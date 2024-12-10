@@ -1,0 +1,153 @@
+/**
+ * `commons.ts`
+ * - common tools to export.
+ *
+ * @author      Steve <steve@lemoncloud.io>
+ * @date        2022-11-01 optimized w/ `commons`
+ * @date        2024-06-24 optimized `parseListParam()`
+ *
+ * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
+ * @origin      `@lemoncloud/ssocio-templates-api/cores` (WARN! keep in same origin)
+ */
+import { GeneralItem } from 'lemon-model';
+import { ListParam, PaginateParam } from './types';
+
+import * as $core from 'lemon-core';
+const _T = $core.$T;
+
+/**
+ * extract only the defined attribute.
+ * ex) `{ a:1, b: undefined }` -> `{ a:1 }`
+ */
+export const onlyDefined = <T>(N: T) =>
+    N && typeof N === 'object'
+        ? Object.entries(N).reduce<T>((N, [k, v]) => {
+              if (v !== undefined) N[k as keyof T] = v;
+              return N;
+          }, {} as T)
+        : null;
+
+/**
+ * list param parser
+ * @param param
+ */
+export function parseListParam(param?: ListParam, $def?: { limit?: number }): Required<ListParam> {
+    return onlyDefined({
+        sort: param?.sort !== undefined ? _T.S2(param?.sort, '') : undefined,
+        limit: _T.N(param?.limit, $def?.limit ?? 10),
+    });
+}
+
+/**
+ * paginate param parser
+ */
+export function parsePaginateParam(
+    param?: PaginateParam,
+    /** default value or conditions */
+    options?: { noLimit?: boolean; limit?: number; page?: number },
+): PaginateParam {
+    const limit = options?.limit;
+    const page = options?.page ?? 0;
+    const res: PaginateParam = {
+        ...parseListParam(param, { limit }),
+        page: _T.N(param?.page, page),
+    };
+    const noLimit = options?.noLimit ?? res.limit == -1;
+
+    //WARN! - limit the max result to 2000.
+    if (noLimit) {
+        const { limit, page } = res;
+        const maxPage = limit > 0 ? Math.floor(Math.min(limit * page, 2000) / limit) : 2000;
+        res.page = Math.min(page, maxPage);
+    }
+
+    //* returns.
+    return res;
+}
+
+/**
+ * common tools for transformer.
+ * - extends the original `$T` in lemon-core.
+ */
+export const $T = {
+    ..._T,
+    /** clear white-spaces and trim */
+    S2: <T extends string = string>(v?: any, def?: string): T => _T.S2(v, def, ' ').trim() as T,
+    /** array string with clear white-spaces and trim */
+    SS: <T extends string = string>(v?: any): T[] =>
+        (v && Array.isArray(v) ? v : _T.SS(v)).map(v => _T.S2(v, '', ' ').trim() as T),
+    /** convert to `boolean`. */
+    B: (v: number | string, def?: 0 | 1 | boolean): boolean =>
+        typeof v === 'number' || typeof v === 'string'
+            ? Boolean($T.BN(v, typeof def === 'boolean' ? (def ? 1 : 0) : def))
+            : Boolean(def),
+    /** convert to boolean style number. */
+    BN: <T extends number = number>(v: any, def?: 0 | 1): T => (v === undefined ? (def as T) : (_T.B(v, def) as T)),
+    /** convert to `number` */
+    N: (v: boolean | number | string, def?: number): number =>
+        typeof v === 'boolean'
+            ? v
+                ? 1
+                : 0
+            : typeof v === 'number' || typeof v === 'string'
+            ? _T.N(v, def)
+            : undefined,
+    /** convert to `float` w/ fixed(3) */
+    F: (n: number) => (typeof n === 'string' || typeof n === 'number' ? parseFloat(Number(n).toFixed(3)) : undefined),
+    /** cleanup if in undefined */
+    clear: <T extends object>(N: T): T =>
+        Object.entries(N).reduce((N, [k, v]) => {
+            if (v !== undefined) N[k] = v;
+            return N;
+        }, {} as any),
+    /** null to string */
+    nul2str: <T extends string>(v: T | any): T => {
+        if (v === undefined) return undefined;
+        return _T.S(v ?? '') as T;
+    },
+    /**
+     * find key in LUT table.
+     */
+    asLut: <T extends object>(
+        key: string,
+        $map: T,
+        options?: { name?: string; throwable?: boolean; default?: string } | string,
+    ) => {
+        const $opts = typeof options === 'string' ? { name: options } : options;
+        const name = $opts?.name ?? 'name';
+        const throwable = $opts?.throwable ?? true;
+        const _def = $opts?.default ?? null;
+        //* check of empty.
+        if (key === undefined) return undefined as keyof T;
+
+        //* check if key is defined.
+        if (typeof $map[key as keyof T] === 'undefined') {
+            //* lookup by value.
+            const found = Object.entries($map).reduce((R, [k, v]) => {
+                if (v === key) return k;
+                return R;
+            }, null);
+            if (found !== null) return found as keyof T;
+
+            //! throw or default
+            if (!throwable) return _def as keyof T;
+            throw new Error(`.${name}[${key}] is invalid!`);
+        }
+        return key as keyof T;
+    },
+    /**
+     * pack as meta in general-type.
+     */
+    asMeta: <T extends GeneralItem = GeneralItem>(body: any, options?: { errScope?: string }): T => {
+        const errScope = options?.errScope ?? '';
+        if (!body) return {} as T;
+        if (typeof body !== 'object') throw new Error(`@body (object) is required ${errScope}`.trim());
+        const isVal = (v: any): v is number | string => typeof v === 'number' || typeof v === 'string';
+        const res = Object.entries(body).reduce<GeneralItem>((R, [k, v]) => {
+            if (isVal(v)) R[k] = v;
+            else if (v && Array.isArray(v)) (R as any)[k] = v.filter(v => isVal(v));
+            return R;
+        }, {});
+        return res as T;
+    },
+};

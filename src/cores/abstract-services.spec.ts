@@ -1,0 +1,536 @@
+/**
+ * `abstract-services.spec.spec.ts`
+ * - test script for `abstract-services.spec.ts`
+ *
+ * @author      Steve <steve@lemoncloud.io>
+ * @date        2022-06-15 initial version
+ * @date        2022-12-29 optimized with `lemon-core@3.2.1`
+ * @date        2023-01-18 optimized with `lemon-core@3.2.4`
+ * @date        2023-01-20 optimized `doSearch()` w/ `SearchParam()`
+ *
+ * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
+ * @origin      `@lemoncloud/ssocio-templates-api/cores` (WARN! keep in same origin)
+ */
+//! override environment with `env/<profile>.yml`
+import { loadProfile } from 'lemon-core/dist/environ';
+import { $U, expect2, GETERR, NextContext, SearchBody, SearchResult } from 'lemon-core';
+import { SimpleSet, CoreModel, filterFields, loadJsonSync, NextIdentityAccess } from 'lemon-core';
+import { MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
+import { keys } from 'ts-transformer-keys';
+import { PaginateParam } from './types';
+
+export type ModelType = 'test';
+export type Model = CoreModel<ModelType>;
+
+/**
+ * `test`: internal test model.
+ */
+export interface TestModel extends Model {
+    /** name of model */
+    name?: string;
+    /** test count */
+    test?: number;
+
+    /** (optional) extra */
+    extra?: SimpleSet;
+
+    /**
+     * (optional) inner Object.
+     */
+    readonly Model?: Model;
+
+    /**
+     * (view) Access Infor.
+     */
+    readonly $identity?: NextIdentityAccess;
+}
+
+export const $FIELD = {
+    test: filterFields(keys<TestModel>()),
+};
+
+/**
+ * class: `TestModelManager`
+ */
+export class TestModelManager extends MyCoreManager<TestModel, ModelType, BackendService> {
+    public constructor(parent: BackendService) {
+        super('test', parent, $FIELD.test);
+    }
+
+    /**
+     * @override validate
+     */
+    public async validateModel(model: TestModel, $org?: TestModel) {
+        if (model.test && model.test <= 0) throw Error('.test (number) is required (greater than 0)');
+        return model;
+    }
+}
+
+/**
+ * class: `BackendService`
+ */
+export class BackendService extends MyCoreService<Model, ModelType, BackendProxy> {
+    public readonly $test: TestModelManager;
+    public constructor(tableName?: string, ns?: string) {
+        super(tableName, ns);
+        this.$test = new TestModelManager(this);
+    }
+
+    /**
+     * say hello()
+     */
+    public hello = (): string => `backend-service:${this.NS}/${this.tableName}`;
+
+    /**
+     * make proxy instance w/ this service.
+     */
+    public createProxy = (context: NextContext) => {
+        const proxy = new BackendProxy(context, this);
+        return proxy;
+    };
+}
+
+/**
+ * class: `BackendProxy`
+ */
+export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
+    public readonly tests: MyManagerProxy<TestModel, TestModelManager, BackendService, ModelType>;
+    public constructor(context: NextContext, service: BackendService) {
+        super(context, service);
+        this.tests = new MyManagerProxy(this, service.$test);
+    }
+}
+
+/**
+ * 각 인증 결과에 따른 예제
+ *
+ * @see sample/context/context-<type>.json
+ */
+export type AuthType = 'public' | 'authed' | 'session' | 'offsite';
+export interface ServiceParams {
+    /** the expected current timestamp */
+    current?: number;
+    /** flag of using dummy data (default true) */
+    dummy?: boolean;
+    /** overrided domain */
+    domain?: string;
+    /** override `roles` in identity */
+    roles?: string[];
+}
+
+//! create service instance.
+export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
+    const current = params?.current ?? $U.current_time_ms();
+    const isDummy = params?.dummy ?? true;
+    const { context, data } = loadJsonSync(`sample/context/context-${type}.json`);
+    if (params?.domain && context) (context as NextContext).domain = params?.domain;
+    if (params?.roles && context?.identity) (context.identity as any).roles = params?.roles;
+    const service = new (class extends BackendService {
+        public constructor() {
+            super(isDummy ? 'dummy-data.yml' : '');
+        }
+        public async doSearch<T>(body: SearchBody): Promise<SearchResult<T, any>> {
+            //* returns the body as object.
+            return { total: 0, list: body as any };
+        }
+    })();
+    service.setCurrent(current);
+    return { service, current, context, data };
+};
+
+//! main test body.
+describe('abstract-services', () => {
+    const PROFILE = loadProfile(process); // override process.env.
+    PROFILE && console.info('! PROFILE=', PROFILE);
+
+    it('should pass basic functions', async () => {
+        const { service } = instance();
+        expect2(() => true).toEqual(true);
+
+        const isKeys = true;
+        if (isKeys) {
+            expect2(() => filterFields($FIELD.test).join(',')).toEqual(
+                'name,test,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id',
+            );
+            expect2(() => filterFields($FIELD.test, ['test']).join(',')).toEqual(
+                'test,name,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id',
+            );
+        } else {
+            console.warn('check ts-transformer-keys!');
+        }
+        // test CoreService
+        expect2(() => service.dynamoOptions).toEqual({ idName: '_id', tableName: 'dummy-data.yml' });
+
+        // test CoreManager
+        const { $test } = service;
+        expect2($test.hello()).toEqual(
+            'typed-storage-service:test/proxy-storage-service:dummy-storage-service:dummy-data/_id',
+        );
+        expect2(await $test.find('A')).toEqual(null);
+        expect2(await $test.exists('A')).toEqual(false);
+        expect2(await $test.findByKey('A')).toEqual(null);
+        expect2(await $test.getMulti(['A', 'A'])).toEqual([null, null]);
+        expect2(await $test.getMulti$(['A', 'A'])).toEqual({ A: { id: 'A', error: '404 NOT FOUND - test:A' } });
+    });
+
+    it('should pass ManagerProxy', async () => {
+        const { service, current } = instance();
+        const proxy = service.createProxy(null as any);
+
+        expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
+        expect2(() => proxy.hello()).toEqual('manager-proxy:TT/dummy-data.yml');
+        expect2(() => service.createProxy({}).hello()).toEqual('manager-proxy:TT/dummy-data.yml');
+
+        const _base = <T extends Model>(type: ModelType, N?: T): Model => ({
+            ns: 'TT',
+            updatedAt: current,
+            createdAt: current,
+            deletedAt: 0,
+            type,
+            ...N,
+        });
+
+        expect2(
+            await service
+                .guardProxy({}, async proxy => {
+                    const a = await proxy.tests.get('a');
+                    a.name = 'hi a';
+                    return a;
+                })
+                .catch(GETERR),
+        ).toEqual('404 NOT FOUND - proxy/test/id:a');
+        expect2(await service.$test.find('a')).toEqual(null);
+
+        expect2(
+            await service
+                .guardProxy({}, async proxy => {
+                    const a = await proxy.tests.get('a', true);
+                    a.name = 'hi a';
+                    return a;
+                })
+                .catch(GETERR),
+        ).toEqual('404 NOT FOUND - proxy/test/id:a');
+        expect2(await service.$test.find('a')).toEqual(null);
+
+        expect2(
+            await service
+                .guardProxy({}, async proxy => {
+                    const a = await proxy.tests.get('a', false);
+                    a.name = 'hi a';
+                    return a;
+                })
+                .catch(GETERR),
+        ).toEqual("Cannot set properties of null (setting 'name')");
+        expect2(await service.$test.find('a')).toEqual(null);
+
+        //! get w/ default.
+        expect2(
+            await service
+                .guardProxy({}, async proxy => {
+                    const a = await proxy.tests.get('a', {});
+                    a.name = 'hi a';
+                    return a;
+                })
+                .catch(GETERR),
+        ).toEqual({
+            ..._base('test'),
+            id: 'a',
+            name: 'hi a',
+        });
+        expect2(await service.$test.find('a')).toEqual({
+            _id: 'TT:test:a',
+            ..._base('test'),
+            id: 'a',
+            name: 'hi a',
+        });
+
+        const dir = 'sample/context/context-session.json';
+        const { context } = loadJsonSync(dir);
+        const identity = context.identity;
+
+        expect2(() => proxy.getCurrentSession({ throwable: true })).toEqual(
+            '403 SESSION-TOKEN - .identity (SessionToken) is required - context:',
+        );
+        const getCurrentSession = (options: {
+            /** (default false for test) */
+            throwable?: boolean;
+            /** (default true) */
+            useSession?: string | boolean;
+            /** (optional) env.USE_SESSION */
+            USE_SESSION?: string;
+        }) => {
+            options.throwable = options.throwable === undefined ? false : options.throwable;
+            return proxy.getCurrentSession(options);
+        };
+
+        expect2(() => getCurrentSession({ useSession: false })).toEqual(null);
+
+        expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir })).toEqual(identity);
+        expect2(() => getCurrentSession({ useSession: true })).toEqual(null);
+        expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: dir })).toEqual(identity);
+        expect2(() => getCurrentSession({ useSession: '1' })).toEqual(null);
+        expect2(() => getCurrentSession({ useSession: dir })).toEqual(identity);
+
+        expect2(() => getCurrentSession({ useSession: 'wrongPath' })).toEqual(
+            "@file[wrongPath] is invalid, ENOENT: no such file or directory, open './wrongPath'",
+        );
+        expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: 'wrongPath' })).toEqual(null);
+        expect2(() => getCurrentSession({ USE_SESSION: 'wrongPath' })).toEqual(null);
+
+        expect2(() => proxy.asCurrentIdentityId(context)).toEqual(identity.identityId);
+
+        const parent: CoreModel = {
+            sid: '0000008',
+            uid: '0000007',
+        };
+        const model1: Model = {
+            id: '1000001',
+            sid: '1000008',
+            uid: '1000007',
+        };
+        const model2: Model = {
+            id: '1000001',
+        };
+        expect2(() => proxy.makeModelBase(model1)).toEqual(model1);
+        expect2(() => proxy.makeModelBase(model1, { parent: parent })).toEqual(model1);
+        expect2(() => proxy.makeModelBase(model1, { useSession: true })).toEqual(model1);
+        expect2(() => proxy.makeModelBase(model2)).toEqual(model2);
+        expect2(() => proxy.makeModelBase(model2, { parent: parent })).toEqual({
+            id: '1000001',
+            sid: '0000008',
+            uid: '0000007',
+        });
+    });
+
+    it('should pass buildQuery for ES', async () => {
+        const { service } = instance();
+
+        const param: PaginateParam = {
+            limit: 30,
+            page: 1,
+        };
+
+        const baseExpected = {
+            from: 30,
+            size: 30,
+            sort: { createdAt: { missing: '_last', order: 'desc' } },
+            query: {
+                bool: {
+                    filter: [
+                        { term: { 'ns.keyword': 'TT' } },
+                        { term: { 'type.keyword': 'test' } },
+                        { term: { deletedAt: 0 } },
+                    ],
+                },
+            },
+            aggs: { stereo: { terms: { field: 'stereo.keyword', missing: 'N/A', order: { _key: 'asc' }, size: 10 } } },
+        };
+
+        expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
+
+        expect2(() => service.$test.hello()).toEqual(
+            'typed-storage-service:test/proxy-storage-service:dummy-storage-service:dummy-data/_id',
+        );
+
+        //* validate param option
+        expect2(() => service.$test.buildQuery({})).toEqual('.limit(number) is required - buildQuery()');
+        expect2(() => service.$test.buildQuery({ limit: '30' as any })).toEqual(
+            '.limit(number) is required - buildQuery()',
+        );
+        expect2(() => service.$test.buildQuery({ limit: '30' as any, page: 10 })).toEqual(
+            '.limit(number) is required - buildQuery()',
+        );
+        // expect2(() => service.$test.buildQuery({ limit: 30 })).toEqual('.page(number) is required - buildQuery()');
+        expect2(() => service.$test.buildQuery({ limit: 30, page: '10' as any })).toEqual(
+            '.page(number) is required - buildQuery()',
+        );
+        expect2(() => service.$test.buildQuery({ limit: 30, page: 0, offset: '10' as any })).toEqual(
+            '.offset(number) is required - buildQuery()',
+        );
+
+        //* validate filter by attributes
+        expect2(() => service.$test.buildQuery(param)).toEqual({
+            ...baseExpected,
+        });
+        expect2(() => service.$test.buildQuery({ ...param, offset: 1 })).toEqual({
+            ...baseExpected,
+            from: baseExpected.from + 1,
+        });
+        expect2(() => service.$test.buildQuery(param, { _idx: 0 })).toEqual({
+            ...baseExpected,
+            query: {
+                bool: {
+                    filter: [
+                        { term: { 'ns.keyword': 'TT' } },
+                        { term: { 'type.keyword': 'test' } },
+                        { term: { deletedAt: 0 } },
+                        { term: { _idx: 0 } },
+                    ],
+                },
+            },
+        });
+        expect2(() => service.$test.buildQuery(param, { _date: '2023-02-08' })).toEqual({
+            ...baseExpected,
+            query: {
+                bool: {
+                    filter: [
+                        { term: { 'ns.keyword': 'TT' } },
+                        { term: { 'type.keyword': 'test' } },
+                        { term: { deletedAt: 0 } },
+                        { term: { '_date.keyword': '2023-02-08' } },
+                    ],
+                },
+            },
+        });
+        expect2(() => service.$test.buildQuery(param, { name: 'lemon' })).toEqual({
+            ...baseExpected,
+            query: {
+                bool: {
+                    filter: [
+                        { term: { 'ns.keyword': 'TT' } },
+                        { term: { 'type.keyword': 'test' } },
+                        { term: { deletedAt: 0 } },
+                        { term: { 'name.keyword': 'lemon' } },
+                    ],
+                },
+            },
+        });
+        expect2(() => service.$test.buildQuery(param, { _idx: 0, _date: '2023-02-08', name: 'lemon' })).toEqual({
+            ...baseExpected,
+            query: {
+                bool: {
+                    filter: [
+                        { term: { 'ns.keyword': 'TT' } },
+                        { term: { 'type.keyword': 'test' } },
+                        { term: { deletedAt: 0 } },
+                        { term: { _idx: 0 } },
+                        { term: { '_date.keyword': '2023-02-08' } },
+                        { term: { 'name.keyword': 'lemon' } },
+                    ],
+                },
+            },
+        });
+
+        //* validate add must
+        expect2(() => service.$test.buildQuery(param, { name: '!' })).toEqual({
+            ...baseExpected,
+            query: {
+                bool: {
+                    filter: [
+                        { term: { 'ns.keyword': 'TT' } },
+                        { term: { 'type.keyword': 'test' } },
+                        { term: { deletedAt: 0 } },
+                    ],
+                    must: [{ exists: { field: 'name' } }],
+                },
+            },
+        });
+
+        //* validate add must_not
+        expect2(() => service.$test.buildQuery(param, { name: '' })).toEqual({
+            ...baseExpected,
+            query: {
+                bool: {
+                    filter: [
+                        { term: { 'ns.keyword': 'TT' } },
+                        { term: { 'type.keyword': 'test' } },
+                        { term: { deletedAt: 0 } },
+                    ],
+                    must_not: [{ exists: { field: 'name' } }],
+                },
+            },
+        });
+        //* validate default filter.
+        expect2(() => service.$test.buildQuery(param, { stereo: null as any }), 'query').toEqual({
+            query: {
+                bool: {
+                    filter: [
+                        { term: { 'ns.keyword': 'TT' } },
+                        { term: { 'type.keyword': 'test' } },
+                        { term: { deletedAt: 0 } },
+                    ],
+                    must_not: [{ term: { 'stereo.keyword': '#' } }],
+                },
+            },
+        });
+
+        //* validate filter by attributes.
+        expect2(() => service.$test.buildQuery(param, { extra: ['a', 'b'] as any }), 'query').toEqual({
+            query: {
+                bool: {
+                    filter: [
+                        { term: { 'ns.keyword': 'TT' } },
+                        { term: { 'type.keyword': 'test' } },
+                        { term: { deletedAt: 0 } },
+                    ],
+                    must: [
+                        {
+                            bool: {
+                                minimum_should_match: 1,
+                                should: [{ term: { 'extra.keyword': 'a' } }, { term: { 'extra.keyword': 'b' } }],
+                            },
+                        },
+                    ],
+                },
+            },
+        });
+
+        //* validate addSortTerm
+        const $searchBody: SearchBody = {
+            query: {
+                bool: {
+                    filter: [
+                        { term: { 'ns.keyword': 'TT' } },
+                        { term: { 'type.keyword': 'test' } },
+                        { term: { deletedAt: 0 } },
+                    ],
+                },
+            },
+            size: 0,
+        };
+        const addSortTermAgent = (sortString: string, searchBody?: SearchBody, parameter?: any) => {
+            searchBody = searchBody ?? $searchBody;
+            parameter = parameter ?? param;
+            const { sort } = service.$test.addSortTerm($searchBody, { ...parameter, sort: sortString });
+            return sort;
+        };
+        expect2(() => addSortTermAgent('id')).toEqual({ 'id.keyword': { missing: '_last', order: 'asc' } });
+        expect2(() => addSortTermAgent('name')).toEqual({ 'name.keyword': { missing: '_last', order: 'asc' } });
+        expect2(() => addSortTermAgent('brand')).toEqual({ 'brand.keyword': { missing: '_last', order: 'asc' } });
+        expect2(() => addSortTermAgent('color')).toEqual({ 'color.keyword': { missing: '_last', order: 'asc' } });
+        expect2(() => addSortTermAgent('createdAt')).toEqual({ createdAt: { missing: '_first', order: 'asc' } });
+        expect2(() => addSortTermAgent('updatedAt')).toEqual({ updatedAt: { missing: '_first', order: 'asc' } });
+        expect2(() => addSortTermAgent('a')).toEqual({ 'a.keyword': { missing: '_first', order: 'asc' } });
+
+        //* validate buildSearchAll
+        const result = service.$test.buildSearchAll();
+        expect2(() => result._source).toEqual(['id', 'error', 'createdAt', 'name', 'test']);
+        expect2(() => result.query).toEqual({
+            bool: {
+                filter: [{ term: { 'ns.keyword': 'TT' } }, { term: { 'type.keyword': 'test' } }],
+                must: [
+                    {
+                        bool: {
+                            minimum_should_match: 1,
+                            should: [
+                                { range: { deletedAt: { lte: 0 } } },
+                                {
+                                    bool: {
+                                        must_not: {
+                                            exists: {
+                                                field: 'deletedAt',
+                                            },
+                                        },
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                ],
+                must_not: [{ term: { stereo: '#' } }, { term: { 'stereo.keyword': '#' } }],
+            },
+        });
+        expect2(() => result.size).toEqual(500);
+        expect2(() => result.sort).toEqual({ createdAt: { missing: '_last', order: 'asc' } });
+    });
+});

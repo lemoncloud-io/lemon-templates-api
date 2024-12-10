@@ -1,0 +1,7 @@
+documentation:
+  version: '1'
+  summary: 'Lemon Service'
+  description: |
+    # A Lemon Core API service documented with OpenAPI specification
+    REST API by lemoncloud.io
+

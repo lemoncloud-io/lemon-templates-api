@@ -1,0 +1,17 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "emitDeclarationOnly": true,
+    "removeComments": false,
+    "outDir": "dist"
+  },
+  "exclude": [
+      "node_modules",
+      "dist",
+      "test",
+      "**/*spec.ts"
+  ],
+  "include": [
+    "../src/view/types.ts"
+  ]
+}

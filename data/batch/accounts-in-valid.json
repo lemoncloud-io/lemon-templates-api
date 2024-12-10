@@ -1,0 +1,27 @@
+{
+    "$": "type:events expiredAt가 유효한 것들.",
+    "size": 1,
+    "query": {
+        "bool": {
+            "filter": [{
+                    "term": {
+                        "ns.keyword": "{{ns}}"
+                    }
+                },
+                {
+                    "term": {
+                        "type.keyword": "account"
+                    }
+                },
+                {
+                    "exists": {
+                        "field": "accountId"
+                    }
+                }
+            ]
+        }
+    },
+    "sort": {
+        "createdAt": "desc"
+    }
+}

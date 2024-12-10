@@ -1,0 +1,118 @@
+# dummy mocks definitions (for initial loading)
+# ---------------------------------------------
+conf:
+  # starting sequence of internal id
+  $id: 100000
+  scene: SA동호수마스터 생성
+  description: layout for editing the house information in apartments
+
+data:
+  # 단지(block)/동(dong)/호(ho or house) => a house
+  - id: 1
+    type: 'site'
+    name: 'SiteX'
+    address: 'Seoul, 123'
+    #NOTE - Site 추가 정보 설정 필요할듯.
+    code: 'test'          # known as `site-code`
+    domain: my-test.com   # 별도 사용자 도메인 연결시 필요.
+    ladderMaxFloor: 10    # 사다리차 최대 층 수
+    #! 단지(type/block)
+    noOfBlock: 2
+    Blocks:
+      - id: 1             # `0` 이면 `index + 1` 으로 자동 할당.
+        type: 'block'
+        name: A
+        noOfDong: 12
+        invalid: 0        # 이게 `1`이면, 하위 항목들(동/호)도 모두 사용안함 (cascades)
+      - id: 2
+        type: 'block'
+        name: B
+        noOfDong: 16
+    #! 동(type/dong)
+    Dongs:
+      - id: 1
+        _block: 1         # auto convert to blockId (#ref-to-block)
+        blockName: A
+        name: '101'
+        floors: 25
+        noOfLine: 4
+        noOfElev: 2
+      - id: 2
+        _block: 2
+        blockName: B
+        name: '203'
+        floors: 32
+        noOfLine: 4
+        noOfElev: 2
+    #! 호 라인(type/line) - 각 동에서 같은 호끼리의 Vertical 정보.
+    Lines:
+      - id: 1
+        _block: 1
+        blockName: A
+        _dong: 1
+        dongName: '101'
+        _size: 3
+        sizeName: '85A'
+        elevator: 1           # 엘리베이터 할당된 번호.
+        useOfLadder: true     # use transformer from 1/0 to boolean.
+      - id: 2
+        _block: 2
+        blockName: B
+        _dong: 2
+        dongName: '203'
+        _size: 1
+        sizeName: '115A'
+        elevator: 2           # 엘리베이터 할당된 번호.
+        useOfLadder: true     # use transformer from 1/0 to boolean.
+    #! 평형(type/size)
+    noOfSize: 3
+    Sizes:
+      - id: 0
+        name: 115A
+        image: a.gif
+      - id: 0
+        name: 110D
+        image: b.jpg
+      - id: 0
+        name: 85A
+        image: c.png
+    noOfBasement: 2
+    #! 집(type/house:주거 최소 단위)
+    Houses:
+      #TODO - house 개수가 10k 이상일수 있음 -> `dong-ho` 를 이용한 ID 생성. (주의: `가`동 처럼 입력할 경우 있음 => Lookup DongTable)
+      #Req.A '01010403' 8 자리 fixed style. (1번째 문자에 따라서 naming-rule 패턴 적용하기)
+      #Req.B POST 할때 내부 객체의 `.id`가 0일 경우 -> 신규ID 생성하여 자동 저장처리.
+      - id: 0
+        _block: 1
+        _dong: 1
+        _line: 1
+        _size: 3
+        name: '401'
+        nick: '101-401'       # 자동 생성
+        floor: 4              # 층수
+        elevator: 1           # 엘리베이터 번호.
+        hidden: false         # 숨김(노출) 처리 -> 최종 저장시 활성화됨.
+        invalid: false        # 사용 여부
+        useOfLadder: true     # use transformer from 1/0 to boolean.
+        freeChargePark: 1     # 무료 주차 개수
+      - id: 0
+        _block: 2
+        _dong: 2
+        _line: 2
+        _size: 1
+        name: '504'
+        nick: '203-504'       # 자동 생성
+        floor: 5              # 층수
+        elevator: 1           # 엘리베이터 번호.
+        hidden: false         # 숨김(노출) 처리 -> 최종 저장시 활성화됨.
+        invalid: false        # 사용 여부
+        useOfLadder: true     # use transformer from 1/0 to boolean.
+        freeChargePark: 2     # 무료 주차 개수
+  - id: 2
+    type: 'site'
+    name: 'SiteY'
+    address: 'Seoul, null'
+    #! 단지(type/block)
+    noOfBlock: 0
+
+
