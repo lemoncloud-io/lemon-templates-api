@@ -1,7 +1,7 @@
 {
-  "name": "@lemoncloud/ssocio-templates-api",
+  "name": "@lemoncloud/lemon-templates-api",
   "version": "0.24.731",
-  "description": "ssocio-templates management api",
+  "description": "lemon-templates management api",
   "types": "dist/view/types.d.ts",
   "scripts": {},
   "dependencies": {

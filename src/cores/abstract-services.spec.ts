@@ -9,15 +9,16 @@
  * @date        2023-01-20 optimized `doSearch()` w/ `SearchParam()`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/ssocio-templates-api/cores` (WARN! keep in same origin)
+ * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { $U, expect2, GETERR, NextContext, SearchBody, SearchResult } from 'lemon-core';
+import { $U, expect2, GETERR, NextContext, SearchBody, SearchResult, $info } from 'lemon-core';
 import { SimpleSet, CoreModel, filterFields, loadJsonSync, NextIdentityAccess } from 'lemon-core';
 import { MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
 import { keys } from 'ts-transformer-keys';
 import { PaginateParam } from './types';
+import { loadSample } from './contexts.spec';
 
 export type ModelType = 'test';
 export type Model = CoreModel<ModelType>;
@@ -104,9 +105,9 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
 /**
  * 각 인증 결과에 따른 예제
  *
- * @see sample/context/context-<type>.json
+ * @see `./contexts.spec.ts/$context[<type>]`
  */
-export type AuthType = 'public' | 'authed' | 'session' | 'offsite';
+export type AuthType = 'public' | 'authed' | 'session' | 'offsite' | 'signed';
 export interface ServiceParams {
     /** the expected current timestamp */
     current?: number;
@@ -118,11 +119,11 @@ export interface ServiceParams {
     roles?: string[];
 }
 
-//! create service instance.
+//* create service instance.
 export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
     const current = params?.current ?? $U.current_time_ms();
     const isDummy = params?.dummy ?? true;
-    const { context, data } = loadJsonSync(`sample/context/context-${type}.json`);
+    const { context, data } = loadSample(type);
     if (params?.domain && context) (context as NextContext).domain = params?.domain;
     if (params?.roles && context?.identity) (context.identity as any).roles = params?.roles;
     const service = new (class extends BackendService {
@@ -138,7 +139,7 @@ export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
     return { service, current, context, data };
 };
 
-//! main test body.
+//* main test body.
 describe('abstract-services', () => {
     const PROFILE = loadProfile(process); // override process.env.
     PROFILE && console.info('! PROFILE=', PROFILE);
@@ -223,7 +224,7 @@ describe('abstract-services', () => {
         ).toEqual("Cannot set properties of null (setting 'name')");
         expect2(await service.$test.find('a')).toEqual(null);
 
-        //! get w/ default.
+        //* get w/ default.
         expect2(
             await service
                 .guardProxy({}, async proxy => {
@@ -244,12 +245,14 @@ describe('abstract-services', () => {
             name: 'hi a',
         });
 
-        const dir = 'sample/context/context-session.json';
+        //* test of sample session.
+        const dir = `./src/cores/context-session.json`;
         const { context } = loadJsonSync(dir);
-        const identity = context.identity;
+        expect2(() => context?.identity, 'sid,uid').toEqual({ sid: '1000008', uid: '1000007' });
+        const identity = context?.identity;
 
         expect2(() => proxy.getCurrentSession({ throwable: true })).toEqual(
-            '403 SESSION-TOKEN - .identity (SessionToken) is required - context:',
+            '403 IDENTITY-TOKEN - .identity (IdentityToken) is required - context:',
         );
         const getCurrentSession = (options: {
             /** (default false for test) */
@@ -532,5 +535,73 @@ describe('abstract-services', () => {
         });
         expect2(() => result.size).toEqual(500);
         expect2(() => result.sort).toEqual({ createdAt: { missing: '_last', order: 'asc' } });
+    });
+
+    it('should pass ManagerProxy(authed)', async () => {
+        const { service, context } = instance('authed');
+        const proxy = service.createProxy(context);
+
+        expect2(() => proxy.getCurrentSession({ throwable: false }), 'accountId,identityId').toEqual({
+            accountId: '0008540000',
+            identityId: 'ap-northeast-2:c23d7fe4-1111-1111-1111-mocks-user',
+        });
+        expect2(() => proxy.assertContext({ isLocal: true }, { throwable: false })).toEqual(false);
+        expect2(() => proxy.assertContext({ isSigned: true })).toEqual(
+            '403 NOT ALLOWED - invalid isSigned[true] @assertContext()',
+        );
+        expect2(() => proxy.assertContext({ isAuthed: true })).toEqual(true);
+
+        expect2(() => proxy.isAdminRole()).toEqual(false);
+        expect2(() => proxy.isAdminRole('user')).toEqual(false);
+    });
+
+    it('should pass ManagerProxy(signed)', async () => {
+        const { service, context } = instance('signed');
+        const proxy = service.createProxy(context);
+
+        expect2(() => proxy.getCurrentSession({ throwable: false }), 'accountId,identityId').toEqual({
+            accountId: '080000000746',
+            identityId: null,
+        });
+        expect2(() => proxy.assertContext({ isLocal: true }, { throwable: false })).toEqual(false);
+        expect2(() => proxy.assertContext({ isSigned: true })).toEqual(true);
+        expect2(() => proxy.assertContext({ isAuthed: true })).toEqual(
+            '403 NOT ALLOWED - invalid isAuthed[true] @assertContext()',
+        );
+
+        expect2(() => proxy.isAdminRole()).toEqual(true);
+        expect2(() => proxy.isAdminRole('user')).toEqual(true);
+    });
+
+    it('should pass ManagerProxy(session)', async () => {
+        const { service, context } = instance('session');
+        const proxy = service.createProxy(context);
+
+        expect2(() => proxy.getCurrentSession({ throwable: false }), 'accountId,identityId').toEqual({
+            accountId: '540000000059',
+            identityId: 'ap-northeast-2:79a9bb80-0000-0000-0000-86fc750bbdf0',
+        });
+        expect2(() => proxy.assertContext({ isLocal: true }, { throwable: false })).toEqual(false);
+        expect2(() => proxy.assertContext({ isSigned: true })).toEqual(true);
+        expect2(() => proxy.assertContext({ isAuthed: true })).toEqual(true);
+
+        expect2(() => proxy.isAdminRole()).toEqual(false);
+        expect2(() => proxy.isAdminRole('user')).toEqual(true);
+    });
+
+    it('should pass ManagerProxy(session + local)', async () => {
+        const { service, context } = instance('session', { domain: 'localhost' });
+        const proxy = service.createProxy(context);
+
+        expect2(() => proxy.getCurrentSession({ throwable: false }), 'accountId,identityId').toEqual({
+            accountId: '540000000059',
+            identityId: 'ap-northeast-2:79a9bb80-0000-0000-0000-86fc750bbdf0',
+        });
+        expect2(() => proxy.assertContext({ isLocal: true }, { throwable: false })).toEqual(true);
+        expect2(() => proxy.assertContext({ isSigned: true })).toEqual(true);
+        expect2(() => proxy.assertContext({ isAuthed: true })).toEqual(true);
+
+        expect2(() => proxy.isAdminRole()).toEqual(true);
+        expect2(() => proxy.isAdminRole('user')).toEqual(true);
     });
 });

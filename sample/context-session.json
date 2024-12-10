@@ -1,5 +1,5 @@
 {
-    "!": "사이트에 엮어서 세션토큰이 발급된경우",
+    "!": "sample context with authed valid identity-token",
     "context": {
         "identity": {
             "sid": "1000008",
@@ -7,7 +7,8 @@
             "uid": "1000007",
             "roles": ["user"],
             "Site": {
-                "code": "B0008"
+                "code": "B0008",
+                "name": "World"
             },
             "User": {
                 "name": "Steve"
@@ -15,7 +16,7 @@
             "iss": "kms/lemon-identity-key",
             "iat": 1662008470,
             "exp": 1662094870,
-            "identityProvider": "oauth.lemoncloud.io,oauth.lemoncloud.io:ap-northeast-2:57601ace-0000-0000-0000-0b2f96d5959b:google:104662653145614891610",
+            "identityProvider": "oauth.lemoncloud.io,oauth.lemoncloud.io:ap-northeast-2:57601ace-0000-0000-0000-0b2f96d5959b:google:112233",
             "identityPoolId": "ap-northeast-2:57601ace-0000-0000-0000-0b2f96d5959b",
             "identityId": "ap-northeast-2:79a9bb80-0000-0000-0000-86fc750bbdf0",
             "accountId": "540000000059",
@@ -27,7 +28,7 @@
         "requestId": "c80221f0-7bff-4de0-aab3-fe4912850b45",
         "accountId": "540000000059",
         "domain": "api.lemoncloud.io",
-        "source": "api://540000000059@lemon-zacs-api-dev#0.8.22"
+        "source": "api://540000000059@lemon-hello-api-dev#0.8.22"
     },
     "headers": {
         "accept": "application/json",
@@ -35,9 +36,9 @@
         "accept-language": "en-US,en;q=0.9",
         "cache-control": "no-cache",
         "Host": "api.lemoncloud.io",
-        "origin": "https://admin-dev.lemoncloud.io",
+        "origin": "https://local.lemoncloud.io",
         "pragma": "no-cache",
-        "referer": "https://admin-dev.lemoncloud.io/",
+        "referer": "https://local.lemoncloud.io/",
         "sec-ch-ua": "\"Chromium\";v=\"104\", \" Not A;Brand\";v=\"99\", \"Google Chrome\";v=\"104\"",
         "sec-ch-ua-mobile": "?0",
         "sec-ch-ua-platform": "\"macOS\"",

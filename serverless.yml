@@ -1,7 +1,7 @@
 #------------------------------------------------
 # Serverless Configuration.
 #------------------------------------------------
-service: ssocio-templates-api
+service: lemon-templates-api
 
 # You can pin your service to only deploy with a specific Serverless version
 # Check out our docs for more details
@@ -39,23 +39,23 @@ custom:
   # SNS Registration: ${self:custom.topicName.${self:custom.CORE.stage}}
   #------------------------------------------------
   topicName:
-    local: ssocio-templates-sns-dev
-    dev: ssocio-templates-sns-dev
-    prod: ssocio-templates-sns
+    local: lemon-templates-sns-dev
+    dev: lemon-templates-sns-dev
+    prod: lemon-templates-sns
   #------------------------------------------------
   # Dynamo:
   #------------------------------------------------
   tableName:
-    local: ssocio-templates-table-dev
-    dev: ssocio-templates-table-dev
-    prod: ssocio-templates-table
+    local: lemon-templates-table-dev
+    dev: lemon-templates-table-dev
+    prod: lemon-templates-table
   #------------------------------------------------
   # SQS Registration:
   #------------------------------------------------
   queueName:
-    local: ssocio-templates-sqs-dev
-    dev: ssocio-templates-sqs-dev
-    prod: ssocio-templates-sqs
+    local: lemon-templates-sqs-dev
+    dev: lemon-templates-sqs-dev
+    prod: lemon-templates-sqs
   #------------------------------------------------
   # pruning old versions
   #------------------------------------------------
@@ -215,7 +215,7 @@ functions:
       # -------------------------------------------------------
       # Schedule: cron
       - schedule:
-          name: ssocio-templates-${self:custom.CORE.stage}-1min
+          name: lemon-templates-${self:custom.CORE.stage}-1min
           description: 'run every minute to keep alive'
           rate: 'cron(0/1 * * * ? *)'
           enabled: false

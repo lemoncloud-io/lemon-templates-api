@@ -47,7 +47,7 @@ export class TestAPIController extends AbstractCRUDController<
      * GET /tests/0/hello
      *
      * ```sh
-     * $ http ':8800/tests/0/hello'
+     * $ http ':8888/tests/0/hello'
      */
     public doGetHello: NextHandler = async (id, param, body, $ctx) => {
         return { id, hello: this.hello(), param, body, context: { clientIp: $ctx.clientIp } };

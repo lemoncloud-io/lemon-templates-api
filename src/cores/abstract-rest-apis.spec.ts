@@ -7,7 +7,7 @@
  * @date        2022-09-21 optimized w/ `abstract-rest-apis`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/ssocio-templates-api/cores` (WARN! keep in same origin)
+ * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
@@ -31,7 +31,7 @@ type SiteBody = Partial<SiteView>;
 export const instance = (type: 'authed' | 'public' = 'authed', isDummy = true) => {
     const context: NextContext = {};
     const SITES_API = '//self/sites';
-    //! transformer with remote view/body.
+    //* transformer with remote view/body.
     const trans = new (class implements Reversable<SiteModel, SiteView, SiteBody> {
         public asModel(view: SiteView): SiteModel {
             if (!view) return null as any;
@@ -43,21 +43,21 @@ export const instance = (type: 'authed' | 'public' = 'authed', isDummy = true) =
             return { id, code, name };
         }
     })();
-    //! it must be the standard rest-api.
+    //* it must be the standard rest-api.
     return $createApi<SiteView, SiteBody, SiteModel>(context, SITES_API, trans, { isDummy });
 };
 
-//! main test body.
+//* main test body.
 describe('abstract-rest-apis', () => {
     const PROFILE = loadProfile(process); // override process.env.
     PROFILE && console.info('! PROFILE=', PROFILE);
 
-    // //! test function
+    // //* test function
     // it('should pass basic function', async () => {
     //     const { trans } = instance();
     // });
 
-    //! test dummy-rest-api
+    //* test dummy-rest-api
     it('should pass dummy-rest-api(authed)', async () => {
         const $api = instance('authed', true);
 
@@ -80,6 +80,6 @@ describe('abstract-rest-apis', () => {
         expect2(await $api.read('80001').catch(GETERR)).toEqual('404 NOT FOUND - dummy-id:80001');
         expect2(await $api.update('80001', { name: 'hello' }).catch(GETERR)).toEqual('404 NOT FOUND - dummy-id:80001');
 
-        //! end of test.
+        //* end of test.
     });
 });

@@ -7,7 +7,7 @@
  * @date        2024-06-24 optimized `parseListParam()`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/ssocio-templates-api/cores` (WARN! keep in same origin)
+ * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 import { GeneralItem } from 'lemon-model';
 import { ListParam, PaginateParam } from './types';

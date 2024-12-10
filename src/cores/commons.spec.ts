@@ -6,7 +6,7 @@
  * @date        2022-06-21 optimized w/ `abstract-services`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/ssocio-templates-api/cores` (WARN! keep in same origin)
+ * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { expect2 } from 'lemon-core';
@@ -23,7 +23,7 @@ const $LUT = {
     } as { [key: string]: string },
 };
 
-//! main test body.
+//* main test body.
 describe('commons', () => {
     it('should pass asLut', async () => {
         expect2(() => $T.asLut('some', $LUT.Languages, 'lang')).toEqual('.lang[some] is invalid!');

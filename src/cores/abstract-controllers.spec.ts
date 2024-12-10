@@ -12,7 +12,7 @@
  * @date        2023-10-12 optimized `doList()` w/o ES6.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/ssocio-templates-api/cores` (WARN! keep in same origin)
+ * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
@@ -20,7 +20,7 @@ import { $ES6, $rand, $T, expect2, GETERR } from 'lemon-core';
 import { AbstractCRUDController, AbstractTransformer } from './abstract-controllers';
 import { View, Body } from './types';
 
-//! project dependant
+//* project dependant
 import { AuthType, ModelType, TestModel, TestModelManager } from './abstract-services.spec';
 import * as $backend from './abstract-services.spec';
 
@@ -48,7 +48,7 @@ export class MyTransformer extends AbstractTransformer<TestModel, MyView, MyBody
     }
 }
 
-//! create instance.
+//* create instance.
 export const instance = (options?: { auth?: AuthType; session?: boolean; domain?: string; roles?: string[] }) => {
     const { service, current, context } = $backend.instance(options?.auth, {
         domain: options?.domain,
@@ -79,12 +79,12 @@ export const instance = (options?: { auth?: AuthType; session?: boolean; domain?
     return { api, current, service, trans, context };
 };
 
-//! main test body.
+//* main test body.
 describe('AbstractCRUDController', () => {
     const PROFILE = loadProfile(process); // override process.env.
     PROFILE && console.info('! PROFILE=', PROFILE);
 
-    //! test transformer
+    //* test transformer
     it('should pass basic transformer', async () => {
         const { trans } = instance();
 
@@ -112,26 +112,26 @@ describe('AbstractCRUDController', () => {
         expect2(() => trans.asDate('2022-01-22')).toEqual('2022-01-22');
     });
 
-    //! test doList(session)
+    //* test doList(session)
     it('should pass doList(authed)', async () => {
         const { api, context, service, current } = instance({ auth: 'authed', session: true });
 
         expect2(
             await service.guardProxy(context, proxy => Promise.resolve(proxy.getCurrentSession())).catch(GETERR),
             'sid,uid,roles',
-        ).toEqual('403 SESSION-TOKEN - check x-lemon-identity');
+        ).toEqual('403 IDENTITY-TOKEN - check x-lemon-identity');
 
         expect2(await api.doList('', { test: '' }, null, context).catch(GETERR)).toEqual(
-            '403 SESSION-TOKEN - check x-lemon-identity',
+            '403 IDENTITY-TOKEN - check x-lemon-identity',
         );
 
         //* test of making new model w/ session
         expect2(await api.doPost('0', null, {}, context).catch(GETERR)).toEqual(
-            '403 SESSION-TOKEN - check x-lemon-identity',
+            '403 IDENTITY-TOKEN - check x-lemon-identity',
         );
     });
 
-    //! test doList(session)
+    //* test doList(session)
     it('should pass doList(session)', async () => {
         const { api, context, service, current } = instance({ auth: 'session', session: true });
 
@@ -296,7 +296,7 @@ describe('AbstractCRUDController', () => {
         });
     });
 
-    //! test doList(admin)
+    //* test doList(admin)
     it('should pass doList(session/admin)', async () => {
         const { api, context, service, current } = instance({ auth: 'session', session: true, roles: ['admin'] });
 
@@ -380,7 +380,7 @@ describe('AbstractCRUDController', () => {
         );
     });
 
-    //! test doList(offsite/admin)
+    //* test doList(offsite/admin)
     it('should pass doList(offsite/admin)', async () => {
         const { api, context, service, current } = instance({ auth: 'offsite', session: true, roles: ['admin'] });
 
@@ -461,9 +461,10 @@ describe('AbstractCRUDController', () => {
         });
     });
 
-    //! test doList(localhost)
+    //* test doList(localhost)
     it('should pass doList(session)', async () => {
         const { api, context, service, current } = instance({ auth: 'session', session: true, domain: 'localhost' });
+        expect2(() => context?.identity, 'roles').toEqual({ roles: ['user'] });
 
         expect2(
             await service.guardProxy(context, proxy => Promise.resolve(proxy.getCurrentSession())).catch(GETERR),
@@ -560,7 +561,7 @@ describe('AbstractCRUDController', () => {
         ]);
     });
 
-    //! test `/hello` route
+    //* test `/hello` route
     it('should normal CRUD: tests/1', async () => {
         const { api, current } = instance({ session: false });
         expect2(() => api.hello()).toEqual(
@@ -636,7 +637,7 @@ describe('AbstractCRUDController', () => {
         expect2(await api.doDelete(newPost.id).catch(GETERR)).toEqual('404 NOT FOUND - test:1000001');
     });
 
-    //! test `findLookup$()` in manager
+    //* test `findLookup$()` in manager
     it('should pass findLookup$()', async () => {
         const { api, current, service } = instance();
         expect2(() => api.hello()).toEqual(
@@ -648,7 +649,7 @@ describe('AbstractCRUDController', () => {
             deletedAt: 0,
         };
 
-        //! define function.s
+        //* define function.s
         const initialNo = 1000000;
         const fxLookup = (key: string, params?: any) =>
             service.$test.findLookup$(key, { useSha256: false, resetRate: 1, isUseMeta: true, initialNo, ...params });
@@ -680,7 +681,7 @@ describe('AbstractCRUDController', () => {
             ...$ts,
         });
 
-        //! check multiple calles.
+        //* check multiple calles.
         const tasks = $rand.range(10).map(() => fxLookup('1'));
         const results = await Promise.all(tasks);
         const expectId1 = initialNo + 3;

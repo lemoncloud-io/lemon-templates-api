@@ -8,7 +8,7 @@
  * @date        2023-09-18 optimized `asProtocol()` w/ public.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/ssocio-templates-api/cores` (WARN! keep in same origin)
+ * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 
 import { $protocol, NextContext } from 'lemon-core';

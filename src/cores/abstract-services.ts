@@ -19,12 +19,15 @@
  * @date        2023-09-15 optimized `getCurrentSession()` w/ USE_SESSION + normalize option.
  * @date        2023-10-08 optimized `buildQuery()` w/ sort + offset.
  * @date        2023-10-11 optimized `doScan()` w/ dynamo-scan-filter.
+ * @date        2024-11-01 optimized `nextId()` of manager-proxy
+ * @date        2024-11-14 renamed to `IdentityToken` from `SessionToken`
+ * @date        2024-11-28 optimized `assertContext()` and `isAdminRole()` w/ `lemon-core@3.2.11`.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/ssocio-templates-api/cores` (WARN! keep in same origin)
+ * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _log, _inf, _err, $ES6, NUL404, NextIdentity } from 'lemon-core';
+import { $U, $T, _log, _inf, _err, $ES6, NUL404 } from 'lemon-core';
 import {
     GETERR$,
     CoreManager,
@@ -45,10 +48,10 @@ import {
     DynamoScanFilter,
     DynamoScanResult,
     GeneralItem,
+    NextIdentity,
+    NextIdentityCognito,
 } from 'lemon-core';
-//NOTE - customize `SessionToken` by application/service.
-import { SessionToken } from '../service/backend-session';
-import { ListResult, PaginateParam } from './types';
+import { IdentityToken, ListResult, PaginateParam } from './types';
 import { keys } from 'ts-transformer-keys';
 import { onlyDefined } from './commons';
 const NAME = $U.env('NAME', 'lemon');
@@ -634,7 +637,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         LOCAL_ACCOUNT?: string;
         /** (optional) env.USE_SESSION */
         USE_SESSION?: string;
-    }): SessionToken {
+    }): IdentityToken {
         // const useSession = !$U.env('LOCAL_ACCOUNT') ? $U.env('USE_SESSION') : null;
         const throwable = options?.throwable ?? true;
         const normalize = options?.normalize ?? true;
@@ -644,22 +647,23 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         LOCAL_ACCOUNT && _inf(this.service.NS, `> LOCAL_ACCOUNT =`, LOCAL_ACCOUNT);
         USE_SESSION && _inf(this.service.NS, `> use-session =`, useSession, USE_SESSION);
 
-        const context: NextContext<SessionToken> = this.context as any;
+        const context: NextContext<IdentityToken> = this.context as any;
         //* WARN - in case of local, no need to throw error.
         const isLocal = context?.domain === 'localhost';
 
         // load the `session-token` from json file.
-        const _load = (file: string): SessionToken => {
+        const _load = (file: string): IdentityToken => {
             const data = loadJsonSync(file);
             if (typeof data?.error === 'string') throw new Error(`@file[${file}] is invalid, ${data.error}`);
-            if (data?.context?.identity) return data?.context?.identity as SessionToken;
+            if (data?.context?.identity) return data?.context?.identity as IdentityToken;
             return data;
         };
         // load the `session-token` with req or env.
-        const _session = (): SessionToken => {
+        const _session = (): IdentityToken => {
             //INFO - `userAgent`가 있다면, identity 생성 프로세스가 제대로 실행된것으로 판단해도됨! @240620.
             if (typeof (context?.identity as any)?.userAgent == 'string') return context?.identity;
-            if (typeof (context?.identity as any)?.identityId == 'string') return context?.identity;
+            //TODO - 아래 코드는 개선의 여지가 있음(문제점???) @241210
+            // if (typeof (context?.identity as any)?.identityId == 'string') return context?.identity;
             if (LOCAL_ACCOUNT) return null;
             if (useSession) {
                 // _inf(this.service.NS, `> use-session =`, useSession, USE_SESSION);
@@ -674,28 +678,29 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
             }
             return null;
         };
-        const $ses = _session();
+        const $sess = _session();
         // _inf(this.service.NS, `> use-session =`, $U.json($ses));
         if (throwable && !isLocal) {
-            const eCode = `403 SESSION-TOKEN`;
-            const err = $ses?.error
-                ? `error:${$ses?.error}`
-                : $ses?.meta
-                ? `meta:${typeof $ses?.meta == 'string' ? $ses?.meta : $U.json($ses?.meta)}`
+            const eCode = `403 IDENTITY-TOKEN`;
+            const err = $sess?.error
+                ? `error:${$sess?.error}`
+                : $sess?.meta
+                ? `meta:${typeof $sess?.meta == 'string' ? $sess?.meta : $U.json($sess?.meta)}`
                 : 'check x-lemon-identity';
             //* validate conditions..
-            if (!$ses) throw new Error(`${eCode} - .identity (SessionToken) is required - context:${$U.json(context)}`);
-            if ($ses?.sid === undefined) throw new Error(`${eCode} - ${err}`);
-            if (!$ses?.sid) throw new Error(`${eCode} - .sid (site-id) is required!`);
-            if (!$ses?.uid) throw new Error(`${eCode} - .uid (user-id) is required!`);
+            if (!$sess)
+                throw new Error(`${eCode} - .identity (IdentityToken) is required - context:${$U.json(context)}`);
+            if ($sess?.sid === undefined) throw new Error(`${eCode} - ${err}`);
+            if (!$sess?.sid) throw new Error(`${eCode} - .sid (site-id) is required!`);
+            if (!$sess?.uid) throw new Error(`${eCode} - .uid (user-id) is required!`);
         }
 
         //* normalize for the internal.
-        const sid = normalize && $ses?.sid?.startsWith('#') ? null : $T.S2($ses?.sid);
-        const uid = normalize && $ses?.uid?.startsWith('#') ? null : $T.S2($ses?.uid);
+        const sid = normalize && $sess?.sid?.startsWith('#') ? null : $T.S2($sess?.sid);
+        const uid = normalize && $sess?.uid?.startsWith('#') ? null : $T.S2($sess?.uid);
 
         //* returns.
-        return $ses ? { ...$ses, sid, uid } : null;
+        return $sess ? { ...$sess, sid, uid } : null;
     }
 
     /**
@@ -710,6 +715,79 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         }
         return context && getIdentityId(context);
     };
+
+    /**
+     * assert context condition.
+     */
+    public assertContext(
+        params?: {
+            /** call in local */
+            isLocal?: boolean;
+            /** authed by cognito identity-provider */
+            isAuthed?: boolean;
+            /** signed call with access-key */
+            isSigned?: boolean;
+            /** check if session has role */
+            hasRole?: string;
+        },
+        /** (optional) */
+        options?: { throwable?: boolean; errScope?: string },
+    ) {
+        const context = this.context;
+        const throwable = options?.throwable ?? true;
+        const errScope = options?.errScope ?? `assertContext()`;
+        const $idt = context?.identity as NextIdentityCognito;
+        const isS = (s: string) => typeof s === 'string' && s?.length > 0;
+        //* call in local
+        const isLocal = context?.domain === 'localhost';
+        //* signed call with access-key
+        const isSigned = isS(($idt as any)?.accessKey);
+        //* authed by cognito provider.
+        const isAuthed = isS($idt?.identityProvider) && isS($idt?.identityId) && isS($idt?.identityPoolId);
+        //* check if has role
+        const _hasRole = (role: string): boolean => {
+            const $sess = this.getCurrentSession({ throwable: false });
+            return $sess?.roles?.includes(role);
+        };
+
+        const errCode = `403 NOT ALLOWED`;
+        if (typeof params?.isLocal == 'boolean' && params?.isLocal != isLocal) {
+            if (throwable) throw new Error(`${errCode} - invalid isLocal[${params?.isLocal}] @${errScope}`);
+            return false;
+        }
+        if (typeof params?.isSigned == 'boolean' && params?.isSigned != isSigned) {
+            if (throwable) throw new Error(`${errCode} - invalid isSigned[${params?.isSigned}] @${errScope}`);
+            return false;
+        }
+        if (typeof params?.isAuthed == 'boolean' && params?.isAuthed != isAuthed) {
+            if (throwable) throw new Error(`${errCode} - invalid isAuthed[${params?.isAuthed}] @${errScope}`);
+            return false;
+        }
+        if (typeof params?.hasRole == 'string' && !_hasRole(params?.hasRole)) {
+            if (throwable) throw new Error(`${errCode} - invalid hasRole[${params?.hasRole}] @${errScope}`);
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * check if current context has `admin` access
+     * 1. run in local environ (or internal protocol with domin='localhost')
+     * 2. access via signed access-key
+     * 3. authorized cognito and has `admin` role in identity-token.
+     *
+     * @param role (default) admin
+     * @param options optionals
+     * @returns boolean
+     */
+    public isAdminRole(role = 'admin', options?: { errScope?: string }) {
+        const $option = { ...options, throwable: false };
+        if (this.assertContext({ isLocal: true }, $option)) return true;
+        if (this.assertContext({ isSigned: true, isAuthed: false }, $option)) return true;
+        if (this.assertContext({ isAuthed: true, hasRole: role }, $option)) return true;
+        return false;
+    }
 
     /**
      * prepare `next-context` w/ the customized { domain, userAgent }
@@ -904,6 +982,13 @@ export class MyManagerProxy<
     }
 
     /**
+     * generate the next id
+     */
+    public async nextId(): Promise<string> {
+        return this.$mgr.nextId().then(n => $T.S2(n));
+    }
+
+    /**
      * create new model
      * - use `.id` or `nextId()` for model-id
      * - validate model in seperate way before using this.
@@ -912,13 +997,13 @@ export class MyManagerProxy<
      * @param validate (optional) flag to validate (default is true)
      */
     public async makeModel(model: MyModel, validate?: boolean): Promise<MyModel> {
-        if (!model) throw new Error(`@model (${this.$mgr.type}-model) is required - makeModel()`);
+        const errScope = `makeModel(${this.$mgr.type}/${model?.id ?? ''})`;
+        if (!model) throw new Error(`@model (${this.$mgr.type}-model) is required - ${errScope}`);
         validate = validate ?? true;
 
         // use the custome id or new generated id.
-        // const nextId = await this.storage.storage.nextSeq(this.storage.type);
         const hasId = !!model.id;
-        const modelId = hasId ? $T.S2(model.id) : await this.$mgr.nextId().then(n => $T.S(n));
+        const modelId = hasId ? $T.S2(model.id) : await this.nextId();
 
         // make default model as base.
         const $def0 = this.$mgr.buildDefault(modelId);
@@ -927,7 +1012,7 @@ export class MyManagerProxy<
 
         // overwrite (or update) the model.
         const $org = await this.get(modelId, { ...$def3 });
-        if ($org?.id !== modelId) throw new Error(`.id[${model?.id}] is invalid - must be id:${modelId}`);
+        if ($org?.id !== modelId) throw new Error(`.id[${model?.id}] is invalid (mismatched ${modelId}) - ${errScope}`);
         return hasId ? this.override($org, $def3) : $org;
     }
 }

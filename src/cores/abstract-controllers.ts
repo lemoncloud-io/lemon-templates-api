@@ -23,7 +23,7 @@
  * @date        2023-09-27 optimized `doList()` to parse param.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/ssocio-templates-api/cores`
+ * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $T, $U, _log, _inf, _err, loadDataYml, NextContext, my_sequence } from 'lemon-core';
@@ -311,7 +311,7 @@ export abstract class AbstractCRUDController<
         return this.service.guardProxy($ctx, async proxy => {
             //* initialize models w/ running environment.
             if (id === 'initialize') {
-                //$ http ':8830/<type>/initialize/admin?clear'
+                //$ http ':8888/<type>/initialize/admin?clear'
                 const list0 = await this.loadMockData<any>(this.manager.type, 'initial');
                 const list1 = list0.map(N => this.bodyToModel(N, true));
                 const list2 = await my_parrallel(list1, async N => {
@@ -359,7 +359,7 @@ export abstract class AbstractCRUDController<
 
     /**
      * create(or insert) a `MyModel`
-     * - `id` must be emptry (or '0')
+     * - `id` must be empty (or '0')
      *
      * ```sh
      * $ http POST ':8888/<typeName>/0' "key"="modelValue"
@@ -393,7 +393,7 @@ export abstract class AbstractCRUDController<
 
     /**
      * create(or insert) multi `MyModel`
-     * - `id` must be emptry (or '0')
+     * - `id` must be empty (or '0')
      *
      * ```sh
      * $ http POST ':8888/<typeName>/0/bulk' "key"="modelValue"

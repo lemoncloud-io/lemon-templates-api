@@ -15,7 +15,7 @@ default_env: &default_env
   REPORT_ERROR: 1         # for lemon-core#2. report error in lambda-handler.
 
   ES6_VERSION: '7.10'
-  ES6_INDEX: 'ssocio-templates-v1'
+  ES6_INDEX: 'lemon-templates-v1'
   ES6_ENDPOINT: 'https://vpc-eureka-es72-isal7yrmwmw3ifhftfyia2qcxy.aos.ap-northeast-2.on.aws'
 
 #-----------------------------------
@@ -28,14 +28,14 @@ local:
   # WARN - for development.
   STAGE: '!develop'
   NS: TT
-  MY_DYNAMO_TABLE:  ssocio-templates-table-dev
-  USE_SESSION: sample/context/context-session.json             # Load sample for session use in local env
+  MY_DYNAMO_TABLE:  lemon-templates-table-dev
+  USE_SESSION: sample/context-session.json             # Load sample for session use in local env
 
   #WARN - for prod debugging.
   # STAGE: '!production'
   # NS: SS
-  # MY_DYNAMO_TABLE:  ssocio-templates-table
-  # USE_SESSION: sample/context/context-session.json
+  # MY_DYNAMO_TABLE:  lemon-templates-table
+  # USE_SESSION: sample/context-session.json
 
 #-----------------------------------
 # development server
