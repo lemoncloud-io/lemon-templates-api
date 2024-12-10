@@ -1,6 +1,6 @@
 {
   "name": "@lemoncloud/lemon-templates-api",
-  "version": "0.24.731",
+  "version": "0.24.1210",
   "description": "lemon-templates management api",
   "types": "dist/view/types.d.ts",
   "scripts": {},
