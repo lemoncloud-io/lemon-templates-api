@@ -906,6 +906,8 @@ export class MyManagerProxy<
             useSession?: boolean;
             /** flag to throw error (default true) */
             throwable?: boolean;
+            /** default limit (default 10) */
+            limit?: number;
         },
     ) {
         const $page: PaginateParam = {};
@@ -919,10 +921,11 @@ export class MyManagerProxy<
         const _has = (name: string): boolean =>
             param && (typeof param[name] === 'string' || typeof param[name] === 'number');
         const _val = (name: string): string => (param ? $T.S2(param[name]) : undefined);
+        //TODO - extract as function below @241017
         const _isAdm = () => session?.roles?.includes('admin');
 
         // parse params
-        const limit = $T.N(param?.limit, 10);
+        const limit = $T.N(param?.limit, options?.limit ?? 10);
         const page = $T.N(param?.page, 0);
         const sort = _has('sort') ? $T.S2(param?.sort, '') : undefined;
         if (page < 0) throw new Error(`@page[${page}] is invalid - doList(${type})`);
