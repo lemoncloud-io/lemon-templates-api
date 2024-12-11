@@ -9,10 +9,11 @@
  * @copyright (C) 2021 LemonCloud Co Ltd. - All Rights Reserved.
  */
 import { loadProfile } from 'lemon-core/dist/environ';
-import { expect2, loadJsonSync, GETERR, $U, NextContext } from 'lemon-core';
+import { expect2, GETERR, $U, NextContext } from 'lemon-core';
 import { BackendService } from './backend-service';
 import { Model } from './backend-model';
 import { onlyDefined } from '../cores/commons';
+import { loadSample } from '../cores/contexts.spec';
 
 export type AuthType = 'authed' | 'public' | 'session';
 export interface ServiceParams {
@@ -28,7 +29,7 @@ export interface ServiceParams {
 export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
     const current = params?.current ?? $U.current_time_ms();
     const isDummy = params?.dummy ?? true;
-    const { context, data } = loadJsonSync(`sample/context/context-${type}.json`);
+    const { context, data } = loadSample(type);
     if (params?.domain && context) (context as NextContext).domain = params?.domain;
 
     const service = new BackendService(isDummy ? 'dummy-data.yml' : '');

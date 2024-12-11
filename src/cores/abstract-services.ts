@@ -20,6 +20,7 @@
  * @date        2023-10-08 optimized `buildQuery()` w/ sort + offset.
  * @date        2023-10-11 optimized `doScan()` w/ dynamo-scan-filter.
  * @date        2024-11-01 optimized `nextId()` of manager-proxy
+ * @date        2023-11-06 optimized `onAfterSave()` for post-processing.
  * @date        2024-11-14 renamed to `IdentityToken` from `SessionToken`
  * @date        2024-11-28 optimized `assertContext()` and `isAdminRole()` w/ `lemon-core@3.2.11`.
  *
@@ -977,10 +978,21 @@ export class MyManagerProxy<
      * callback before saving model.
      * - could change field before saving.
      *
-     * @param model the last model to save
-     * @param $org (optional) original model (null if create)
+     * @param model the last model to save.
+     * @param $org (optional) original model (null if creating)
      */
     public async onBeforeSave(model: MyModel, $org?: MyModel): Promise<MyModel> {
+        return model;
+    }
+
+    /**
+     * callback after saving model.
+     * - could trigger the next step if created.
+     *
+     * @param model the saved model (null if deleted)
+     * @param $org (optional) original model (null if new created)
+     */
+    public async onAfterSave(model: MyModel, $org?: MyModel): Promise<MyModel> {
         return model;
     }
 

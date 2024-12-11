@@ -21,6 +21,7 @@
  * @date        2023-05-31 optimized to use `cores` in `modelAsView()` & `makeModelBase()`
  * @date        2023-09-15 optimized to use `hasCores` in `modelAsView()`
  * @date        2023-09-27 optimized `doList()` to parse param.
+ * @date        2023-11-06 optimized `onAfterSave()` for post-processing.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
@@ -387,7 +388,8 @@ export abstract class AbstractCRUDController<
             const validated = await $prxy.validateModel(toCreate, null);
             const filtered = await $prxy.onBeforeSave(validated, null);
             const created = await $prxy.makeModel({ ...filtered, ...base }, false); //WARN! - already validated.
-            return this.modelAsView(created);
+            const final = await $prxy.onAfterSave(created, null);
+            return this.modelAsView(final);
         });
     }
 
@@ -425,7 +427,7 @@ export abstract class AbstractCRUDController<
             const filtered = await my_sequence(validated, async validated => {
                 const filtered = await $prxy.onBeforeSave(validated, null);
                 const created = await $prxy.makeModel({ ...filtered, ...$base }, false); //WARN! - already validated.
-                return created;
+                return $prxy.onAfterSave(created, null);
             });
             return filtered.map(created => this.modelAsView(created));
         });
@@ -453,10 +455,12 @@ export abstract class AbstractCRUDController<
         // STEP.2 run main
         return this.service.guardProxy($ctx, async proxy => {
             const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
+            const $org = await $prxy.get(id);
             const validated = await $prxy.validateModel(toUpdate, id);
-            const filtered = await $prxy.onBeforeSave(validated, await $prxy.get(id));
+            const filtered = await $prxy.onBeforeSave(validated, $org);
             const updated = await $prxy.set(id, filtered);
-            return this.modelAsView(updated);
+            const final = await $prxy.onAfterSave(updated, $org);
+            return this.modelAsView(final);
         });
     };
 
@@ -485,7 +489,8 @@ export abstract class AbstractCRUDController<
             const $org = await $prxy.get(id, true);
             if (!destroy && $org?.deletedAt > 0) throw new Error(`404 NOT FOUND - ${this.manager.type}:${id}`);
             const deleted = await $prxy.$mgr.delete(id, isLocal && destroy);
-            return this.modelAsView(deleted);
+            const final = await $prxy.onAfterSave(null, deleted);
+            return this.modelAsView(final || deleted);
         });
     };
 
@@ -516,17 +521,18 @@ export abstract class AbstractCRUDController<
         }));
         // runs in guarded proxy.
         const $res = await this.service.guardProxy($ctx, async proxy => {
-            const $mgr = proxy.getManagerProxy(this.modelType);
-            if (!$mgr) throw new Error(`.model-type[${this.modelType}] is required!`);
+            const $prxy = proxy.getManagerProxy(this.modelType);
+            if (!$prxy) throw new Error(`.model-type[${this.modelType}] is required!`);
             //* validate and update.
             const $res = await my_parrallel(
                 models,
                 async (model: MyModel, i) => {
                     if (!model?.id) throw new Error(`.id is required - doPutBulk(${this.type}:${i})`);
-                    const validated = await $mgr.validateModel(model, model.id);
-                    const filtered = await $mgr.onBeforeSave(validated, await $mgr.get(model.id));
-                    const updated = await $mgr.set(model.id, filtered);
-                    return updated;
+                    const $org = await $prxy.get(model.id);
+                    const validated = await $prxy.validateModel(model, model.id);
+                    const filtered = await $prxy.onBeforeSave(validated, $org);
+                    const updated = await $prxy.set(model.id, filtered);
+                    return $prxy.onAfterSave(updated, $org);
                 },
                 parrallel,
             );
