@@ -229,8 +229,6 @@ functions:
           path: /
           method: get
           cors: true
-          documentation:
-            summary: "show service name and version"
       # -------------------------------------------------------
       # REST API : /hello
       - http:
