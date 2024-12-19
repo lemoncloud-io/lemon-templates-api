@@ -9,8 +9,8 @@
  * @copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { _log, _inf, _err, $U, NUL404, GETERR, $ES6 } from 'lemon-core';
-import { NextHandler, GeneralWEBController, loadJsonSync, doReportError } from 'lemon-core';
+import { _log, _inf, _err, $U, NUL404, GETERR, NextHandler, $ES6 } from 'lemon-core';
+import { GeneralWEBController, loadJsonSync, doReportError, SearchResult } from 'lemon-core';
 import { BatchParams, SearchService } from './service';
 import { SearchBatchModel, SearchBody, SearchQueryModel } from './model';
 import { $slack, $T } from 'lemon-core';
@@ -161,7 +161,9 @@ export class SearchAPIController extends GeneralWEBController {
      * run query, and get the search results. (GET/POST)
      *
      * ```sh
+     * $ http :8888/search/echo/query
      * $ http :8888/search/1000002/query
+     * $ http :8888/search/events-in-valid/query
      * $ http :8888/search/mappings-no-hash-option/query
      * $ http :8888/search/mappings-has-hash-option/query
      * $ http :8888/search/texts-has-not-norm1/query
@@ -178,6 +180,17 @@ export class SearchAPIController extends GeneralWEBController {
         body && _log(NS, `> body = `, $U.json(body));
         id = id === '0' ? '' : $T.S(id);
         const verbose = !!$T.B(param?.v, param?.v === '' ? 1 : 0);
+
+        //TODO - improve if no id
+        if (!id) {
+            return;
+        } else if (id === 'echo') {
+            const context = {
+                accountId: ctx.accountId,
+                userAgent: ctx.userAgent,
+            };
+            return { param, body, context };
+        }
 
         const size = $T.N(param?.size || body?.size, 1);
         const { query } = await this.findQueryModel(id);
@@ -445,7 +458,7 @@ export class SearchAPIController extends GeneralWEBController {
                 //NOTE - 가끔 ES검색이 실패할 경우가 있으며, 재시도가 필요함!
                 _inf(NS, `> search =`, $U.json(srch));
                 const $res = await this.runQuery(srch, size).catch(e =>
-                    doReportError(e, $ctx, null, { id, param, body, $batch }).then(() => {
+                    doReportError(e, $ctx, null, { id, param, body, $batch }).then<SearchResult<unknown>>(() => {
                         hasFinished = true;
                         //INFO - `TooManyRequest`와 같은 에러로 멈출수 있음...
                         updates.state = 'failed';
