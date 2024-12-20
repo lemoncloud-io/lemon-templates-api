@@ -272,6 +272,25 @@ describe('SearchService', () => {
         expect2(() => search.hello()).toEqual(`search-service:TT/dummy-data.yml/${indexName}`);
 
         //* test of echo
-        expect2(await search.search({ size: 0 }, { indexName: '#echo' })).toEqual();
+        expect2(await search.search({ size: 0 }, { indexName: '#echo' }), '!context').toEqual({
+            param: { indexName: '#echo' },
+            body: {
+                body: { size: 0 },
+                index: '#echo',
+                service: 'lemon-templates-api',
+                signature: 'v1:lgLCkE2DyUsYjlqQw8RWYyyWieQGCt5077SuZkEfya8=',
+            },
+            // context: {
+            //     identity: {
+            //         accessKey: 'AKIAJMHS2OVFCUCEKXYA',
+            //         accountId: '085403634746',
+            //         caller: 'AIDAIARRLJP5R642RTOM4',
+            //         identityId: null,
+            //         identityPoolId: null,
+            //         identityProvider: null,
+            //         userAgent: 'Amazon CloudFront',
+            //     },
+            // },
+        });
     });
 });

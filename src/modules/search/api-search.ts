@@ -170,7 +170,9 @@ export class SearchAPIController extends GeneralWEBController {
      * run query, and get the search results. (GET/POST)
      *
      * ```sh
+     * $ http :8888/search/echo/query
      * $ http :8888/search/1000002/query
+     * $ http :8888/search/events-in-valid/query
      * $ http :8888/search/mappings-no-hash-option/query
      * $ http :8888/search/mappings-has-hash-option/query
      * $ http :8888/search/texts-has-not-norm1/query
@@ -187,6 +189,17 @@ export class SearchAPIController extends GeneralWEBController {
         body && _log(NS, `> body = `, $U.json(body));
         id = id === '0' ? '' : $T.S(id);
         const verbose = !!$T.B(param?.v, param?.v === '' ? 1 : 0);
+
+        //TODO - improve if no id
+        if (!id) {
+            return;
+        } else if (id === 'echo') {
+            const context = {
+                accountId: ctx.accountId,
+                userAgent: ctx.userAgent,
+            };
+            return { param, body, context };
+        }
 
         const size = $T.N(param?.size || body?.size, 1);
         const { query } = await this.findQueryModel(id);
