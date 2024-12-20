@@ -4,11 +4,12 @@
  *
  * @author      Steve <steve@lemoncloud.io>
  * @date        2022-02-22 optimized w/ `lemon-core#3.0` and `@elastic/elasticsearch`
+ * @date        2024-12-20 optimized with `lemon-core#3.2.11`
  *
- * @origin      lemon-accounts-api
+ * @origin      lemon-templates-api
  * @copyright (C) 2021 LemonCloud Co Ltd. - All Rights Reserved.
  */
-import { $U, sourceToItem, _err, _inf, _log } from 'lemon-core';
+import { $U, sourceToItem, _err, _inf, _log, _ES6 } from 'lemon-core';
 import {
     CoreModelFilterable,
     Elastic6Option,
@@ -21,6 +22,8 @@ import {
     TypedStorageService,
     UniqueFieldManager,
     GETERR,
+    Elastic6SearchParams,
+    Elastic6Instance,
 } from 'lemon-core';
 import {
     $FIELD,
@@ -30,7 +33,6 @@ import {
     SearchBatchModel,
     SearchQueryModel,
     SearchResult,
-    SearchType,
 } from './model';
 import { $protocol, $T, SimpleSet } from 'lemon-core';
 import elasticsearch from '@elastic/elasticsearch';
@@ -83,13 +85,13 @@ export class SearchService
      */
     public readonly client?: elasticsearch.Client;
     /**
-     * Elasticsearch option
-     */
-    public readonly options?: Elastic6Option;
-    /**
-     * Elastic6Service instance
+     * Elastic6Service
      */
     public readonly elastic?: Elastic6Service;
+    /**
+     * Elastic6Instance
+     */
+    public readonly instance?: Elastic6Instance;
 
     protected readonly tableName: string;
     protected current: number = 0; // for unit-test. set the current time-stamp.
@@ -112,22 +114,25 @@ export class SearchService
         super(ns);
         _log(NS, `SearchService(${tableName}, ${ns})..`);
         this.tableName = tableName;
-        this.options = options;
-
-        //! initialize Elasticsearch
-        if (options?.endpoint && options?.indexName) {
-            this.elastic = new Elastic6Service<any>(options);
-            this.client = this.elastic.client;
-        }
-
+        const $es6 = _ES6(options);
+        this.instance = $es6;
+        this.elastic = $es6?.elastic;
+        this.client = $es6?.client;
         this.$query = new MyQueryManager(this);
         this.$batch = new MyBatchManager(this);
+    }
+
+    /** get the current `options` (nullable) */
+    public get options() {
+        return this.elastic?.options;
     }
 
     /**
      * the current information
      */
-    public hello = () => `search-service:${this.NS}/${this.tableName}/${this.options?.indexName}`;
+    public hello = () => `search-service:${this.NS}/${this.tableName ?? ''}/${this.options?.indexName ?? ''}`;
+
+    /** override current */
     public setCurrent = (current: number) => (this.current = current);
 
     /**
@@ -189,19 +194,20 @@ export class SearchService
     /**
      * search by raw query
      *
-     * @param body          Elasticsearch Query DSL
-     * @param searchType    see 'search_type' in Elasticsearch documentation
+     * @param body      Elasticsearch Query DSL
+     * @param params    (optional) search parameters.
      */
-    public async search<T>(body: SearchBody, searchType?: SearchType): Promise<SearchResult<T>> {
-        return this.elastic.search(body, searchType);
+    public async search<T>(body: SearchBody, params?: Elastic6SearchParams): Promise<SearchResult<T>> {
+        if (!this.instance) throw new Error(`.instance is invalid (mis-config)`);
+        return this.instance.search(body, params);
     }
 
     /**
      * search all until limit (-1 means no-limit)
      */
-    public async searchAll<T>(body: SearchBody, searchType?: SearchType, limit: number = -1) {
+    public async searchAll<T>(body: SearchBody, params?: Elastic6SearchParams, limit: number = -1) {
         const list: T[] = [];
-        for await (const chunk of this.generateSearchResult(body, searchType, limit)) {
+        for await (const chunk of this.generateSearchResult(body, params, limit)) {
             chunk.forEach((N: T) => list.push(N));
         }
         return list;
@@ -210,15 +216,15 @@ export class SearchService
     /**
      * create async generator that yields items queried until last
      *
-     * @param body          Elasticsearch Query DSL
-     * @param searchType    see 'search_type' in Elasticsearch documentation
-     * @param number        the maximum limit of loop (-1 means un-limited)
+     * @param body      Elasticsearch Query DSL
+     * @param params    (optional) search parameters.
+     * @param limit     the maximum limit of loop (-1 means un-limited)
      */
-    public async *generateSearchResult<T>(body: SearchBody, searchType?: SearchType, limit?: number) {
+    public async *generateSearchResult<T>(body: SearchBody, params?: Elastic6SearchParams, limit?: number) {
         if (!body.sort) body.sort = '_doc';
 
         do {
-            const { list, last } = await this.search<T>(body, searchType);
+            const { list, last } = await this.search<T>(body, params);
             body.search_after = last;
 
             yield list;

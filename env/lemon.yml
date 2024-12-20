@@ -19,10 +19,16 @@ default_env: &default_env
   ES6_ENDPOINT: 'https://vpc-eureka-es72-isal7yrmwmw3ifhftfyia2qcxy.aos.ap-northeast-2.on.aws'
 
 #-----------------------------------
+# test for jest in local
+test:
+  <<: *default_env
+  ES6_ENDPOINT: https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy
+
+#-----------------------------------
 # local development configuration.
 local:
   <<: *default_env
-  ES6_ENDPOINT: 'https://localhost:9683'              # INFO! - use ssh tunneling (alias `lmes72`)
+  # ES6_ENDPOINT: 'https://localhost:9683'              # INFO! - use ssh tunneling (alias `lmes72`)
   REPORT_ERROR_ARN: arn:aws:sns:ap-northeast-2:540298831859:lemon-hello-sns
 
   # WARN - for development.
@@ -30,6 +36,7 @@ local:
   NS: TT
   MY_DYNAMO_TABLE:  lemon-templates-table-dev
   USE_SESSION: sample/context-session.json             # Load sample for session use in local env
+  ES6_ENDPOINT: https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy
 
   #WARN - for prod debugging.
   # STAGE: '!production'

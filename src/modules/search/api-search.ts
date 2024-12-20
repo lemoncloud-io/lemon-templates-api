@@ -5,14 +5,23 @@
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2022-02-18 optimized search w/ ES6.8
+ * @date        2024-12-20 optimized with `lemon-core#3.2.11`
  *
+ * @origin      lemon-templates-api
  * @copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { _log, _inf, _err, $U, NUL404, GETERR, $ES6 } from 'lemon-core';
-import { NextHandler, GeneralWEBController, loadJsonSync, doReportError } from 'lemon-core';
+import {
+    NextHandler,
+    GeneralWEBController,
+    loadJsonSync,
+    doReportError,
+    Elastic6SearchParams,
+    SearchProxyBody,
+} from 'lemon-core';
 import { BatchParams, SearchService } from './service';
-import { SearchBatchModel, SearchBody, SearchQueryModel } from './model';
+import { SearchBatchModel, SearchBody, SearchResult, SearchQueryModel } from './model';
 import { $slack, $T } from 'lemon-core';
 import { performance } from 'perf_hooks';
 import $service from '../../service/backend-service';
@@ -198,6 +207,27 @@ export class SearchAPIController extends GeneralWEBController {
             return _fx($res);
         }
         return { ...$res, $query };
+    };
+
+    /**
+     * run the proxied search query.
+     */
+    public getSearchProxy: NextHandler<Elastic6SearchParams, any, SearchProxyBody> = async (id, param, body, ctx) =>
+        this.postSearchProxy(id, param, body, ctx);
+    public postSearchProxy: NextHandler<Elastic6SearchParams, any, SearchProxyBody> = async (id, param, body, ctx) => {
+        const errScope = `postSearchProxy(${id ?? ''})`;
+        _log(NS, `${errScope}..`);
+        id = id === '0' ? '' : $T.S(id);
+        // const verbose = !!$T.B(param?.v, param?.v === '' ? 1 : 0);
+
+        const indexName = param?.indexName;
+        if (indexName === '#echo') {
+            const context = { identity: { ...ctx?.identity } };
+            return { param, body, context };
+        }
+        const options = this.service.options;
+        if (options?.indexName != body?.index)
+            throw new Error(`.index[${body?.index}] is invalid (mismatched) - ${errScope}`);
     };
 
     //TODO - support `/export`
@@ -445,7 +475,7 @@ export class SearchAPIController extends GeneralWEBController {
                 //NOTE - 가끔 ES검색이 실패할 경우가 있으며, 재시도가 필요함!
                 _inf(NS, `> search =`, $U.json(srch));
                 const $res = await this.runQuery(srch, size).catch(e =>
-                    doReportError(e, $ctx, null, { id, param, body, $batch }).then(() => {
+                    doReportError(e, $ctx, null, { id, param, body, $batch }).then<SearchResult<unknown>>(() => {
                         hasFinished = true;
                         //INFO - `TooManyRequest`와 같은 에러로 멈출수 있음...
                         updates.state = 'failed';
