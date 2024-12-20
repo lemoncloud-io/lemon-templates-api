@@ -252,6 +252,7 @@ describe('SearchService', () => {
 
     //* search-proxy runing in local w/ access-key
     it('should pass search proxy(lemon)', async () => {
+        //* lemon.dev 에 배포된 상태에서 테스트 진행함!
         const indexName = 'lemon-templates-v1';
         const endpoint = 'https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy';
 
@@ -292,5 +293,7 @@ describe('SearchService', () => {
             //     },
             // },
         });
+
+        expect2(await search.search(null, { indexName: '#describe-index' })).toEqual();
     });
 });

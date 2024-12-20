@@ -1,0 +1,123 @@
+{
+    "!": "",
+    "mappings": {
+        "dynamic_templates": [
+            {
+                "autocomplete": {
+                    "mapping": {
+                        "analyzer": "autocomplete_case_insensitive",
+                        "search_analyzer": "standard",
+                        "type": "text"
+                    },
+                    "path_match": "_decomposed.*"
+                }
+            },
+            {
+                "autocomplete_qwerty": {
+                    "mapping": {
+                        "analyzer": "autocomplete_case_sensitive",
+                        "search_analyzer": "whitespace",
+                        "type": "text"
+                    },
+                    "path_match": "_qwerty.*"
+                }
+            },
+            {
+                "string_id": {
+                    "mapping": {
+                        "ignore_above": 256,
+                        "type": "keyword"
+                    },
+                    "match": "$id",
+                    "match_mapping_type": "string"
+                }
+            },
+            {
+                "strings": {
+                    "mapping": {
+                        "analyzer": "hangul",
+                        "fields": {
+                            "keyword": {
+                                "ignore_above": 256,
+                                "type": "keyword"
+                            }
+                        },
+                        "search_analyzer": "hangul",
+                        "type": "text"
+                    },
+                    "match_mapping_type": "string"
+                }
+            }
+        ],
+        "properties": {
+            "@version": {
+                "index": false,
+                "type": "keyword"
+            },
+            "created_at": {
+                "type": "date"
+            },
+            "deleted_at": {
+                "type": "date"
+            },
+            "updated_at": {
+                "type": "date"
+            }
+        }
+    },
+    "settings": {
+        "index": {
+            "analysis": {
+                "analyzer": {
+                    "autocomplete_case_insensitive": {
+                        "filter": [
+                            "lowercase"
+                        ],
+                        "tokenizer": "edge_30grams",
+                        "type": "custom"
+                    },
+                    "autocomplete_case_sensitive": {
+                        "filter": [],
+                        "tokenizer": "edge_30grams",
+                        "type": "custom"
+                    },
+                    "hangul": {
+                        "filter": [
+                            "lowercase"
+                        ],
+                        "tokenizer": "hangul",
+                        "type": "custom"
+                    }
+                },
+                "tokenizer": {
+                    "edge_30grams": {
+                        "max_gram": "30",
+                        "min_gram": "1",
+                        "token_chars": [
+                            "letter",
+                            "digit",
+                            "punctuation",
+                            "symbol"
+                        ],
+                        "type": "edge_ngram"
+                    },
+                    "hangul": {
+                        "decompound": "true",
+                        "deinflect": "true",
+                        "index_eojeol": "true",
+                        "pos_tagging": "false",
+                        "type": "seunjeon_tokenizer"
+                    }
+                }
+            },
+            "creation_date": "1734606587225",
+            "number_of_replicas": "1",
+            "number_of_shards": "4",
+            "provided_name": "lemon-templates-v1",
+            "uuid": "nKrXaJOgTcyKknDOaiZ8bQ",
+            "version": {
+                "created": "135238227"
+            }
+        }
+    }
+}

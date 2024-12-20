@@ -1,6 +1,6 @@
 {
   "name": "lemon-templates-api",
-  "version": "0.24.1220a",
+  "version": "0.24.1220d",
   "description": "lemon-templates management api",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",

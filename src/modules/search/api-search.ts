@@ -11,7 +11,7 @@
  * @copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { _log, _inf, _err, $U, NUL404, GETERR, $ES6 } from 'lemon-core';
+import { _log, _inf, _err, $U, NUL404, GETERR, $ES6, $info } from 'lemon-core';
 import {
     NextHandler,
     GeneralWEBController,
@@ -24,7 +24,7 @@ import { BatchParams, SearchService } from './service';
 import { SearchBatchModel, SearchBody, SearchResult, SearchQueryModel } from './model';
 import { $slack, $T } from 'lemon-core';
 import { performance } from 'perf_hooks';
-import $service from '../../service/backend-service';
+import $service, { BackendService } from '../../service/backend-service';
 const NS = $U.NS('search', 'yellow'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -32,15 +32,17 @@ const NS = $U.NS('search', 'yellow'); // NAMESPACE TO BE PRINTED.
  * - handler for `/search/` api
  */
 export class SearchAPIController extends GeneralWEBController {
-    protected service: SearchService;
+    protected service: BackendService;
+    protected search: SearchService;
 
     /**
      * default constructor.
      */
-    public constructor(service?: SearchService) {
+    public constructor(service?: BackendService, search?: SearchService) {
         super('search');
         _log(NS, `SearchController()...`);
-        this.service = service ?? $service.search;
+        this.service = service ?? $service;
+        this.search = search ?? $service.search;
     }
 
     /**
@@ -52,13 +54,13 @@ export class SearchAPIController extends GeneralWEBController {
      * find the target model by id or name
      */
     protected findQueryModel = async (id: string): Promise<SearchQueryModel> => {
-        if (!this.service) throw new Error(`.service (SearchService) is required - search!`);
+        if (!this.search) throw new Error(`.service (SearchService) is required - search!`);
         let model: SearchQueryModel = null;
-        if (this.service.$query.validateId(id)) {
-            model = await this.service.$query.getModelById(id);
-        } else if (this.service.$query.validateName(id)) {
-            model = await this.service.$query.findByName(id);
-        } else throw new Error(`404 NOT FOUND - find-model(${this.service.$query.type}/${id})`);
+        if (this.search.$query.validateId(id)) {
+            model = await this.search.$query.getModelById(id);
+        } else if (this.search.$query.validateName(id)) {
+            model = await this.search.$query.findByName(id);
+        } else throw new Error(`404 NOT FOUND - find-model(${this.search.$query.type}/${id})`);
 
         //! return model.
         return { ...model, Query: model.query ? JSON.parse(model.query) : null };
@@ -66,14 +68,14 @@ export class SearchAPIController extends GeneralWEBController {
 
     protected findQuery = async (id: string): Promise<SearchBody> => {
         const model = await this.findQueryModel(id);
-        const query = this.service.$query.asQuery(model.query);
+        const query = this.search.$query.asQuery(model.query);
         return query;
     };
 
     protected runQuery = async (body: SearchBody, size?: number) => {
         _log(NS, `runQuery(${size})..`);
-        if (size !== undefined) return this.service.search({ ...body, size: $U.N(size, 0) });
-        return this.service.search(body);
+        if (size !== undefined) return this.search.search({ ...body, size: $U.N(size, 0) });
+        return this.search.search(body);
     };
 
     /**
@@ -155,7 +157,7 @@ export class SearchAPIController extends GeneralWEBController {
         const $query = await this.findQueryModel(id);
         _log(NS, `> $query =`, $U.json($query));
         _log(NS, `> batch-id =`, $query.batchId);
-        const $batch = $query.batchId ? await this.service.$batch.getModelById($query.batchId) : null;
+        const $batch = $query.batchId ? await this.search.$batch.getModelById($query.batchId) : null;
         if (restart && $batch) {
             const size = $T.N(param?.size, $batch.size);
             const limit = $T.N(param?.limit, $batch.limit);
@@ -182,28 +184,20 @@ export class SearchAPIController extends GeneralWEBController {
      * $ http POST :8888/search/1000002/query
      * $ http POST :8888/search/mappings-no-norm1-prio/query priority=2
      */
-    public getSearchQuery: NextHandler = async (id, param, body, ctx) => this.postSearchQuery(id, param, body, ctx);
-    public postSearchQuery: NextHandler = async (id, param, body, ctx) => {
-        _log(NS, `postSearchQuery(${id})..`);
-        param && _log(NS, `> param = `, $U.json(param));
-        body && _log(NS, `> body = `, $U.json(body));
-        id = id === '0' ? '' : $T.S(id);
+    public getSearchQuery: NextHandler = async (id, param, body, $ctx) => this.postSearchQuery(id, param, body, $ctx);
+    public postSearchQuery: NextHandler = async (id, param, body, $ctx) => {
+        const errScope = `postSearchQuery(${id ?? ''})`;
+        _log(NS, `${errScope}..`);
+        // param && _log(NS, `> param = `, $U.json(param));
+        // body && _log(NS, `> body = `, $U.json(body));
+        $ctx && _log(NS, `> $ctx = `, $U.json($ctx));
+        id = id === '0' ? '' : $T.S2(id);
+        if (id) throw new Error(`@id[${id}] is invalid - ${errScope}`);
+
         const verbose = !!$T.B(param?.v, param?.v === '' ? 1 : 0);
-
-        //TODO - improve if no id
-        if (!id) {
-            return;
-        } else if (id === 'echo') {
-            const context = {
-                accountId: ctx.accountId,
-                userAgent: ctx.userAgent,
-            };
-            return { param, body, context };
-        }
-
         const size = $T.N(param?.size || body?.size, 1);
         const { query } = await this.findQueryModel(id);
-        const $query = this.service.$query.asQuery(query, { ...body, ns: this.service.NS });
+        const $query = this.search.$query.asQuery(query, { ...body, ns: this.search.NS });
         const $res = await this.runQuery($query, size);
         if (verbose) {
             const _fx = (O: any): any =>
@@ -225,22 +219,58 @@ export class SearchAPIController extends GeneralWEBController {
     /**
      * run the proxied search query.
      */
-    public getSearchProxy: NextHandler<Elastic6SearchParams, any, SearchProxyBody> = async (id, param, body, ctx) =>
-        this.postSearchProxy(id, param, body, ctx);
-    public postSearchProxy: NextHandler<Elastic6SearchParams, any, SearchProxyBody> = async (id, param, body, ctx) => {
+    public getSearchProxy: NextHandler<Elastic6SearchParams, any, SearchProxyBody> = async (id, param, body, $ctx) =>
+        this.postSearchProxy(id, param, body, $ctx);
+    public postSearchProxy: NextHandler<Elastic6SearchParams, any, SearchProxyBody> = async (id, param, body, $ctx) => {
         const errScope = `postSearchProxy(${id ?? ''})`;
         _log(NS, `${errScope}..`);
-        id = id === '0' ? '' : $T.S(id);
-        // const verbose = !!$T.B(param?.v, param?.v === '' ? 1 : 0);
+        id = id === '0' ? '' : $T.S2(id);
 
-        const indexName = param?.indexName;
-        if (indexName === '#echo') {
-            const context = { identity: { ...ctx?.identity } };
+        //* (internal) for loop testing.
+        if (param?.indexName === '#echo') {
+            const context = { identity: { ...$ctx?.identity } };
             return { param, body, context };
         }
-        const options = this.service.options;
-        if (options?.indexName != body?.index)
-            throw new Error(`.index[${body?.index}] is invalid (mismatched) - ${errScope}`);
+
+        // STEP.0 validate parameters.
+        if (1) {
+            const options = this.search.options;
+            const indexName = $T.S(options?.indexName);
+            const service = $T.S($info()?.service);
+            if (service !== body?.service)
+                throw new Error(`.service[${body?.service ?? ''}] is invalid (mismatched) - ${errScope}`);
+            if (indexName !== body?.index && !body?.index?.startsWith('#'))
+                throw new Error(`.index[${body?.index ?? ''}] is invalid (mismatched) - ${errScope}`);
+        }
+
+        //* runs in guarded proxy.
+        return this.service.guardProxy($ctx, async proxy => {
+            // STEP.1 validate access (valid ONLY if signed w/o identity-pool).
+            const isPassed = proxy.assertContext({ isSigned: true, isAuthed: false }, { throwable: false });
+            if (!isPassed) throw new Error(`403 NOT ALLOWED - invalid credential @${errScope}`);
+
+            //! decode by `#<cmd>`.
+            const cmd = param?.indexName?.startsWith('#') ? $T.S2(param?.indexName?.substring(1)) : null;
+            if (cmd === null) {
+            } else if (cmd === 'create-index') {
+                return $ES6.elastic?.createIndex();
+            } else if (cmd === 'destroy-index') {
+                return $ES6.elastic?.destroyIndex();
+            } else if (cmd === 'describe-index') {
+                return $ES6.elastic?.describe();
+            } else {
+                throw new Error(`@cmd[${cmd}] is invalid (not-supported) - ${errScope}`);
+            }
+
+            // STEP.2 extract body. (warning! beware of infinite loooop)
+            const $body = body?.body && typeof body?.body === 'object' ? body?.body : undefined;
+            if (!$body) throw new Error(`.body(SearchBody) is required - ${errScope}`);
+
+            // STEP.3 execute query..
+            const $res = await this.search.search($body, param);
+            _log(NS, `> total =`, $res?.total);
+            return $res;
+        });
     };
 
     //TODO - support `/export`
@@ -323,14 +353,14 @@ export class SearchAPIController extends GeneralWEBController {
         // STEP.2 save query
         if (!id) {
             //! insert new, and update
-            const model = await this.service.$query.storage.insert({ name: '#' });
+            const model = await this.search.$query.storage.insert({ name: '#' });
             return this.putSearch(model.id, param, body, ctx);
-        } else if (this.service.$query.validateId(id)) {
+        } else if (this.search.$query.validateId(id)) {
             //! update the existing one.
             return this.putSearch(id, param, body, ctx);
-        } else if (this.service.$query.validateName(id)) {
+        } else if (this.search.$query.validateName(id)) {
             //! update the existing one by name.
-            const model = await this.service.$query.saveQuery(id, body);
+            const model = await this.search.$query.saveQuery(id, body);
             return model;
         }
         throw new Error(`@id[${id}] (query-id) is invalid!`);
@@ -362,7 +392,7 @@ export class SearchAPIController extends GeneralWEBController {
         const $org = await this.findQueryModel(id);
 
         // STEP.2 update the query body..
-        return this.service.$query.updateQuery($org, body);
+        return this.search.$query.updateQuery($org, body);
     };
 
     /**
@@ -394,13 +424,13 @@ export class SearchAPIController extends GeneralWEBController {
 
         // STEP.1 find the existing query.
         const $query = await this.findQueryModel(id);
-        const meta = { ...body, ns: this.service.NS }; // replace query-template
-        const query = this.service.$query.asQuery($query.query, meta);
+        const meta = { ...body, ns: this.search.NS }; // replace query-template
+        const query = this.search.$query.asQuery($query.query, meta);
 
         // STEP.2 make batch-model, and update the state.
         const $batch = name
-            ? await this.service.$batch.createBatch($query, name, target)
-            : await this.service.$batch.findBatch($query);
+            ? await this.search.$batch.createBatch($query, name, target)
+            : await this.search.$batch.findBatch($query);
         const hasStopped = $batch.state != 'running';
         const size = $T.N(param?.size, $batch.size || 0); // batch size (if result.length==0, then EOF)
         const limit = $T.N(param?.limit, $batch.limit || 0); // max limit (-1 means doing until EOF)
@@ -425,17 +455,17 @@ export class SearchAPIController extends GeneralWEBController {
         const qid = $query.id;
         const bid = $batch.id;
         _inf(NS, `> updates[${bid}] =`, $U.json($ups));
-        const updated = await this.service.$batch.storage.update(bid, $ups, $inc);
+        const updated = await this.search.$batch.storage.update(bid, $ups, $inc);
         _inf(NS, `> updated[${bid}] =`, $U.json(updated));
         Object.assign($batch, { ...updated, id: bid });
 
         // STEP.4 enquene batch-task if not in queue.
-        const queueId = updated.started === 1 ? await this.service.$batch.enqueueNext($batch, $ctx) : null;
+        const queueId = updated.started === 1 ? await this.search.$batch.enqueueNext($batch, $ctx) : null;
         queueId && _inf(NS, `> queue-id =`, queueId);
 
         // STEP.4-1 also update the last batch/queue-id to query.
         if (qid && bid && queueId) {
-            const upds = await this.service.$query.storage.update(qid, { batchId: bid, queueId });
+            const upds = await this.search.$query.storage.update(qid, { batchId: bid, queueId });
             _inf(NS, `> query[${qid}].updated =`, $U.json(upds));
         }
 
@@ -457,7 +487,7 @@ export class SearchAPIController extends GeneralWEBController {
         //! WARN - must be matched with the current batch run-count
         const count = $T.N(param?.count, 0);
         const _limit = $T.N(param?.limit, param?.limit === '' ? count + 1 : 0); // limit 설정있으면, 1번만 자동 실행토록..
-        const $batch: SearchBatchModel = await this.service.$batch.getModelById(batchId).catch(NUL404);
+        const $batch: SearchBatchModel = await this.search.$batch.getModelById(batchId).catch(NUL404);
         const hl = (a: any) => `\`${typeof a === 'number' ? a : a || ''}\``;
 
         const name = $batch.name && $batch.name != '#' ? $batch.name : $batch.id;
@@ -502,11 +532,11 @@ export class SearchAPIController extends GeneralWEBController {
                 //! run the target batch-handler.
                 const target = $batch.target;
                 const params: BatchParams = {
-                    meta: this.service.$batch.asMeta$($batch.meta),
+                    meta: this.search.$batch.asMeta$($batch.meta),
                     index: count,
                     context: $ctx,
                 };
-                const list = await this.service.runBatchHandler(target, $res?.list, params).catch(e => {
+                const list = await this.search.runBatchHandler(target, $res?.list, params).catch(e => {
                     _err(NS, `! err =`, e);
                     //INFO - 핸들러함수에서 에러를 발생할 수 있으며, 이때 멈춰야함.
                     hasFinished = true;
@@ -545,7 +575,7 @@ export class SearchAPIController extends GeneralWEBController {
             }
 
             // STEP.3 update batch.
-            const updated = await this.service.$batch.storage.update(batchId, updates, { count: 1 });
+            const updated = await this.search.$batch.storage.update(batchId, updates, { count: 1 });
             _inf(NS, `> updated =`, $U.json(updated));
             Object.assign($batch, { ...updated, id: batchId });
             const t1 = performance.now(); // start of processing
@@ -556,7 +586,7 @@ export class SearchAPIController extends GeneralWEBController {
             // eslint-disable-next-line prettier/prettier
             const title = `#batch[${hl(name)}] has ${hl($batch.state)} at ${hl(count)}/${hl(body?.total)}${opts} in ${hl(took)}s.`;
             const idx = $U.N(count, 0);
-            const qid = hasFinished ? '' : await this.service.$batch.enqueueNext($batch, $ctx);
+            const qid = hasFinished ? '' : await this.search.$batch.enqueueNext($batch, $ctx);
             if (idx % 10 === 0 || hasFinished || opts) {
                 slack && (await $slack(title, { $batch, param, body, $ctx, qid, limit }));
             }
