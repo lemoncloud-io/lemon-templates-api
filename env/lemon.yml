@@ -36,7 +36,7 @@ local:
   NS: TT
   MY_DYNAMO_TABLE:  lemon-templates-table-dev
   USE_SESSION: sample/context-session.json             # Load sample for session use in local env
-  ES6_ENDPOINT: https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy
+  ES6_ENDPOINT: https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy    # use search-proxy after deployment.
 
   #WARN - for prod debugging.
   # STAGE: '!production'

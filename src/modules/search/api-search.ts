@@ -80,6 +80,7 @@ export class SearchAPIController extends GeneralWEBController {
 
     /**
      * GET /search/{id}/hello
+     * - internal management of search index
      */
     public getSearchHello: NextHandler = async (id, param, body, $ctx) => {
         const errScope = `getSearchHello(${id ?? ''})`;
@@ -87,17 +88,18 @@ export class SearchAPIController extends GeneralWEBController {
         const isLocal = $ctx?.domain === 'localhost';
         if (!isLocal) throw new Error(`403 NOT ALLOWED - domain[${$ctx?.domain ?? ''}] is invali  @${errScope}`);
 
+        const hello = this.hello();
         const useProxy = this.search?.isProxy(); // flag if search is running w/ proxy agent.
         const runProxy = (cmd: string) => this.search.instance.search(null, { indexName: `#${cmd}` });
+        const $elastic = this.search?.instance?.elastic;
 
         //! $ http ':8888/search/init-elastic/hello'
-        if (id == 'init-elastic') return useProxy ? runProxy('create-index') : $ES6.elastic?.createIndex();
+        if (id == 'init-elastic') return useProxy ? runProxy('create-index') : $elastic?.createIndex();
         //! $ http ':8888/search/destroy-elastic/hello'
-        if (id == 'destroy-elastic') return useProxy ? runProxy('destroy-index') : $ES6.elastic?.destroyIndex();
+        if (id == 'destroy-elastic') return useProxy ? runProxy('destroy-index') : $elastic?.destroyIndex();
         //! $ http ':8888/search/desc-elastic/hello'
-        if (id == 'desc-elastic') return useProxy ? runProxy('describe-index') : $ES6.elastic?.describe();
+        if (id == 'desc-elastic') return useProxy ? runProxy('describe-index') : $elastic?.describe();
 
-        const hello = this.hello();
         return { id, hello };
     };
 
