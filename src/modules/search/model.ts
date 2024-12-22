@@ -6,12 +6,17 @@
  * @date        2021-12-07 initial version
  * @date        2021-12-17 customized from origin
  * @date        2022-02-18 optimized search w/ ES6.8
+ * @date        2024-12-20 optimized with `lemon-core#3.2.11`
  *
- * @origin      lemon-accounts-api
+ * @origin      lemon-templates-api
  * @copyright (C) 2021 LemonCloud Co Ltd. - All Rights Reserved.
  */
+import { CoreModel, QueryTerm, SortTerm, SearchQuery, SearchBody } from 'lemon-core';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { _log, _inf, _err, CoreModel } from 'lemon-core';
+import { _log, _inf, _err, SearchResult } from 'lemon-core';
+
+export { QueryTerm, SortTerm, SearchQuery, SearchBody, SearchResult };
+export type SearchType = 'query_then_fetch' | 'dfs_query_then_fetch';
 
 /**
  * type: model-type
@@ -109,95 +114,6 @@ export interface SearchBatchModel extends SearchModel {
      */
     error?: string;
 }
-
-/**
- * type `SearchResult`
- */
-export interface SearchResult<T> {
-    /**
-     * total count of items searched
-     */
-    total: number;
-    /**
-     * item list
-     */
-    list: T[];
-    /**
-     * pagination cursor
-     */
-    last?: string[];
-    /**
-     * aggregation result
-     */
-    aggregations?: any;
-}
-
-/**
- * 쿼리의 각 항목의 값들
- */
-export type QueryTerm =
-    | string
-    | number
-    | string[]
-    | number[]
-    | { query: string | number | string[] | number[]; operator?: 'and' | 'or'; slop?: number }
-    | { query: { query_string: { default_field?: string; query: string } } };
-
-/**
- * 정렬(sort)에 쓰이는 항목.
- */
-export type SortTerm =
-    | string
-    | { [key: string]: 'asc' | 'desc' }
-    | {
-          [key: string]: {
-              order?: 'asc' | 'desc';
-              missing?: '_last' | '_first';
-          };
-      };
-
-/**
- * 검색 쿼리 항목.
- */
-export interface SearchQuery {
-    term?: { [key: string]: QueryTerm };
-    terms?: { [key: string]: QueryTerm };
-    match?: { [key: string]: QueryTerm };
-    match_phrase?: { [key: string]: QueryTerm };
-    prefix?: { [key: string]: QueryTerm };
-    exists?: { field: string };
-    range?: {
-        [key: string]: {
-            gt?: string | number;
-            gte?: string | number;
-            lt?: string | number;
-            lte?: string | number;
-            // like "dd/MM/yyyy||yyyy"
-            format?: string;
-        };
-    };
-    bool?: {
-        filter?: SearchQuery | SearchQuery[];
-        must?: SearchQuery | SearchQuery[];
-        must_not?: SearchQuery | SearchQuery[];
-        should?: SearchQuery | SearchQuery[];
-        minimum_should_match?: number;
-    };
-}
-
-/**
- * type of search body
- */
-export interface SearchBody {
-    size?: number;
-    search_after?: (string | number)[];
-    query: SearchQuery;
-    sort?: SortTerm | SortTerm[];
-    _source?: string[];
-    aggs?: any;
-}
-
-export type SearchType = 'query_then_fetch' | 'dfs_query_then_fetch';
 
 //! extract properties out of Model...
 import { keys } from 'ts-transformer-keys';

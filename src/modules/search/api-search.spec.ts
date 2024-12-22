@@ -5,7 +5,9 @@
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2020-03-10 initial version
  * @date        2020-06-30 optimized with lemon-core#2.2.1
+ * @date        2024-12-20 optimized with `lemon-core#3.2.11`
  *
+ * @origin      lemon-templates-api
  * @copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
 //! override environment with `env/<profile>.yml`
