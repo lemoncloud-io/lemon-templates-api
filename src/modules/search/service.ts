@@ -9,11 +9,10 @@
  * @origin      lemon-templates-api
  * @copyright (C) 2021 LemonCloud Co Ltd. - All Rights Reserved.
  */
-import { $U, sourceToItem, _err, _inf, _log, _ES6 } from 'lemon-core';
+import { $U, _err, _inf, _log, _ES6 } from 'lemon-core';
 import {
     CoreModelFilterable,
     Elastic6Option,
-    Elastic6Service,
     GeneralKeyMaker,
     GeneralModelFilter,
     NextContext,
@@ -35,7 +34,6 @@ import {
     SearchResult,
 } from './model';
 import { $protocol, $T, SimpleSet } from 'lemon-core';
-import elasticsearch from '@elastic/elasticsearch';
 const NS = $U.NS('search', 'blue'); // NAMESPACE TO BE PRINTED.
 
 export { Elastic6Option };
@@ -81,14 +79,6 @@ export class SearchService
     implements StorageMakeable<SearchModel, SearchModelType>
 {
     /**
-     * Elasticsearch client
-     */
-    public readonly client?: elasticsearch.Client;
-    /**
-     * Elastic6Service
-     */
-    public readonly elastic?: Elastic6Service;
-    /**
      * Elastic6Instance
      */
     public readonly instance?: Elastic6Instance;
@@ -116,15 +106,13 @@ export class SearchService
         this.tableName = tableName;
         const $es6 = _ES6(options);
         this.instance = $es6;
-        this.elastic = $es6?.elastic;
-        this.client = $es6?.client;
         this.$query = new MyQueryManager(this);
         this.$batch = new MyBatchManager(this);
     }
 
     /** get the current `options` (nullable) */
     public get options() {
-        return this.elastic?.options;
+        return this.instance?.elastic?.options;
     }
 
     /**
@@ -134,6 +122,13 @@ export class SearchService
 
     /** override current */
     public setCurrent = (current: number) => (this.current = current);
+
+    /**
+     * check if search is running over proxy.
+     */
+    public isProxy(): boolean {
+        return !!this.instance?.hello().startsWith('Elastic6Proxy');
+    }
 
     /**
      * get internal `_id` by primary keys.
@@ -172,24 +167,26 @@ export class SearchService
         }
     }
 
-    /**
-     * multi get by id
-     *
-     * @param _ids  _id list
-     */
-    public async mget<T>(_ids: string[]): Promise<(T | null)[]> {
-        const $res = await this.client.mget({
-            index: this.options.indexName,
-            type: this.options.docType,
-            body: {
-                docs: _ids.map(_id => ({ _id })),
-            },
-        });
-        // _log(NS, `> res =`, $U.json({ ...$res, meta: undefined }));
-        const { docs } = $res.body;
-        const idName = this.options.idName; // id of elastic-search.
-        return docs.map((doc: any) => (doc.found ? sourceToItem<T>(doc._source, idName) : null));
-    }
+    //TODO - imporve later to support multi get.
+    // /**
+    //  * multi get by id
+    //  *
+    //  * @param _ids  _id list
+    //  */
+    // public async mget<T>(_ids: string[]): Promise<(T | null)[]> {
+    //     const client?: elasticsearch.Client = this.instance.client;
+    //     const $res = await this.client.mget({
+    //         index: this.options.indexName,
+    //         type: this.options.docType,
+    //         body: {
+    //             docs: _ids.map(_id => ({ _id })),
+    //         },
+    //     });
+    //     // _log(NS, `> res =`, $U.json({ ...$res, meta: undefined }));
+    //     const { docs } = $res.body;
+    //     const idName = this.options.idName; // id of elastic-search.
+    //     return docs.map((doc: any) => (doc.found ? sourceToItem<T>(doc._source, idName) : null));
+    // }
 
     /**
      * search by raw query

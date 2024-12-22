@@ -11,7 +11,7 @@
  * @copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { _log, _inf, _err, $U, NUL404, GETERR, $ES6, $info } from 'lemon-core';
+import { _log, _inf, _err, $U, NUL404, GETERR, $ES6, $info, $protocol } from 'lemon-core';
 import {
     NextHandler,
     GeneralWEBController,
@@ -81,16 +81,23 @@ export class SearchAPIController extends GeneralWEBController {
     /**
      * GET /search/{id}/hello
      */
-    public getSearchHello: NextHandler = async id => {
+    public getSearchHello: NextHandler = async (id, param, body, $ctx) => {
+        const errScope = `getSearchHello(${id ?? ''})`;
         id = id == '0' ? '' : id;
-        const hello = this.hello();
-        //! $ http ':8888/search/init-elastic/hello'
-        if (id == 'init-elastic') return $ES6.elastic?.createIndex();
-        //! $ http ':8888/search/destroy-elastic/hello'
-        if (0 && id == 'destroy-elastic') return $ES6.elastic?.destroyIndex();
-        //! $ http ':8888/search/desc-elastic/hello'
-        if (id == 'desc-elastic') return $ES6.elastic?.describe();
+        const isLocal = $ctx?.domain === 'localhost';
+        if (!isLocal) throw new Error(`403 NOT ALLOWED - domain[${$ctx?.domain ?? ''}] is invali  @${errScope}`);
 
+        const useProxy = this.search?.isProxy(); // flag if search is running w/ proxy agent.
+        const runProxy = (cmd: string) => this.search.instance.search(null, { indexName: `#${cmd}` });
+
+        //! $ http ':8888/search/init-elastic/hello'
+        if (id == 'init-elastic') return useProxy ? runProxy('create-index') : $ES6.elastic?.createIndex();
+        //! $ http ':8888/search/destroy-elastic/hello'
+        if (id == 'destroy-elastic') return useProxy ? runProxy('destroy-index') : $ES6.elastic?.destroyIndex();
+        //! $ http ':8888/search/desc-elastic/hello'
+        if (id == 'desc-elastic') return useProxy ? runProxy('describe-index') : $ES6.elastic?.describe();
+
+        const hello = this.hello();
         return { id, hello };
     };
 
@@ -192,7 +199,8 @@ export class SearchAPIController extends GeneralWEBController {
         // body && _log(NS, `> body = `, $U.json(body));
         $ctx && _log(NS, `> $ctx = `, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id);
-        if (id) throw new Error(`@id[${id}] is invalid - ${errScope}`);
+        // if (id) throw new Error(`@id[${id}] is invalid - ${errScope}`);
+        if (!id) throw new Error(`@id[${id}] is required - ${errScope}`);
 
         const verbose = !!$T.B(param?.v, param?.v === '' ? 1 : 0);
         const size = $T.N(param?.size || body?.size, 1);
@@ -232,6 +240,13 @@ export class SearchAPIController extends GeneralWEBController {
             return { param, body, context };
         }
 
+        //NOTE - prevent the infite loop to use `search-proxy`
+        // http POST :8888/search/0/proxy
+        const $es6 = this.search?.instance;
+        if (this.search?.isProxy()) {
+            throw new Error(`.search[${$es6?.hello()}] is invalid (should not in proxy) - ${errScope}`);
+        }
+
         // STEP.0 validate parameters.
         if (1) {
             const options = this.search.options;
@@ -250,15 +265,17 @@ export class SearchAPIController extends GeneralWEBController {
             if (!isPassed) throw new Error(`403 NOT ALLOWED - invalid credential @${errScope}`);
 
             //! decode by `#<cmd>`.
-            const cmd = param?.indexName?.startsWith('#') ? $T.S2(param?.indexName?.substring(1)) : null;
-            if (cmd === null) {
+            const indexName = $T.S2(param?.indexName);
+            const cmd = indexName.startsWith('#') ? indexName.substring(1) : null;
+            if (cmd && !$es6?.elastic) {
+                throw new Error(`.elastic(object) is required (mis-configuration) - ${errScope}`);
             } else if (cmd === 'create-index') {
-                return $ES6.elastic?.createIndex();
+                return $es6.elastic?.createIndex();
             } else if (cmd === 'destroy-index') {
-                return $ES6.elastic?.destroyIndex();
+                return $es6.elastic?.destroyIndex();
             } else if (cmd === 'describe-index') {
-                return $ES6.elastic?.describe();
-            } else {
+                return $es6.elastic?.describe();
+            } else if (cmd !== null) {
                 throw new Error(`@cmd[${cmd}] is invalid (not-supported) - ${errScope}`);
             }
 
@@ -267,7 +284,7 @@ export class SearchAPIController extends GeneralWEBController {
             if (!$body) throw new Error(`.body(SearchBody) is required - ${errScope}`);
 
             // STEP.3 execute query..
-            const $res = await this.search.search($body, param);
+            const $res = await $es6.search($body, param);
             _log(NS, `> total =`, $res?.total);
             return $res;
         });
