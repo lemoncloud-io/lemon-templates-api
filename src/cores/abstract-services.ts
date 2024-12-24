@@ -28,7 +28,7 @@
  * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _log, _inf, _err, $ES6, NUL404 } from 'lemon-core';
+import { $U, $T, _log, _inf, _err, $ES6, NUL404, my_sequence } from 'lemon-core';
 import {
     GETERR$,
     CoreManager,
@@ -51,11 +51,21 @@ import {
     GeneralItem,
     NextIdentity,
     NextIdentityCognito,
+    ModelSynchronizer,
+    DynamoStreamBody,
+    DynamoStreamParam,
+    DynamoStreamFilter,
+    DynamoStreamCallback,
+    Elastic6Item,
+    Elastic6Service,
+    DynamoStreamEvent,
 } from 'lemon-core';
 import { IdentityToken, ListResult, PaginateParam } from './types';
 import { keys } from 'ts-transformer-keys';
 import { onlyDefined } from './commons';
+import { toJavascript } from 'lemon-core/dist/lib/dynamodb-value';
 const NAME = $U.env('NAME', 'lemon');
+const NS = $U.NS('HDBS', 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
  * fields in core model.
@@ -573,6 +583,164 @@ export abstract class MyCoreManager<
         _add_must_not({ term: { stereo: '#' } });
         _add_must_not({ term: { 'stereo.keyword': '#' } });
         return body;
+    }
+
+    /**
+     * model synchronizer map
+     * @private
+     */
+    private readonly synchronizerMap: Map<string, ModelSynchronizer> = new Map();
+
+    /**
+     * syncModel w/o search, using Scan
+     */
+    public async syncModel($page: PaginateParam, filter?: DynamoScanFilter) {
+        //* 1. doScan(w/filter by type); scan-size = 100
+        const { list } = await this.doScan($page, filter);
+
+        //* 2. ModelSynchronizer
+        const elastic = $ES6.elastic;
+        const modelSynchronizer = async (param: DynamoStreamParam, body: DynamoStreamBody, i: number) => {
+            await this.syncElasticToElastic(elastic, param, body, i);
+        };
+
+        //* 3. bulk update; bulk-size=10 -> my_sequence
+        const listSize = list.length;
+        const bulkSize = 10;
+        const loopCount = Math.ceil(listSize / bulkSize);
+        for (let i = 0; i < loopCount; i++) {
+            const chunk = list.slice(i * bulkSize, (i + 1) * bulkSize);
+            await my_sequence(chunk, async (record, j) => {
+                const { param, body } = await this.onStreamRecord(record, 'INSERT');
+                return await modelSynchronizer(param, body, j);
+            });
+        }
+        //* 4. lambda time-limit; 30s/http, 10m/sqs(slack noti)
+    }
+
+    /**
+     * internal callback for filtering
+     * @private
+     */
+    private filter: DynamoStreamFilter<CoreModel<string>> = (id, item) => {
+        const handler = this.synchronizerMap.get(item.type);
+        if (handler) return handler.filter?.(id, item) ?? true; // 핸들러를 등록했다면 filter 메서드를 정의하지 않았더라도 sync 한다.
+        return false; // 핸들러가 등록되지 않았다면 sync하지 않는다.
+    };
+
+    /**
+     * internal callback on before synchronization
+     * @private
+     */
+    private onBeforeSync: DynamoStreamCallback<CoreModel<string>> = async (id, eventName, item, diff, prev) => {
+        const handler = this.synchronizerMap.get(item.type);
+        if (handler) await handler.onBeforeSync?.(id, eventName, item, diff, prev);
+    };
+
+    /**
+     * internal callback on after synchronization
+     * @private
+     */
+    private onAfterSync: DynamoStreamCallback<CoreModel<string>> = async (id, eventName, item, diff, prev) => {
+        const handler = this.synchronizerMap.get(item.type);
+        if (handler) await handler.onAfterSync?.(id, eventName, item, diff, prev);
+    };
+
+    private onStreamRecord = async (
+        record: Model,
+        eventName: DynamoStreamEvent,
+    ): Promise<{ param: DynamoStreamParam; body: DynamoStreamBody }> => {
+        if (!record) return; // ignore this.
+        const $key: any = null;
+        const $new = record; // null if eventName == 'REMOVE'
+        const $old: any = null; // null if eventName == 'INSERT'
+
+        //* 이제 변경된 데이터를 추적해서, 이후 처리 지원. (update 는 호출만되어도 이벤트가 발생하게 됨)
+        const diff = eventName === 'MODIFY' ? $U.diff($old, $new) : [];
+        const node = $new || $old || {}; // make sure not null.
+        const prev = diff.reduce<any>((M: any, key: any) => {
+            M[key] = $old[key];
+            return M;
+        }, {});
+
+        //* prepare next-handler's param & body.
+        const param = { eventName };
+        const body = { keys: $key, diff, prev, node };
+        return { param, body };
+    };
+
+    private async syncElasticToElastic<T extends Elastic6Item>(
+        service: Elastic6Service,
+        param: any,
+        body: any,
+        i: number,
+        filter?: DynamoStreamFilter<T>,
+        onBeforeSync?: DynamoStreamCallback<T>,
+        onAfterSync?: DynamoStreamCallback<T>,
+    ) {
+        const options = this.parent.dynamoOptions;
+        //FIXED - if it has decomposed, then update full set.
+        const hasDecomposed = !!service?.options?.autocompleteFields?.length;
+
+        const { idName } = options;
+        const { keys, diff, prev, node } = body;
+        const { eventName } = param;
+
+        keys && _log(NS, `> keys =`, $U.json(keys));
+        diff && _log(NS, `> diff =`, $U.json(diff));
+        prev && _log(NS, `> prev =`, $U.json(prev));
+        // node && _log(NS, `> node =`, $U.json(node));
+
+        //* find id.
+        const _id = (node && node['id']) || keys[idName];
+
+        if (!_id) {
+            node && _log(NS, `> node =`, $U.json(node));
+            _log(NS, `WARN! node[${_id}] is missing! keys =`, $U.json(keys));
+            return;
+        }
+
+        //* origin object, and apply filter.
+        const item: T = $U.cleanup({ ...node }); //* remove internals like '_' '$'.
+        const passed: boolean = !filter ? true : filter(_id, item, diff, prev);
+        if (passed !== true && passed !== undefined) {
+            _log(NS, `WARN! node[${_id}] is by-passed`);
+            return;
+        }
+
+        //* call pre sync function
+        if (onBeforeSync) await onBeforeSync(_id, eventName, item, diff, prev);
+
+        //* update or save.
+        if (false) {
+        } else if (eventName == 'REMOVE') {
+            //* clear data.
+            const res = await service.deleteItem(_id); // ignore error.
+            _log(NS, `> deleted[${_id}] =`, $U.json(res));
+        } else if (hasDecomposed) {
+            //* overwrite all.
+            const res = await service.saveItem(_id, item);
+            _log(NS, `> saved[${_id}] @1 =`, $U.json(res));
+        } else if (diff && Array.isArray(diff) && diff.length) {
+            //* try to update in advance, then save.
+            const $upt = diff.reduce<any>((M: any, key: string) => {
+                M[key] = item[key as keyof Elastic6Item];
+                return M;
+            }, {});
+            _log(NS, `> updates[${_id}] @1 =`, $U.json($upt));
+            const res = await service.updateItem(_id, $upt).catch((e: Error) => {
+                if (`${e.message}`.startsWith('404 NOT FOUND')) return service.saveItem(_id, item);
+                throw e;
+            });
+            _log(NS, `> updated[${_id}] @2 =`, $U.json(res));
+        } else {
+            //* overwrite all.
+            const res = await service.saveItem(_id, item);
+            _log(NS, `> saved[${_id}] @2 =`, $U.json(res));
+        }
+
+        if (onAfterSync) await onAfterSync(_id, eventName, item, diff, prev);
+        return `${i}`;
     }
 }
 
