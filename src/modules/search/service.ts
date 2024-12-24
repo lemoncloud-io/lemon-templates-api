@@ -244,6 +244,21 @@ export class SearchService
         const service = storage.makeTypedStorageService(type);
         return service;
     }
+
+    /** show the stat of this index */
+    public async showIndexStat() {
+        const { list } = await this.instance.elastic.listIndices();
+        const item = list?.find(N => N.index == this.options.indexName);
+        const _mb = (s: string) => {
+            if (s?.endsWith('kb')) return $U.F(s.substring(0, s.length - 2)) / 1000.0;
+            if (s?.endsWith('mb')) return $U.F(s.substring(0, s.length - 2));
+            if (s?.endsWith('gb')) return $U.F(s.substring(0, s.length - 2)) * 1000;
+            if (s?.endsWith('tb')) return $U.F(s.substring(0, s.length - 2)) * 1000 * 1000;
+            return 0;
+        };
+        // return.
+        return { ...item, priStoreSizeMb: _mb(item?.priStoreSize), storeSizeMb: _mb(item?.storeSize) };
+    }
 }
 
 /**
