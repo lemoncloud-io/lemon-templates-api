@@ -21,7 +21,7 @@ const $env = ((env: any) =>
         profile: env.profile ?? 'lemon',
         region: env.region ?? 'ap-northeast-2',
     }))(process.env);
-const MODEL_VERSION = '1.0.2';
+const MODEL_VERSION = '1.0.3';
 
 //! import statements
 import AWS from 'aws-sdk';
@@ -65,10 +65,23 @@ const makePackage = () => {
     _log(NS, `> tar.name =`, $tar.name);
 
     //* grap the dependencies to include in types
-    const dependencies = Object.entries($src.dependencies).reduce<SimpleSet>((M, [k, v]) => {
-        if (k == 'lemon-core') M['lemon-model'] = `^${MODEL_VERSION}`;
-        else if (k == 'lemon-model') M['lemon-model'] = `${v}`;
-        else if (k.startsWith('@lemoncloud/')) M[k] = `${v}`;
+    const dependencies = Object.entries($src.dependencies).reduce<SimpleSet>((M, [k, _]) => {
+        const v = `${_ ?? ''}`;
+        const _n = (s: string) =>
+            s
+                .split('.')
+                .map(s => (s.length < 2 ? `00${s}` : s.length < 3 ? `0${s}` : s))
+                .join('.');
+        if (k == 'lemon-core') {
+            const s = v.startsWith('^') ? v.substring(1) : v;
+            const ss = _n(s);
+            if (ss < '003.002.011') {
+                M['lemon-model'] = `^1.0.2`;
+            } else {
+                M['lemon-model'] = `^${MODEL_VERSION}`;
+            }
+        } else if (k == 'lemon-model') M['lemon-model'] = v;
+        else if (k.startsWith('@lemoncloud/')) M[k] = v;
         return M;
     }, {});
 
