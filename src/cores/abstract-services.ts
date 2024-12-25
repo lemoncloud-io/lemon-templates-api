@@ -172,10 +172,12 @@ export abstract class MyCoreManager<
 
     /**
      * get the next sequenced no from `initialNo` (default 1000000)
+     *
+     * @param step (optional) next-step (>= 0)
      * @returns next seq-no
      */
-    public async nextId(): Promise<number> {
-        return this.storage.storage.nextSeq(this.storage.type, this.options?.initialNo);
+    public async nextId(step?: number): Promise<number> {
+        return this.storage.storage.nextSeq(this.storage.type, this.options?.initialNo, step);
     }
 
     /**
@@ -999,8 +1001,8 @@ export class MyManagerProxy<
     /**
      * generate the next id
      */
-    public async nextId(): Promise<string> {
-        return this.$mgr.nextId().then(n => $T.S2(n));
+    public async nextId(step?: number): Promise<string> {
+        return this.$mgr.nextId(step).then(n => $T.S2(n));
     }
 
     /**

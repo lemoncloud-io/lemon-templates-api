@@ -51,6 +51,13 @@ interface CRUDCreationOptions {
      * @see proxy.getCurrentSession()
      */
     useSession?: boolean;
+    /**
+     * (optional) flag to use `throwable` in `getCurrentSession()`
+     * - default might be `true`
+     *
+     * @see proxy.makeModelBase()
+     */
+    throwable?: boolean;
 }
 
 /**
@@ -132,6 +139,13 @@ export abstract class AbstractCRUDController<
     }
 
     /**
+     * get config of using session.
+     */
+    public get confThrowable(): boolean {
+        return this.options?.throwable ?? true;
+    }
+
+    /**
      * model transformer from model to view
      */
     public modelAsView(model: MyModel, options?: { useOnlyDefined?: boolean; hasCores?: boolean }): MyView {
@@ -166,7 +180,7 @@ export abstract class AbstractCRUDController<
         },
     ): Promise<MyModel> {
         const useSession = options?.useSession ?? this.confUseSession;
-        const throwable = options?.throwable ?? true;
+        const throwable = options?.throwable ?? this.confThrowable;
         return proxy.makeModelBase<MyModel>({} as any, { useSession, throwable });
     }
 
