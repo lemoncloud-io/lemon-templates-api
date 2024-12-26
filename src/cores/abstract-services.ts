@@ -28,7 +28,7 @@
  * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _log, _inf, _err, $ES6, NUL404, my_sequence } from 'lemon-core';
+import { $U, $T, _log, _inf, _err, $ES6, NUL404, my_sequence, $ERROR } from 'lemon-core';
 import {
     GETERR$,
     CoreManager,
@@ -63,7 +63,7 @@ import {
 import { IdentityToken, ListResult, PaginateParam } from './types';
 import { keys } from 'ts-transformer-keys';
 import { onlyDefined } from './commons';
-import { toJavascript } from 'lemon-core/dist/lib/dynamodb-value';
+import { ApiResponse } from '@elastic/elasticsearch';
 const NAME = $U.env('NAME', 'lemon');
 const NS = $U.NS('HDBS', 'green'); // NAMESPACE TO BE PRINTED.
 
@@ -74,6 +74,14 @@ const CORE_FIELDS: string[] = keys<CoreModel>();
 
 export type SearchParam<T> = T & { [key: string]: string | number };
 
+interface BulkResponseBody {
+    errors: boolean;
+    items: BulkResponseItem[];
+    took?: number;
+}
+interface BulkResponseItem<T = any> {
+    index?: T;
+}
 /**
  * class: `MyCoreService`
  * - CoreService의 공통 부분을 채워넣는다.
@@ -469,6 +477,41 @@ export abstract class MyCoreManager<
     }
 
     /**
+     * execute scan with filter.
+     *
+     * @param $last
+     * @param filter
+     * @returns
+     */
+    public async doScanLast(
+        $last?: Record<string, any>,
+        $limit?: number,
+        $filter?: DynamoScanFilter,
+    ): Promise<ListResult<Model, { key: string; count: number }>> {
+        const options = this.parent.dynamoOptions;
+        const idName = options.idName || '_id';
+        const limit = $limit ?? 2;
+        const last = $last ?? null;
+        const filter = $filter ?? null;
+
+        if (!options?.tableName || options?.tableName?.endsWith('.yml')) {
+            throw new Error(`400 NO DYNAMO - table:${options?.tableName ?? ''}!`);
+        }
+
+        const $scan = new DynamoScanService(options);
+        const $res = await $scan.scan(limit, last, filter);
+
+        const list0: Model[] = [];
+        $res.list?.forEach(N => {
+            delete N[idName];
+            list0.push(N as unknown as Model);
+        });
+
+        const total = list0?.length || 0;
+        return { list: list0, total, limit: limit };
+    }
+
+    /**
      * basic ElasticSearch Query.
      * you can override this method for customization.
      *
@@ -586,161 +629,73 @@ export abstract class MyCoreManager<
     }
 
     /**
-     * model synchronizer map
-     * @private
-     */
-    private readonly synchronizerMap: Map<string, ModelSynchronizer> = new Map();
-
-    /**
      * syncModel w/o search, using Scan
      */
-    public async syncModel($page: PaginateParam, filter?: DynamoScanFilter) {
+    public async syncModel(
+        $last?: Record<string, any>,
+        $limit?: number,
+        filter?: DynamoScanFilter,
+    ): Promise<ApiResponse<BulkResponseBody, any>[]> {
         //* 1. doScan(w/filter by type); scan-size = 100
-        const { list } = await this.doScan($page, filter);
+        const { list } = await this.doScanLast($last, $limit, filter);
 
-        //* 2. ModelSynchronizer
-        const elastic = $ES6.elastic;
-        const modelSynchronizer = async (param: DynamoStreamParam, body: DynamoStreamBody, i: number) => {
-            await this.syncElasticToElastic(elastic, param, body, i);
-        };
+        //* 2. chunk the list into smaller parts
+        const chunkSize = 10;
+        const flattenedList = this.flattenList(list);
+        const chunks = this.makeChucks(flattenedList, chunkSize);
 
-        //* 3. bulk update; bulk-size=10 -> my_sequence
-        const listSize = list.length;
-        const bulkSize = 10;
-        const loopCount = Math.ceil(listSize / bulkSize);
-        for (let i = 0; i < loopCount; i++) {
-            const chunk = list.slice(i * bulkSize, (i + 1) * bulkSize);
-            await my_sequence(chunk, async (record, j) => {
-                const { param, body } = await this.onStreamRecord(record, 'INSERT');
-                return await modelSynchronizer(param, body, j);
-            });
-        }
-        //* 4. lambda time-limit; 30s/http, 10m/sqs(slack noti)
+        //* 3. use my_sequence to bulk each chunk sequentially
+        const chunkList = chunks.map((chunk, index) => ({
+            id: `${index}`,
+            error: null,
+            chunk,
+        }));
+
+        const results = await my_sequence(chunkList, async (chunkWrapper, index) => {
+            const operations = this.createBulkOperations(chunkWrapper.chunk);
+            const res = await this.saveBulk(operations);
+            return res;
+        });
+        return results;
     }
 
-    /**
-     * internal callback for filtering
-     * @private
-     */
-    private filter: DynamoStreamFilter<CoreModel<string>> = (id, item) => {
-        const handler = this.synchronizerMap.get(item.type);
-        if (handler) return handler.filter?.(id, item) ?? true; // 핸들러를 등록했다면 filter 메서드를 정의하지 않았더라도 sync 한다.
-        return false; // 핸들러가 등록되지 않았다면 sync하지 않는다.
-    };
-
-    /**
-     * internal callback on before synchronization
-     * @private
-     */
-    private onBeforeSync: DynamoStreamCallback<CoreModel<string>> = async (id, eventName, item, diff, prev) => {
-        const handler = this.synchronizerMap.get(item.type);
-        if (handler) await handler.onBeforeSync?.(id, eventName, item, diff, prev);
-    };
-
-    /**
-     * internal callback on after synchronization
-     * @private
-     */
-    private onAfterSync: DynamoStreamCallback<CoreModel<string>> = async (id, eventName, item, diff, prev) => {
-        const handler = this.synchronizerMap.get(item.type);
-        if (handler) await handler.onAfterSync?.(id, eventName, item, diff, prev);
-    };
-
-    private onStreamRecord = async (
-        record: Model,
-        eventName: DynamoStreamEvent,
-    ): Promise<{ param: DynamoStreamParam; body: DynamoStreamBody }> => {
-        if (!record) return; // ignore this.
-        const $key: any = null;
-        const $new = record; // null if eventName == 'REMOVE'
-        const $old: any = null; // null if eventName == 'INSERT'
-
-        //* 이제 변경된 데이터를 추적해서, 이후 처리 지원. (update 는 호출만되어도 이벤트가 발생하게 됨)
-        const diff = eventName === 'MODIFY' ? $U.diff($old, $new) : [];
-        const node = $new || $old || {}; // make sure not null.
-        const prev = diff.reduce<any>((M: any, key: any) => {
-            M[key] = $old[key];
-            return M;
-        }, {});
-
-        //* prepare next-handler's param & body.
-        const param = { eventName };
-        const body = { keys: $key, diff, prev, node };
-        return { param, body };
-    };
-
-    private async syncElasticToElastic<T extends Elastic6Item>(
-        service: Elastic6Service,
-        param: any,
-        body: any,
-        i: number,
-        filter?: DynamoStreamFilter<T>,
-        onBeforeSync?: DynamoStreamCallback<T>,
-        onAfterSync?: DynamoStreamCallback<T>,
-    ) {
-        const options = this.parent.dynamoOptions;
-        //FIXED - if it has decomposed, then update full set.
-        const hasDecomposed = !!service?.options?.autocompleteFields?.length;
-
-        const { idName } = options;
-        const { keys, diff, prev, node } = body;
-        const { eventName } = param;
-
-        keys && _log(NS, `> keys =`, $U.json(keys));
-        diff && _log(NS, `> diff =`, $U.json(diff));
-        prev && _log(NS, `> prev =`, $U.json(prev));
-        // node && _log(NS, `> node =`, $U.json(node));
-
-        //* find id.
-        const _id = (node && node['id']) || keys[idName];
-
-        if (!_id) {
-            node && _log(NS, `> node =`, $U.json(node));
-            _log(NS, `WARN! node[${_id}] is missing! keys =`, $U.json(keys));
-            return;
+    private makeChucks(list: any, chunkSize: number) {
+        const result: any[][] = [];
+        for (let i = 0; i < list.length; i += chunkSize) {
+            result.push(list.slice(i, i + chunkSize));
         }
+        return result;
+    }
 
-        //* origin object, and apply filter.
-        const item: T = $U.cleanup({ ...node }); //* remove internals like '_' '$'.
-        const passed: boolean = !filter ? true : filter(_id, item, diff, prev);
-        if (passed !== true && passed !== undefined) {
-            _log(NS, `WARN! node[${_id}] is by-passed`);
-            return;
-        }
+    private flattenList(nestedList: any[]): any[] {
+        return nestedList.flat();
+    }
 
-        //* call pre sync function
-        if (onBeforeSync) await onBeforeSync(_id, eventName, item, diff, prev);
-
-        //* update or save.
-        if (false) {
-        } else if (eventName == 'REMOVE') {
-            //* clear data.
-            const res = await service.deleteItem(_id); // ignore error.
-            _log(NS, `> deleted[${_id}] =`, $U.json(res));
-        } else if (hasDecomposed) {
-            //* overwrite all.
-            const res = await service.saveItem(_id, item);
-            _log(NS, `> saved[${_id}] @1 =`, $U.json(res));
-        } else if (diff && Array.isArray(diff) && diff.length) {
-            //* try to update in advance, then save.
-            const $upt = diff.reduce<any>((M: any, key: string) => {
-                M[key] = item[key as keyof Elastic6Item];
-                return M;
-            }, {});
-            _log(NS, `> updates[${_id}] @1 =`, $U.json($upt));
-            const res = await service.updateItem(_id, $upt).catch((e: Error) => {
-                if (`${e.message}`.startsWith('404 NOT FOUND')) return service.saveItem(_id, item);
-                throw e;
+    private createBulkOperations(dataChunk: any[]) {
+        return dataChunk.reduce((acc, doc) => {
+            acc.push({
+                index: {
+                    _index: $ES6.options?.indexName,
+                    _id: doc.id,
+                },
             });
-            _log(NS, `> updated[${_id}] @2 =`, $U.json(res));
-        } else {
-            //* overwrite all.
-            const res = await service.saveItem(_id, item);
-            _log(NS, `> saved[${_id}] @2 =`, $U.json(res));
-        }
+            acc.push(doc);
+            return acc;
+        }, [] as Array<{ index: { _index: string; _id: string } }>);
+    }
 
-        if (onAfterSync) await onAfterSync(_id, eventName, item, diff, prev);
-        return `${i}`;
+    private async saveBulk(operations: any[]) {
+        const elastic = $ES6.client;
+        const bulkResponse: ApiResponse<BulkResponseBody, any> = await elastic
+            .bulk({
+                body: operations,
+            })
+            .catch(
+                $ERROR.handler('bulk', e => {
+                    throw e;
+                }),
+            );
+        return bulkResponse;
     }
 }
 
