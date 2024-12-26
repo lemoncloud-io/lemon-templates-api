@@ -28,7 +28,7 @@
  * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _log, _inf, _err, $ES6, NUL404, my_sequence, $ERROR } from 'lemon-core';
+import { $U, $T, _log, _inf, _err, $ES6, NUL404, $ERROR } from 'lemon-core';
 import {
     GETERR$,
     CoreManager,
@@ -51,14 +51,7 @@ import {
     GeneralItem,
     NextIdentity,
     NextIdentityCognito,
-    ModelSynchronizer,
-    DynamoStreamBody,
-    DynamoStreamParam,
-    DynamoStreamFilter,
-    DynamoStreamCallback,
-    Elastic6Item,
-    Elastic6Service,
-    DynamoStreamEvent,
+    my_sequence,
 } from 'lemon-core';
 import { IdentityToken, ListResult, PaginateParam } from './types';
 import { keys } from 'ts-transformer-keys';
@@ -82,6 +75,29 @@ interface BulkResponseBody {
 interface BulkResponseItem<T = any> {
     index?: T;
 }
+
+/**
+ * type: `ScanLastParams`
+ */
+export interface ScanLastParams {
+    /** last cursor during scan */
+    last?: any;
+    /** (optional) limit to 1x scan */
+    limit?: number;
+    /** filter to scan */
+    filter?: DynamoScanFilter;
+}
+
+/**
+ * type: `ScanLastResult`
+ */
+export interface ScanLastResult<T = any> extends ListResult<T> {
+    /** count of scan */
+    count?: number;
+    /** (optinoal) last of scan if there are more */
+    last?: any;
+}
+
 /**
  * class: `MyCoreService`
  * - CoreService의 공통 부분을 채워넣는다.
@@ -477,22 +493,17 @@ export abstract class MyCoreManager<
     }
 
     /**
-     * execute scan with filter.
+     * execute scan-last with filter.
      *
-     * @param $last
-     * @param filter
+     * @param $param ScanLastParams
      * @returns
      */
-    public async doScanLast(
-        $last?: Record<string, any>,
-        $limit?: number,
-        $filter?: DynamoScanFilter,
-    ): Promise<ListResult<Model, { key: string; count: number }>> {
+    public async doScanLast($param: ScanLastParams): Promise<ScanLastResult<Model>> {
         const options = this.parent.dynamoOptions;
         const idName = options.idName || '_id';
-        const limit = $limit ?? 2;
-        const last = $last ?? null;
-        const filter = $filter ?? null;
+        const limit = $param?.limit ?? 2;
+        const last = $param?.last;
+        const filter = $param?.filter;
 
         if (!options?.tableName || options?.tableName?.endsWith('.yml')) {
             throw new Error(`400 NO DYNAMO - table:${options?.tableName ?? ''}!`);
@@ -501,14 +512,15 @@ export abstract class MyCoreManager<
         const $scan = new DynamoScanService(options);
         const $res = await $scan.scan(limit, last, filter);
 
-        const list0: Model[] = [];
-        $res.list?.forEach(N => {
-            delete N[idName];
-            list0.push(N as unknown as Model);
+        const list: Model[] = $res.list?.map<Model>(N => {
+            // do copy
+            const M = { ...N };
+            delete M[idName];
+            return M as unknown as Model;
         });
 
-        const total = list0?.length || 0;
-        return { list: list0, total, limit: limit };
+        const total = $U.N(list?.length || 0);
+        return onlyDefined({ list, total, limit: limit, count: $res?.count, last: $res?.last });
     }
 
     /**
@@ -630,35 +642,54 @@ export abstract class MyCoreManager<
 
     /**
      * syncModel w/o search, using Scan
+     * 1. scan models with last + limit
+     * 2. sync to index with bulk update.
+     *
+     * TODO - rename to `doSyncScanLast()`
+     * TODO - input(1D array) -> output(1D array)
      */
     public async syncModel(
-        $last?: Record<string, any>,
-        $limit?: number,
-        filter?: DynamoScanFilter,
+        $param: ScanLastParams,
+        options?: {
+            /** chunk-size of bulk (default: 10) */
+            size?: number;
+        },
     ): Promise<ApiResponse<BulkResponseBody, any>[]> {
         //* 1. doScanLast(w/filter by type); scan-size = 100
-        const { list } = await this.doScanLast($last, $limit, filter);
+        const $perf = $T.perf();
+        const { list, last } = await this.doScanLast($param);
 
         //* 2. chunk the list into smaller parts
-        const chunkSize = 10;
+        const chunkSize = options?.size ?? 10;
         const flattenedList = this.flattenList(list);
         const chunks = this.makeChucks(flattenedList, chunkSize);
 
+        type Chunks<T = any> = {
+            id: string;
+            error: any;
+            chunk: T[];
+        };
+
         //* 3. use my_sequence to bulk each chunk sequentially
-        const chunkList = chunks.map((chunk, index) => ({
-            id: `${index}`,
-            error: null,
-            chunk,
-        }));
+        const chunkList = chunks.map(
+            (chunk, index): Chunks => ({
+                id: `${index}`,
+                error: null,
+                chunk,
+            }),
+        );
 
         const results = await my_sequence(chunkList, async (chunkWrapper, index) => {
             const operations = this.createBulkOperations(chunkWrapper.chunk);
             const res = await this.saveBulk(operations);
             return res;
         });
+        const took = $perf.took();
+        //TODO - reforming the result of `syncModel()` w/ { last, list }
         return results;
     }
 
+    //TODO - move into inner-local function.
     private makeChucks(list: any, chunkSize: number) {
         const result: any[][] = [];
         for (let i = 0; i < list.length; i += chunkSize) {
