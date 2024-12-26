@@ -604,4 +604,63 @@ describe('abstract-services', () => {
         expect2(() => proxy.isAdminRole()).toEqual(true);
         expect2(() => proxy.isAdminRole('user')).toEqual(true);
     });
+
+    it('should pass migrate search-index', async () => {
+        const { service } = instance();
+        const result = await service.$test.syncModel();
+        expect2(() => result[0]?.body.errors).toEqual(false);
+        expect2(() => result[0]?.body.items, '!_version').toEqual([
+            {
+                index: {
+                    _id: '1000078',
+                    _index: 'lemon-templates-v1',
+                    _primary_term: 1,
+                    _seq_no: 205,
+                    _shards: { failed: 0, successful: 2, total: 2 },
+                    _type: '_doc',
+                    _version: 15,
+                    result: 'updated',
+                    status: 200,
+                },
+            },
+            {
+                index: {
+                    _id: '1000017',
+                    _index: 'lemon-templates-v1',
+                    _primary_term: 1,
+                    _seq_no: 161,
+                    _shards: { failed: 0, successful: 2, total: 2 },
+                    _type: '_doc',
+                    _version: 15,
+                    result: 'updated',
+                    status: 200,
+                },
+            },
+        ]);
+        expect2(() => result[0]?.meta.request.params.bulkBody).toEqual([
+            { index: { _id: '1000078', _index: 'lemon-templates-v1' } },
+            {
+                age: 2,
+                createdAt: 1718688801255,
+                deletedAt: 0,
+                id: '1000078',
+                name: '1718688801037',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718688801255,
+            },
+            { index: { _id: '1000017', _index: 'lemon-templates-v1' } },
+            {
+                createdAt: 1734325286081,
+                deletedAt: 0,
+                id: '1000017',
+                name: '#',
+                ns: 'TT',
+                query: '{"query":{"query":{"bool":{"filter":{"term":{"type":"test"}}}},"aggs":{"test":{"terms":{"field":"count"}}},"sort":[{"count":{"order":"asc","missing":"_last"}}]}}',
+                type: '#query',
+                updatedAt: 1734325286131,
+            },
+        ]);
+        expect2(() => result[0].statusCode).toEqual(200);
+    });
 });
