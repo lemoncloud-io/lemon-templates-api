@@ -636,7 +636,7 @@ export abstract class MyCoreManager<
         $limit?: number,
         filter?: DynamoScanFilter,
     ): Promise<ApiResponse<BulkResponseBody, any>[]> {
-        //* 1. doScan(w/filter by type); scan-size = 100
+        //* 1. doScanLast(w/filter by type); scan-size = 100
         const { list } = await this.doScanLast($last, $limit, filter);
 
         //* 2. chunk the list into smaller parts

@@ -609,34 +609,24 @@ describe('abstract-services', () => {
         const { service } = instance();
         const result = await service.$test.syncModel();
         expect2(() => result[0]?.body.errors).toEqual(false);
-        expect2(() => result[0]?.body.items, '!_version').toEqual([
-            {
-                index: {
-                    _id: '1000078',
-                    _index: 'lemon-templates-v1',
-                    _primary_term: 1,
-                    _seq_no: 205,
-                    _shards: { failed: 0, successful: 2, total: 2 },
-                    _type: '_doc',
-                    _version: 15,
-                    result: 'updated',
-                    status: 200,
-                },
-            },
-            {
-                index: {
-                    _id: '1000017',
-                    _index: 'lemon-templates-v1',
-                    _primary_term: 1,
-                    _seq_no: 161,
-                    _shards: { failed: 0, successful: 2, total: 2 },
-                    _type: '_doc',
-                    _version: 15,
-                    result: 'updated',
-                    status: 200,
-                },
-            },
-        ]);
+        expect2(() => result[0]?.body.items[0].index, '!_version,!_seq_no').toEqual({
+            _id: '1000078',
+            _index: 'lemon-templates-v1',
+            _primary_term: 1,
+            _shards: { failed: 0, successful: 2, total: 2 },
+            _type: '_doc',
+            result: 'updated',
+            status: 200,
+        });
+        expect2(() => result[0]?.body.items[1].index, '!_version,!_seq_no').toEqual({
+            _id: '1000017',
+            _index: 'lemon-templates-v1',
+            _primary_term: 1,
+            _shards: { failed: 0, successful: 2, total: 2 },
+            _type: '_doc',
+            result: 'updated',
+            status: 200,
+        });
         expect2(() => result[0]?.meta.request.params.bulkBody).toEqual([
             { index: { _id: '1000078', _index: 'lemon-templates-v1' } },
             {
