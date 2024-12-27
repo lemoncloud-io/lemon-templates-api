@@ -84,22 +84,11 @@ interface BulkResponseItem<T = any> {
 }
 
 /**
- * type: `RefinedBulkResult`
- */
-interface RefinedBulkResult<T = any> {
-    error: boolean;
-    items: BulkResponseItem<any>[];
-    took: number;
-    requestParams: T;
-    statusCode: number;
-}
-
-/**
  * type: `ScanLastParams`
  */
-export interface ScanLastParams {
+export interface ScanLastParams<T = any> {
     /** last cursor during scan */
-    last?: any;
+    last?: T;
     /** (optional) limit to 1x scan */
     limit?: number;
     /** filter to scan */
@@ -121,8 +110,6 @@ export interface ScanLastResult<T = any> extends ListResult<T> {
  * @param .list can be BulkResponseItem[]
  */
 export interface DoSyncScanLastResult<T = any> extends ListResult<T> {
-    /** results of bulk */
-    results?: RefinedBulkResult[];
     /** count of scan */
     count?: number;
     /** (optinoal) last of scan if there are more */
@@ -531,7 +518,6 @@ export abstract class MyCoreManager<
      */
     public async doScanLast($param: ScanLastParams): Promise<ScanLastResult<Model>> {
         const options = this.parent.dynamoOptions;
-        const idName = options.idName || '_id';
         const limit = $param?.limit ?? 2;
         const last = $param?.last;
         const filter = $param?.filter;
@@ -543,13 +529,7 @@ export abstract class MyCoreManager<
         const $scan = new DynamoScanService(options);
         const $res = await $scan.scan(limit, last, filter);
 
-        const list: Model[] = $res.list?.map<Model>(N => {
-            // do copy
-            const M = { ...N };
-            // `_id`를 지워주기 (이유: _id가 search에서 예약되어 있음)
-            delete M[idName];
-            return M as unknown as Model;
-        });
+        const list: Model[] = $res.list as unknown as Model[];
 
         const total = $U.N(list?.length || 0);
         return onlyDefined({ list, total, limit: limit, count: $res?.count, last: $res?.last });
@@ -677,7 +657,6 @@ export abstract class MyCoreManager<
      * 1. scan models with last + limit
      * 2. sync to index with bulk update.
      *
-     * TODO - input(1D array) -> output(1D array)
      */
     public async doSyncScanLast(
         $param: ScanLastParams,
@@ -698,13 +677,9 @@ export abstract class MyCoreManager<
             }
             return result;
         };
-        //TODO - use `_` as inner local function.
-        const _flattenList = <T = any>(nestedList: T[]) => nestedList.flat();
 
         const chunkSize = options?.size ?? 10;
-        // const flattenedList = _flattenList(list);
-        const flattenedList = list;
-        const chunks = _makeChucks(flattenedList, chunkSize);
+        const chunks = _makeChucks(list, chunkSize);
 
         //* inner type.
         type Chunks<T = any> = {
@@ -721,8 +696,7 @@ export abstract class MyCoreManager<
                 chunk,
             }),
         );
-
-        const createBulkOperations = (dataChunk: any[]) => {
+        const _transformBulkOperations = (dataChunk: Model[]) => {
             return dataChunk.reduce((acc, doc) => {
                 acc.push({
                     index: {
@@ -730,29 +704,37 @@ export abstract class MyCoreManager<
                         _id: doc._id,
                     },
                 });
-                acc.push(doc);
+                const { _id, ...docCopy } = doc;
+                acc.push(docCopy as Model);
                 return acc;
-            }, [] as Array<{ index: { _index: string; _id: string } }>);
+            }, [] as Array<{ index: { _index: string; _id: string } } | Model>);
         };
 
         const results = await my_sequence(chunkList, async (chunkWrapper, index) => {
-            const operations = createBulkOperations(chunkWrapper.chunk);
+            const operations = _transformBulkOperations(chunkWrapper.chunk);
             const $res = await this.saveBulk(operations);
-            const result: RefinedBulkResult = {
-                error: $res?.body.errors,
-                items: $res?.body.items,
-                took: $res?.body.took,
-                requestParams: $res.meta.request.params,
-                statusCode: $res?.statusCode,
-            };
-            return result;
+            return $res;
         });
-
-        //TODO - `results.items[]` -> 'list'으로 변환하기. w/ list의 타입정의.
+        type ItemList = {
+            _id: string;
+            _index: string;
+            _primary_term: number;
+            _seq_no: number;
+            _shards: { failed: number; successful: number; total: number };
+            _type: string;
+            _version: number;
+            result: string;
+            status: number;
+        };
+        const itemList = results.reduce((acc, result) => {
+            const items = result.body.items.map(item => item.index);
+            acc.push(...items);
+            return acc;
+        }, [] as ItemList[]);
 
         //* returns
         const took = $perf.took();
-        return onlyDefined<DoSyncScanLastResult>({ results: results, last: last, count: count, list: null, took });
+        return onlyDefined<DoSyncScanLastResult>({ last: last, count: count, took, list: itemList });
     }
 
     private async saveBulk(operations: any[]) {
