@@ -607,7 +607,7 @@ describe('abstract-services', () => {
 
     it('should pass migrate search-index', async () => {
         const { service } = instance();
-        const result = await service.$test.syncModel();
+        const result = await service.$test.doSyncScanLast();
         expect2(() => result[0]?.body.errors).toEqual(false);
         expect2(() => result[0]?.body.items[0].index, '!_version,!_seq_no').toEqual({
             _id: '1000078',

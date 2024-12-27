@@ -641,14 +641,13 @@ export abstract class MyCoreManager<
     }
 
     /**
-     * syncModel w/o search, using Scan
+     * doSyncScanLast w/o search, using Scan
      * 1. scan models with last + limit
      * 2. sync to index with bulk update.
      *
-     * TODO - rename to `doSyncScanLast()`
      * TODO - input(1D array) -> output(1D array)
      */
-    public async syncModel(
+    public async doSyncScanLast(
         $param: ScanLastParams,
         options?: {
             /** chunk-size of bulk (default: 10) */
@@ -685,7 +684,7 @@ export abstract class MyCoreManager<
             return res;
         });
         const took = $perf.took();
-        //TODO - reforming the result of `syncModel()` w/ { last, list }
+        //TODO - reforming the result of `doSyncScanLast()` w/ { last, list }
         return results;
     }
 
