@@ -659,9 +659,18 @@ export abstract class MyCoreManager<
         const { list, last } = await this.doScanLast($param);
 
         //* 2. chunk the list into smaller parts
+        const makeChucks = (list: any[], chunkSize: number) => {
+            const result: any[][] = [];
+            for (let i = 0; i < list.length; i += chunkSize) {
+                result.push(list.slice(i, i + chunkSize));
+            }
+            return result;
+        };
+        const flattenList = (nestedList: any[]) => nestedList.flat();
+
         const chunkSize = options?.size ?? 10;
-        const flattenedList = this.flattenList(list);
-        const chunks = this.makeChucks(flattenedList, chunkSize);
+        const flattenedList = flattenList(list);
+        const chunks = makeChucks(flattenedList, chunkSize);
 
         type Chunks<T = any> = {
             id: string;
@@ -678,40 +687,27 @@ export abstract class MyCoreManager<
             }),
         );
 
+        const createBulkOperations = (dataChunk: any[]) => {
+            return dataChunk.reduce((acc, doc) => {
+                acc.push({
+                    index: {
+                        _index: $ES6.options?.indexName,
+                        _id: doc.id,
+                    },
+                });
+                acc.push(doc);
+                return acc;
+            }, [] as Array<{ index: { _index: string; _id: string } }>);
+        };
+
         const results = await my_sequence(chunkList, async (chunkWrapper, index) => {
-            const operations = this.createBulkOperations(chunkWrapper.chunk);
+            const operations = createBulkOperations(chunkWrapper.chunk);
             const res = await this.saveBulk(operations);
             return res;
         });
         const took = $perf.took();
         //TODO - reforming the result of `doSyncScanLast()` w/ { last, list }
         return results;
-    }
-
-    //TODO - move into inner-local function.
-    private makeChucks(list: any, chunkSize: number) {
-        const result: any[][] = [];
-        for (let i = 0; i < list.length; i += chunkSize) {
-            result.push(list.slice(i, i + chunkSize));
-        }
-        return result;
-    }
-
-    private flattenList(nestedList: any[]): any[] {
-        return nestedList.flat();
-    }
-
-    private createBulkOperations(dataChunk: any[]) {
-        return dataChunk.reduce((acc, doc) => {
-            acc.push({
-                index: {
-                    _index: $ES6.options?.indexName,
-                    _id: doc.id,
-                },
-            });
-            acc.push(doc);
-            return acc;
-        }, [] as Array<{ index: { _index: string; _id: string } }>);
     }
 
     private async saveBulk(operations: any[]) {
