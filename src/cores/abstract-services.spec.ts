@@ -614,6 +614,7 @@ describe('abstract-services', () => {
         expect2(() => result.last).toEqual({ _id: 'TT:test:1000243' });
         expect2(() => result.list).toEqual([
             {
+                _id: 'TT:test:1000078',
                 age: 2,
                 createdAt: 1718688801255,
                 deletedAt: 0,
@@ -624,6 +625,7 @@ describe('abstract-services', () => {
                 updatedAt: 1718688801255,
             },
             {
+                _id: 'TT:#query:1000017',
                 createdAt: 1734325286081,
                 deletedAt: 0,
                 id: '1000017',
@@ -634,6 +636,7 @@ describe('abstract-services', () => {
                 updatedAt: 1734325286131,
             },
             {
+                _id: 'TT:test:1000243',
                 age: 1,
                 createdAt: 1718703832286,
                 deletedAt: 0,
@@ -652,6 +655,7 @@ describe('abstract-services', () => {
         expect2(() => resultWithLast.last).toEqual({ _id: 'TT:test:1000159' });
         expect2(() => resultWithLast.list).toEqual([
             {
+                _id: 'TT:test:1000004',
                 createdAt: 1711679260356,
                 deletedAt: 0,
                 id: '1000004',
@@ -661,6 +665,7 @@ describe('abstract-services', () => {
                 updatedAt: 1711679260356,
             },
             {
+                _id: 'TT:test:1000212',
                 age: 1,
                 createdAt: 1718701431833,
                 deletedAt: 0,
@@ -671,6 +676,7 @@ describe('abstract-services', () => {
                 updatedAt: 1718701431833,
             },
             {
+                _id: 'TT:test:1000159',
                 age: 1,
                 createdAt: 1718697350728,
                 deletedAt: 0,
@@ -706,6 +712,7 @@ describe('abstract-services', () => {
         expect2(() => resultWithFilter.last).toEqual({ _id: 'TT:test:1000243' });
         expect2(() => resultWithFilter.list).toEqual([
             {
+                _id: 'TT:test:1000078',
                 age: 2,
                 createdAt: 1718688801255,
                 deletedAt: 0,
@@ -716,6 +723,7 @@ describe('abstract-services', () => {
                 updatedAt: 1718688801255,
             },
             {
+                _id: 'TT:test:1000243',
                 age: 1,
                 createdAt: 1718703832286,
                 deletedAt: 0,
@@ -731,105 +739,33 @@ describe('abstract-services', () => {
     it('should pass migrate search-index', async () => {
         const { service } = instance();
         const result = await service.$test.doSyncScanLast({ limit: 3 });
-        expect2(() => result).toEqual({
-            count: 3,
-            last: { _id: 'TT:test:1000243' },
-            results: [
-                {
-                    error: false,
-                    items: [
-                        {
-                            index: {
-                                _id: '1000078',
-                                _index: 'lemon-templates-v1',
-                                _primary_term: 1,
-                                _seq_no: 456,
-                                _shards: { failed: 0, successful: 2, total: 2 },
-                                _type: '_doc',
-                                _version: 53,
-                                result: 'updated',
-                                status: 200,
-                            },
-                        },
-                        {
-                            index: {
-                                _id: '1000017',
-                                _index: 'lemon-templates-v1',
-                                _primary_term: 1,
-                                _seq_no: 339,
-                                _shards: { failed: 0, successful: 2, total: 2 },
-                                _type: '_doc',
-                                _version: 53,
-                                result: 'updated',
-                                status: 200,
-                            },
-                        },
-                        {
-                            index: {
-                                _id: '1000243',
-                                _index: 'lemon-templates-v1',
-                                _primary_term: 1,
-                                _seq_no: 435,
-                                _shards: { failed: 0, successful: 2, total: 2 },
-                                _type: '_doc',
-                                _version: 18,
-                                result: 'updated',
-                                status: 200,
-                            },
-                        },
-                    ],
-                    requestParams: {
-                        body: '{"index":{"_index":"lemon-templates-v1","_id":"1000078"}}{"deletedAt":0,"ns":"TT","updatedAt":1718688801255,"createdAt":1718688801255,"id":"1000078","name":"1718688801037","type":"test","age":2}{"index":{"_index":"lemon-templates-v1","_id":"1000017"}}                                            {"deletedAt":0,"query":"{\\"query\\":{\\"query\\":{\\"bool\\":{\\"filter\\":{\\"term\\":{\\"type\\":\\"test\\"}}}},\\"aggs\\":{\\"test\\":{\\"terms\\":{\\"field\\":\\"count\\"}}},\\"sort\\":[{\\"count\\":{\\"order\\":\\"asc\\",\\"missing\\":\\"_last\\"}}]}}","ns":"TT","updatedAt":1734325286131,"createdAt":1734325286081,"id":"1000017","name":"#","type":"#query"}{"index":{"_index":"lemon-templates-v1","_id":"1000243"}}{"deletedAt":0,"ns":"TT","updatedAt":1718703832286,"createdAt":1718703832286,"id":"1000243","name":"1718703832078","type":"test","age":1}',
-                        bulkBody: [
-                            { index: { _id: '1000078', _index: 'lemon-templates-v1' } },
-                            {
-                                age: 2,
-                                createdAt: 1718688801255,
-                                deletedAt: 0,
-                                id: '1000078',
-                                name: '1718688801037',
-                                ns: 'TT',
-                                type: 'test',
-                                updatedAt: 1718688801255,
-                            },
-                            { index: { _id: '1000017', _index: 'lemon-templates-v1' } },
-                            {
-                                createdAt: 1734325286081,
-                                deletedAt: 0,
-                                id: '1000017',
-                                name: '#',
-                                ns: 'TT',
-                                query: '{"query":{"query":{"bool":{"filter":{"term":{"type":"test"}}}},"aggs":{"test":{"terms":{"field":"count"}}},"sort":[{"count":{"order":"asc","missing":"_last"}}]}}',
-                                type: '#query',
-                                updatedAt: 1734325286131,
-                            },
-                            { index: { _id: '1000243', _index: 'lemon-templates-v1' } },
-                            {
-                                age: 1,
-                                createdAt: 1718703832286,
-                                deletedAt: 0,
-                                id: '1000243',
-                                name: '1718703832078',
-                                ns: 'TT',
-                                type: 'test',
-                                updatedAt: 1718703832286,
-                            },
-                        ],
-                        headers: {
-                            'content-length': '778',
-                            'content-type': 'application/x-ndjson',
-                            'user-agent': 'elasticsearch-js/7.12.0 (darwin 23.6.0-arm64; Node.js v18.19.1)',
-                            'x-elastic-client-meta': 'es=7.12.0,js=18.19.1,t=7.12.0,hc=18.19.1',
-                        },
-                        method: 'POST',
-                        path: '/_bulk',
-                        querystring: '',
-                        timeout: 30000,
-                    },
-                    statusCode: 200,
-                    took: 10,
-                },
-            ],
+        expect2(() => result, 'count,last,took').toEqual({ count: 3, last: { _id: 'TT:test:1000243' }, took: 0.1 });
+        expect2(() => result.list[0], '!_version,!_seq_no').toEqual({
+            _id: 'TT:test:1000078',
+            _index: 'lemon-templates-v1',
+            _primary_term: 1,
+            _shards: { failed: 0, successful: 2, total: 2 },
+            _type: '_doc',
+            result: 'updated',
+            status: 200,
+        });
+        expect2(() => result.list[1], '!_version,!_seq_no').toEqual({
+            _id: 'TT:#query:1000017',
+            _index: 'lemon-templates-v1',
+            _primary_term: 1,
+            _shards: { failed: 0, successful: 2, total: 2 },
+            _type: '_doc',
+            result: 'updated',
+            status: 200,
+        });
+        expect2(() => result.list[2], '!_version,!_seq_no').toEqual({
+            _id: 'TT:test:1000243',
+            _index: 'lemon-templates-v1',
+            _primary_term: 1,
+            _shards: { failed: 0, successful: 2, total: 2 },
+            _type: '_doc',
+            result: 'updated',
+            status: 200,
         });
     });
 });
