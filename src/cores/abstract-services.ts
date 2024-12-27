@@ -66,14 +66,31 @@ const NS = $U.NS('HDBS', 'green'); // NAMESPACE TO BE PRINTED.
 const CORE_FIELDS: string[] = keys<CoreModel>();
 
 export type SearchParam<T> = T & { [key: string]: string | number };
-
+/**
+ * type: `BulkResponseBody`
+ */
 interface BulkResponseBody {
     errors: boolean;
     items: BulkResponseItem[];
     took?: number;
 }
+
+/**
+ * type: `BulkResponseItem`
+ */
 interface BulkResponseItem<T = any> {
     index?: T;
+}
+
+/**
+ * type: `RefinedBulkResult`
+ */
+export interface RefinedBulkResult<T = any> {
+    error: boolean;
+    items: BulkResponseItem<any>[];
+    took: number;
+    requestParams: T;
+    statusCode: number;
 }
 
 /**
@@ -92,6 +109,17 @@ export interface ScanLastParams {
  * type: `ScanLastResult`
  */
 export interface ScanLastResult<T = any> extends ListResult<T> {
+    /** count of scan */
+    count?: number;
+    /** (optinoal) last of scan if there are more */
+    last?: any;
+}
+/**
+ * type: `doSyncScanLastResult`
+ */
+export interface DoSyncScanLastResult<T = any> {
+    /** results of bulk */
+    results?: RefinedBulkResult[];
     /** count of scan */
     count?: number;
     /** (optinoal) last of scan if there are more */
@@ -653,10 +681,10 @@ export abstract class MyCoreManager<
             /** chunk-size of bulk (default: 10) */
             size?: number;
         },
-    ): Promise<ApiResponse<BulkResponseBody, any>[]> {
+    ): Promise<DoSyncScanLastResult> {
         //* 1. doScanLast(w/filter by type); scan-size = 100
         const $perf = $T.perf();
-        const { list, last } = await this.doScanLast($param);
+        const { list, last, count } = await this.doScanLast($param);
 
         //* 2. chunk the list into smaller parts
         const makeChucks = (list: any[], chunkSize: number) => {
@@ -703,11 +731,17 @@ export abstract class MyCoreManager<
         const results = await my_sequence(chunkList, async (chunkWrapper, index) => {
             const operations = createBulkOperations(chunkWrapper.chunk);
             const res = await this.saveBulk(operations);
-            return res;
+            const result: RefinedBulkResult = {
+                error: res?.body.errors,
+                items: res?.body.items,
+                took: res?.body.took,
+                requestParams: res.meta.request.params,
+                statusCode: res?.statusCode,
+            };
+            return result;
         });
         const took = $perf.took();
-        //TODO - reforming the result of `doSyncScanLast()` w/ { last, list }
-        return results;
+        return onlyDefined({ results: results, last: last, count: count });
     }
 
     private async saveBulk(operations: any[]) {
