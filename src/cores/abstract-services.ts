@@ -66,6 +66,7 @@ const NS = $U.NS('HDBS', 'green'); // NAMESPACE TO BE PRINTED.
 const CORE_FIELDS: string[] = keys<CoreModel>();
 
 export type SearchParam<T> = T & { [key: string]: string | number };
+
 /**
  * type: `BulkResponseBody`
  */
@@ -85,7 +86,7 @@ interface BulkResponseItem<T = any> {
 /**
  * type: `RefinedBulkResult`
  */
-export interface RefinedBulkResult<T = any> {
+interface RefinedBulkResult<T = any> {
     error: boolean;
     items: BulkResponseItem<any>[];
     took: number;
@@ -116,8 +117,10 @@ export interface ScanLastResult<T = any> extends ListResult<T> {
 }
 /**
  * type: `doSyncScanLastResult`
+ *
+ * @param .list can be BulkResponseItem[]
  */
-export interface DoSyncScanLastResult<T = any> {
+export interface DoSyncScanLastResult<T = any> extends ListResult<T> {
     /** results of bulk */
     results?: RefinedBulkResult[];
     /** count of scan */
@@ -543,6 +546,7 @@ export abstract class MyCoreManager<
         const list: Model[] = $res.list?.map<Model>(N => {
             // do copy
             const M = { ...N };
+            // `_id`를 지워주기 (이유: _id가 search에서 예약되어 있음)
             delete M[idName];
             return M as unknown as Model;
         });
@@ -687,19 +691,22 @@ export abstract class MyCoreManager<
         const { list, last, count } = await this.doScanLast($param);
 
         //* 2. chunk the list into smaller parts
-        const makeChucks = (list: any[], chunkSize: number) => {
-            const result: any[][] = [];
+        const _makeChucks = <T = any>(list: T[], chunkSize: number) => {
+            const result: T[][] = [];
             for (let i = 0; i < list.length; i += chunkSize) {
                 result.push(list.slice(i, i + chunkSize));
             }
             return result;
         };
-        const flattenList = (nestedList: any[]) => nestedList.flat();
+        //TODO - use `_` as inner local function.
+        const _flattenList = <T = any>(nestedList: T[]) => nestedList.flat();
 
         const chunkSize = options?.size ?? 10;
-        const flattenedList = flattenList(list);
-        const chunks = makeChucks(flattenedList, chunkSize);
+        // const flattenedList = _flattenList(list);
+        const flattenedList = list;
+        const chunks = _makeChucks(flattenedList, chunkSize);
 
+        //* inner type.
         type Chunks<T = any> = {
             id: string;
             error: any;
@@ -720,7 +727,7 @@ export abstract class MyCoreManager<
                 acc.push({
                     index: {
                         _index: $ES6.options?.indexName,
-                        _id: doc.id,
+                        _id: doc._id,
                     },
                 });
                 acc.push(doc);
@@ -730,18 +737,22 @@ export abstract class MyCoreManager<
 
         const results = await my_sequence(chunkList, async (chunkWrapper, index) => {
             const operations = createBulkOperations(chunkWrapper.chunk);
-            const res = await this.saveBulk(operations);
+            const $res = await this.saveBulk(operations);
             const result: RefinedBulkResult = {
-                error: res?.body.errors,
-                items: res?.body.items,
-                took: res?.body.took,
-                requestParams: res.meta.request.params,
-                statusCode: res?.statusCode,
+                error: $res?.body.errors,
+                items: $res?.body.items,
+                took: $res?.body.took,
+                requestParams: $res.meta.request.params,
+                statusCode: $res?.statusCode,
             };
             return result;
         });
+
+        //TODO - `results.items[]` -> 'list'으로 변환하기. w/ list의 타입정의.
+
+        //* returns
         const took = $perf.took();
-        return onlyDefined({ results: results, last: last, count: count });
+        return onlyDefined<DoSyncScanLastResult>({ results: results, last: last, count: count, list: null, took });
     }
 
     private async saveBulk(operations: any[]) {
