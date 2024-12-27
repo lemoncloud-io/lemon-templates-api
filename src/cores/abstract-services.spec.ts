@@ -604,31 +604,15 @@ describe('abstract-services', () => {
         expect2(() => proxy.isAdminRole()).toEqual(true);
         expect2(() => proxy.isAdminRole('user')).toEqual(true);
     });
-
-    it('should pass migrate search-index', async () => {
+    it('should pass doScanLast', async () => {
         const { service } = instance();
-        const result = await service.$test.doSyncScanLast();
-        expect2(() => result[0]?.body.errors).toEqual(false);
-        expect2(() => result[0]?.body.items[0].index, '!_version,!_seq_no').toEqual({
-            _id: '1000078',
-            _index: 'lemon-templates-v1',
-            _primary_term: 1,
-            _shards: { failed: 0, successful: 2, total: 2 },
-            _type: '_doc',
-            result: 'updated',
-            status: 200,
-        });
-        expect2(() => result[0]?.body.items[1].index, '!_version,!_seq_no').toEqual({
-            _id: '1000017',
-            _index: 'lemon-templates-v1',
-            _primary_term: 1,
-            _shards: { failed: 0, successful: 2, total: 2 },
-            _type: '_doc',
-            result: 'updated',
-            status: 200,
-        });
-        expect2(() => result[0]?.meta.request.params.bulkBody).toEqual([
-            { index: { _id: '1000078', _index: 'lemon-templates-v1' } },
+        const result = await service.$test.doScanLast({ limit: 3 });
+        //* 1. doScanLast with { limit }
+        expect2(() => result.count).toEqual(3);
+        expect2(() => result.limit).toEqual(3);
+        expect2(() => result.total).toEqual(3);
+        expect2(() => result.last).toEqual({ _id: 'TT:test:1000243' });
+        expect2(() => result.list).toEqual([
             {
                 age: 2,
                 createdAt: 1718688801255,
@@ -639,7 +623,6 @@ describe('abstract-services', () => {
                 type: 'test',
                 updatedAt: 1718688801255,
             },
-            { index: { _id: '1000017', _index: 'lemon-templates-v1' } },
             {
                 createdAt: 1734325286081,
                 deletedAt: 0,
@@ -650,7 +633,203 @@ describe('abstract-services', () => {
                 type: '#query',
                 updatedAt: 1734325286131,
             },
+            {
+                age: 1,
+                createdAt: 1718703832286,
+                deletedAt: 0,
+                id: '1000243',
+                name: '1718703832078',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718703832286,
+            },
         ]);
-        expect2(() => result[0].statusCode).toEqual(200);
+        //* 2. doScanLast with { limit, last }
+        const resultWithLast = await service.$test.doScanLast({ limit: 3, last: { _id: 'TT:test:1000243' } });
+        expect2(() => resultWithLast.count).toEqual(3);
+        expect2(() => resultWithLast.limit).toEqual(3);
+        expect2(() => resultWithLast.total).toEqual(3);
+        expect2(() => resultWithLast.last).toEqual({ _id: 'TT:test:1000159' });
+        expect2(() => resultWithLast.list).toEqual([
+            {
+                createdAt: 1711679260356,
+                deletedAt: 0,
+                id: '1000004',
+                name: 'lemon',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1711679260356,
+            },
+            {
+                age: 1,
+                createdAt: 1718701431833,
+                deletedAt: 0,
+                id: '1000212',
+                name: '1718701431689',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718701431833,
+            },
+            {
+                age: 1,
+                createdAt: 1718697350728,
+                deletedAt: 0,
+                id: '1000159',
+                name: '1718697350582',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718697350728,
+            },
+        ]);
+
+        //* 2.1 check whether $params works well
+        const resultForVerification = await service.$test.doScanLast({ limit: 6 });
+
+        expect2(() => resultForVerification.count).toEqual(6);
+        expect2(() => resultForVerification.limit).toEqual(6);
+        expect2(() => resultForVerification.total).toEqual(6);
+        // expectedLast should be the last of doScanLast with { limit, last }
+        const expectedLast = resultWithLast.last;
+        expect2(() => resultForVerification.last).toEqual(expectedLast);
+        // expectedList should be the list results of test step 1 & 2
+        const expectedList = result.list.concat(resultWithLast.list);
+        expect2(() => resultForVerification.list).toEqual(expectedList);
+
+        //* 3. doScanLast with { limit, filter }
+        const resultWithFilter = await service.$test.doScanLast({
+            limit: 3,
+            filter: { key: 'type', operator: 'contains', value: 'test' },
+        });
+        expect2(() => resultWithFilter.count).toEqual(2);
+        expect2(() => resultWithFilter.limit).toEqual(3);
+        expect2(() => resultWithFilter.total).toEqual(2);
+        expect2(() => resultWithFilter.last).toEqual({ _id: 'TT:test:1000243' });
+        expect2(() => resultWithFilter.list).toEqual([
+            {
+                age: 2,
+                createdAt: 1718688801255,
+                deletedAt: 0,
+                id: '1000078',
+                name: '1718688801037',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718688801255,
+            },
+            {
+                age: 1,
+                createdAt: 1718703832286,
+                deletedAt: 0,
+                id: '1000243',
+                name: '1718703832078',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718703832286,
+            },
+        ]);
+    });
+
+    it('should pass migrate search-index', async () => {
+        const { service } = instance();
+        const result = await service.$test.doSyncScanLast({ limit: 3 });
+        expect2(() => result).toEqual({
+            count: 3,
+            last: { _id: 'TT:test:1000243' },
+            results: [
+                {
+                    error: false,
+                    items: [
+                        {
+                            index: {
+                                _id: '1000078',
+                                _index: 'lemon-templates-v1',
+                                _primary_term: 1,
+                                _seq_no: 456,
+                                _shards: { failed: 0, successful: 2, total: 2 },
+                                _type: '_doc',
+                                _version: 53,
+                                result: 'updated',
+                                status: 200,
+                            },
+                        },
+                        {
+                            index: {
+                                _id: '1000017',
+                                _index: 'lemon-templates-v1',
+                                _primary_term: 1,
+                                _seq_no: 339,
+                                _shards: { failed: 0, successful: 2, total: 2 },
+                                _type: '_doc',
+                                _version: 53,
+                                result: 'updated',
+                                status: 200,
+                            },
+                        },
+                        {
+                            index: {
+                                _id: '1000243',
+                                _index: 'lemon-templates-v1',
+                                _primary_term: 1,
+                                _seq_no: 435,
+                                _shards: { failed: 0, successful: 2, total: 2 },
+                                _type: '_doc',
+                                _version: 18,
+                                result: 'updated',
+                                status: 200,
+                            },
+                        },
+                    ],
+                    requestParams: {
+                        body: '{"index":{"_index":"lemon-templates-v1","_id":"1000078"}}{"deletedAt":0,"ns":"TT","updatedAt":1718688801255,"createdAt":1718688801255,"id":"1000078","name":"1718688801037","type":"test","age":2}{"index":{"_index":"lemon-templates-v1","_id":"1000017"}}                                            {"deletedAt":0,"query":"{\\"query\\":{\\"query\\":{\\"bool\\":{\\"filter\\":{\\"term\\":{\\"type\\":\\"test\\"}}}},\\"aggs\\":{\\"test\\":{\\"terms\\":{\\"field\\":\\"count\\"}}},\\"sort\\":[{\\"count\\":{\\"order\\":\\"asc\\",\\"missing\\":\\"_last\\"}}]}}","ns":"TT","updatedAt":1734325286131,"createdAt":1734325286081,"id":"1000017","name":"#","type":"#query"}{"index":{"_index":"lemon-templates-v1","_id":"1000243"}}{"deletedAt":0,"ns":"TT","updatedAt":1718703832286,"createdAt":1718703832286,"id":"1000243","name":"1718703832078","type":"test","age":1}',
+                        bulkBody: [
+                            { index: { _id: '1000078', _index: 'lemon-templates-v1' } },
+                            {
+                                age: 2,
+                                createdAt: 1718688801255,
+                                deletedAt: 0,
+                                id: '1000078',
+                                name: '1718688801037',
+                                ns: 'TT',
+                                type: 'test',
+                                updatedAt: 1718688801255,
+                            },
+                            { index: { _id: '1000017', _index: 'lemon-templates-v1' } },
+                            {
+                                createdAt: 1734325286081,
+                                deletedAt: 0,
+                                id: '1000017',
+                                name: '#',
+                                ns: 'TT',
+                                query: '{"query":{"query":{"bool":{"filter":{"term":{"type":"test"}}}},"aggs":{"test":{"terms":{"field":"count"}}},"sort":[{"count":{"order":"asc","missing":"_last"}}]}}',
+                                type: '#query',
+                                updatedAt: 1734325286131,
+                            },
+                            { index: { _id: '1000243', _index: 'lemon-templates-v1' } },
+                            {
+                                age: 1,
+                                createdAt: 1718703832286,
+                                deletedAt: 0,
+                                id: '1000243',
+                                name: '1718703832078',
+                                ns: 'TT',
+                                type: 'test',
+                                updatedAt: 1718703832286,
+                            },
+                        ],
+                        headers: {
+                            'content-length': '778',
+                            'content-type': 'application/x-ndjson',
+                            'user-agent': 'elasticsearch-js/7.12.0 (darwin 23.6.0-arm64; Node.js v18.19.1)',
+                            'x-elastic-client-meta': 'es=7.12.0,js=18.19.1,t=7.12.0,hc=18.19.1',
+                        },
+                        method: 'POST',
+                        path: '/_bulk',
+                        querystring: '',
+                        timeout: 30000,
+                    },
+                    statusCode: 200,
+                    took: 10,
+                },
+            ],
+        });
     });
 });
