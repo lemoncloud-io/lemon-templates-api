@@ -128,7 +128,7 @@ export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
     if (params?.roles && context?.identity) (context.identity as any).roles = params?.roles;
     const service = new (class extends BackendService {
         public constructor() {
-            super(isDummy ? 'dummy-data.yml' : '');
+            super(isDummy ? 'dummy-data.yml' : 'lemon-sandbox-table-dev');
         }
         public async doSearch<T>(body: SearchBody): Promise<SearchResult<T, any>> {
             //* returns the body as object.
@@ -734,6 +734,14 @@ describe('abstract-services', () => {
                 updatedAt: 1718703832286,
             },
         ]);
+
+        //* 4. doScanLast with last _id
+        const checkLast = await service.$test.doScanLast({ limit: 20, last: { _id: 'TT:test:1000216' } });
+        expect2(() => checkLast.count).toEqual(0);
+        expect2(() => checkLast.limit).toEqual(20);
+        expect2(() => checkLast.total).toEqual(0);
+        expect2(() => checkLast.last).toEqual();
+        expect2(() => checkLast.list).toEqual([]);
     });
 
     it('should pass migrate search-index', async () => {
@@ -742,99 +750,15 @@ describe('abstract-services', () => {
         expect2(() => result.last).toEqual({ _id: 'TT:test:1000246' });
         expect2(() => result.count).toEqual(10);
         // expect2(() => result.took).toEqual(0.1);
-        expect2(() => result.list, '!_version,!_seq_no').toEqual([
-            {
-                _id: 'TT:test:1000078',
-                _index: 'lemon-templates-v1',
-                _primary_term: 1,
-                _shards: { failed: 0, successful: 2, total: 2 },
-                _type: '_doc',
-                result: 'updated',
-                status: 200,
-            },
-            {
-                _id: 'TT:#query:1000017',
-                _index: 'lemon-templates-v1',
-                _primary_term: 1,
-                _shards: { failed: 0, successful: 2, total: 2 },
-                _type: '_doc',
-                result: 'updated',
-                status: 200,
-            },
-            {
-                _id: 'TT:test:1000243',
-                _index: 'lemon-templates-v1',
-                _primary_term: 1,
-                _shards: { failed: 0, successful: 2, total: 2 },
-                _type: '_doc',
-                result: 'updated',
-                status: 200,
-            },
-            {
-                _id: 'TT:test:1000004',
-                _index: 'lemon-templates-v1',
-                _primary_term: 1,
-                _shards: { failed: 0, successful: 2, total: 2 },
-                _type: '_doc',
-                result: 'updated',
-                status: 200,
-            },
-            {
-                _id: 'TT:test:1000212',
-                _index: 'lemon-templates-v1',
-                _primary_term: 1,
-                _shards: { failed: 0, successful: 2, total: 2 },
-                _type: '_doc',
-                result: 'updated',
-                status: 200,
-            },
-            {
-                _id: 'TT:test:1000159',
-                _index: 'lemon-templates-v1',
-                _primary_term: 1,
-                _shards: { failed: 0, successful: 2, total: 2 },
-                _type: '_doc',
-                result: 'updated',
-                status: 200,
-            },
-            {
-                _id: 'TT:test:1000027',
-                _index: 'lemon-templates-v1',
-                _primary_term: 1,
-                _shards: { failed: 0, successful: 2, total: 2 },
-                _type: '_doc',
-                result: 'updated',
-                status: 200,
-            },
-            {
-                _id: 'TT:test:1000069',
-                _index: 'lemon-templates-v1',
-                _primary_term: 1,
-                _shards: { failed: 0, successful: 2, total: 2 },
-                _type: '_doc',
-                result: 'updated',
-                status: 200,
-            },
-            {
-                _id: 'TT:test:1000199',
-                _index: 'lemon-templates-v1',
-                _primary_term: 1,
-                _shards: { failed: 0, successful: 2, total: 2 },
-                _type: '_doc',
-                result: 'updated',
-                status: 200,
-            },
-            {
-                _id: 'TT:test:1000246',
-                _index: 'lemon-templates-v1',
-                _primary_term: 1,
-                _shards: { failed: 0, successful: 2, total: 2 },
-                _type: '_doc',
-                result: 'updated',
-                status: 200,
-            },
-        ]);
-        expect2(() => result.statusCodes).toEqual([200]);
-        expect2(() => result.errors).toEqual([false]);
+        expect2(() => result.list[0], '!_version').toEqual({ _id: 'TT:test:1000078', error: undefined, status: 200 });
+        expect2(() => result.list[1], '!_version').toEqual({ _id: 'TT:#query:1000017', error: undefined, status: 200 });
+        expect2(() => result.list[2], '!_version').toEqual({ _id: 'TT:test:1000243', error: undefined, status: 200 });
+
+        //* doSyncScanLast with last _id
+        const checkLast = await service.$test.doSyncScanLast({ limit: 20, last: { _id: 'TT:test:1000216' } });
+        expect2(() => checkLast.last).toEqual();
+        expect2(() => checkLast.count).toEqual(0);
+        // expect2(() => checkLast.took).toEqual(0.1);
+        expect2(() => checkLast.list[0], '!_version').toEqual();
     });
 });

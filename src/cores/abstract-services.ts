@@ -549,7 +549,13 @@ export abstract class MyCoreManager<
         const list: Model[] = $res.list as unknown as Model[];
 
         const total = $U.N(list?.length || 0);
-        return onlyDefined({ list, total, limit: limit, count: $res?.count, last: $res?.last });
+        return onlyDefined({
+            list,
+            total,
+            limit: limit,
+            count: $res?.count,
+            last: Object.keys($res?.last || {}).length === 0 ? undefined : $res?.last,
+        });
     }
 
     /**
@@ -669,12 +675,6 @@ export abstract class MyCoreManager<
         return body;
     }
 
-    /**
-     * doSyncScanLast w/o search, using Scan
-     * 1. scan models with last + limit
-     * 2. sync to index with bulk update.
-     *
-     */
     public async doSyncScanLast(
         $param: ScanLastParams,
         options?: {
@@ -682,8 +682,6 @@ export abstract class MyCoreManager<
             size?: number;
         },
     ): Promise<DoSyncScanLastResult> {
-        const chunkSize = options?.size ?? 10;
-
         //* 1. doScanLast(w/filter by type); scan-size = 100
         const $perf = $T.perf();
         const { list, last, count } = await this.doScanLast($param);
@@ -696,6 +694,17 @@ export abstract class MyCoreManager<
             }
             return result;
         };
+
+        const _saveBulk = async <T = any>(operations: T[]) => {
+            const elastic = $ES6.client;
+            const $res = await elastic.bulk({ body: operations }).catch(e => {
+                _err(this.NS, `>> err=`, e);
+                throw e;
+            });
+            return $res;
+        };
+
+        const chunkSize = options?.size ?? 10;
         const chunks = _makeChucks(list, chunkSize);
 
         //* inner type.
@@ -703,6 +712,23 @@ export abstract class MyCoreManager<
             id: string;
             error: any;
             chunk: T[];
+        };
+        type BulkResponseBody = {
+            errors: boolean;
+            items: { index: ItemList }[];
+            took?: number;
+        };
+        type ItemList = {
+            _id?: string;
+            _index?: string;
+            _primary_term?: number;
+            _seq_no?: number;
+            _shards?: { failed: number; successful: number; total: number };
+            _type?: string;
+            _version?: number;
+            error?: string;
+            result?: string;
+            status?: number;
         };
 
         //* 3. use my_sequence to bulk each chunk sequentially
@@ -721,50 +747,29 @@ export abstract class MyCoreManager<
             });
         };
 
-        const results = await my_sequence(chunkList, async $chunkWrapper => {
-            const operations = _transformBulkOperations($chunkWrapper.chunk);
-            const $res = await this.saveBulk(operations);
+        const results = await my_sequence(chunkList, async chunkWrapper => {
+            const operations = _transformBulkOperations(chunkWrapper.chunk);
+            const $res = await _saveBulk(operations);
+            const items: ItemList[] = ($res.body as BulkResponseBody)?.items?.map(item => ({
+                _id: item.index._id,
+                _version: item.index._version,
+                error: item.index.error,
+                status: item.index.status,
+            }));
+            $res.body.items = items;
             return $res;
         });
+        _log(this.logNS, `> results =`, $U.json(results));
 
-        //* 4. make flattend results
-        const $flattened = results.reduce(
-            (acc, result) => {
-                acc.errors.push(result.body.errors);
-                acc.items.push(...result.body.items.map(item => item.index));
-                acc.statusCodes.push(result.statusCode);
-                return acc;
-            },
-            {
-                errors: [] as boolean[],
-                items: [] as ItemList[],
-                statusCodes: [] as number[],
-            },
-        );
+        const itemList = results.reduce<ItemList[]>((L, N) => {
+            if (typeof (N as any)?.error == 'string') L.push({ error: (N as any).error });
+            if (N.body?.items) L.push(...N.body?.items);
+            return L;
+        }, []);
 
+        //* returns
         const took = $perf.took();
-        return onlyDefined<DoSyncScanLastResult>({
-            last: last,
-            count: count,
-            took,
-            list: $flattened.items,
-            errors: $flattened.errors,
-            statusCodes: $flattened.statusCodes,
-        });
-    }
-
-    private async saveBulk(operations: any[]) {
-        const elastic = $ES6.client;
-        const bulkResponse: ApiResponse<BulkResponseBody, any> = await elastic
-            .bulk({
-                body: operations,
-            })
-            .catch(
-                $ERROR.handler('bulk', e => {
-                    throw e;
-                }),
-            );
-        return bulkResponse;
+        return onlyDefined<DoSyncScanLastResult>({ last: last, count: count, took, list: itemList });
     }
 }
 
