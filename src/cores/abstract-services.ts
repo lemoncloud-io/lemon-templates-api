@@ -28,7 +28,7 @@
  * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _log, _inf, _err, $ES6, NUL404, $ERROR } from 'lemon-core';
+import { $U, $T, _log, _inf, _err, $ES6, NUL404, GETERR } from 'lemon-core';
 import {
     GETERR$,
     CoreManager,
@@ -56,7 +56,6 @@ import {
 import { IdentityToken, ListResult, PaginateParam } from './types';
 import { keys } from 'ts-transformer-keys';
 import { onlyDefined } from './commons';
-import { ApiResponse } from '@elastic/elasticsearch';
 const NAME = $U.env('NAME', 'lemon');
 const NS = $U.NS('HDBS', 'green'); // NAMESPACE TO BE PRINTED.
 
@@ -67,35 +66,6 @@ const CORE_FIELDS: string[] = keys<CoreModel>();
 
 export type SearchParam<T> = T & { [key: string]: string | number };
 
-/**
- * type: `BulkResponseBody`
- */
-interface BulkResponseBody {
-    errors: boolean;
-    items: BulkResponseItem[];
-    took?: number;
-}
-
-/**
- * type: `BulkResponseItem`
- */
-interface BulkResponseItem<T = any> {
-    index?: T;
-}
-/**
- * type: `ItemList`
- */
-interface ItemList {
-    _id: string;
-    _index: string;
-    _primary_term: number;
-    _seq_no: number;
-    _shards: { failed: number; successful: number; total: number };
-    _type: string;
-    _version: number;
-    result: string;
-    status: number;
-}
 /**
  * type: `ScanLastParams`
  */
@@ -686,6 +656,30 @@ export abstract class MyCoreManager<
         const $perf = $T.perf();
         const { list, last, count } = await this.doScanLast($param);
 
+        //* inner type.
+        type Chunks<T = any> = {
+            id: string;
+            error: any;
+            chunk: T[];
+        };
+        type BulkResponseBody = {
+            errors: boolean;
+            items: { index: ItemList }[];
+            took?: number;
+        };
+        type ItemList = {
+            _id?: string;
+            // _index?: string;
+            // _primary_term?: number;
+            // _seq_no?: number;
+            // _shards?: { failed: number; successful: number; total: number };
+            // _type?: string;
+            _version?: number;
+            error?: string;
+            // result?: string;
+            status?: number;
+        };
+
         //* 2. chunk the list into smaller parts
         const _makeChucks = <T = any>(list: T[], chunkSize: number) => {
             const result: T[][] = [];
@@ -701,35 +695,17 @@ export abstract class MyCoreManager<
                 _err(this.NS, `>> err=`, e);
                 throw e;
             });
-            return $res;
+            const list = ($res.body as BulkResponseBody)?.items?.map<ItemList>(item => ({
+                _id: item.index._id,
+                _version: item.index._version,
+                error: item.index.error,
+                status: item.index.status,
+            }));
+            return { list, error: null as string };
         };
 
         const chunkSize = options?.size ?? 10;
         const chunks = _makeChucks(list, chunkSize);
-
-        //* inner type.
-        type Chunks<T = any> = {
-            id: string;
-            error: any;
-            chunk: T[];
-        };
-        type BulkResponseBody = {
-            errors: boolean;
-            items: { index: ItemList }[];
-            took?: number;
-        };
-        type ItemList = {
-            _id?: string;
-            _index?: string;
-            _primary_term?: number;
-            _seq_no?: number;
-            _shards?: { failed: number; successful: number; total: number };
-            _type?: string;
-            _version?: number;
-            error?: string;
-            result?: string;
-            status?: number;
-        };
 
         //* 3. use my_sequence to bulk each chunk sequentially
         const chunkList = chunks.map(
@@ -747,23 +723,18 @@ export abstract class MyCoreManager<
             });
         };
 
-        const results = await my_sequence(chunkList, async chunkWrapper => {
-            const operations = _transformBulkOperations(chunkWrapper.chunk);
-            const $res = await _saveBulk(operations);
-            const items: ItemList[] = ($res.body as BulkResponseBody)?.items?.map(item => ({
-                _id: item.index._id,
-                _version: item.index._version,
-                error: item.index.error,
-                status: item.index.status,
-            }));
-            $res.body.items = items;
-            return $res;
+        const results = await my_sequence(chunkList, async N => {
+            const operations = _transformBulkOperations(N.chunk);
+            return _saveBulk(operations).catch(e => {
+                return { list: null as ItemList[], error: GETERR(e) };
+            });
         });
-        _log(this.logNS, `> results =`, $U.json(results));
+        // _log(this.logNS, `> results =`, $U.json(results));
 
+        //TODO - 초기 입력의 목록과 출력의 목록의 쌍이 서로 맞아야함.... @241230/steve
         const itemList = results.reduce<ItemList[]>((L, N) => {
-            if (typeof (N as any)?.error == 'string') L.push({ error: (N as any).error });
-            if (N.body?.items) L.push(...N.body?.items);
+            if (typeof N?.error == 'string') L.push({ error: N.error });
+            if (N?.list) L.push(...N.list);
             return L;
         }, []);
 
