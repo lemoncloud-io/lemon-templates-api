@@ -82,7 +82,20 @@ interface BulkResponseBody {
 interface BulkResponseItem<T = any> {
     index?: T;
 }
-
+/**
+ * type: `ItemList`
+ */
+interface ItemList {
+    _id: string;
+    _index: string;
+    _primary_term: number;
+    _seq_no: number;
+    _shards: { failed: number; successful: number; total: number };
+    _type: string;
+    _version: number;
+    result: string;
+    status: number;
+}
 /**
  * type: `ScanLastParams`
  */
@@ -114,6 +127,10 @@ export interface DoSyncScanLastResult<T = any> extends ListResult<T> {
     count?: number;
     /** (optinoal) last of scan if there are more */
     last?: any;
+    /** errors of saveBulk */
+    errors?: boolean[];
+    /** statusCodes of saveBulk */
+    statusCodes?: number[];
 }
 
 /**
@@ -665,6 +682,8 @@ export abstract class MyCoreManager<
             size?: number;
         },
     ): Promise<DoSyncScanLastResult> {
+        const chunkSize = options?.size ?? 10;
+
         //* 1. doScanLast(w/filter by type); scan-size = 100
         const $perf = $T.perf();
         const { list, last, count } = await this.doScanLast($param);
@@ -677,8 +696,6 @@ export abstract class MyCoreManager<
             }
             return result;
         };
-
-        const chunkSize = options?.size ?? 10;
         const chunks = _makeChucks(list, chunkSize);
 
         //* inner type.
@@ -696,45 +713,44 @@ export abstract class MyCoreManager<
                 chunk,
             }),
         );
+
         const _transformBulkOperations = (dataChunk: Model[]) => {
-            return dataChunk.reduce((acc, doc) => {
-                acc.push({
-                    index: {
-                        _index: $ES6.options?.indexName,
-                        _id: doc._id,
-                    },
-                });
-                const { _id, ...docCopy } = doc;
-                acc.push(docCopy as Model);
-                return acc;
-            }, [] as Array<{ index: { _index: string; _id: string } } | Model>);
+            return dataChunk.flatMap(doc => {
+                const { _id, ...items } = doc;
+                return [{ index: { _index: $ES6.options?.indexName, _id: doc._id } }, items as Model];
+            });
         };
 
-        const results = await my_sequence(chunkList, async (chunkWrapper, index) => {
-            const operations = _transformBulkOperations(chunkWrapper.chunk);
+        const results = await my_sequence(chunkList, async $chunkWrapper => {
+            const operations = _transformBulkOperations($chunkWrapper.chunk);
             const $res = await this.saveBulk(operations);
             return $res;
         });
-        type ItemList = {
-            _id: string;
-            _index: string;
-            _primary_term: number;
-            _seq_no: number;
-            _shards: { failed: number; successful: number; total: number };
-            _type: string;
-            _version: number;
-            result: string;
-            status: number;
-        };
-        const itemList = results.reduce((acc, result) => {
-            const items = result.body.items.map(item => item.index);
-            acc.push(...items);
-            return acc;
-        }, [] as ItemList[]);
 
-        //* returns
+        //* 4. make flattend results
+        const flattened = results.reduce(
+            (acc, result) => {
+                acc.errors.push(result.body.errors);
+                acc.items.push(...result.body.items.map(item => item.index));
+                acc.statusCodes.push(result.statusCode);
+                return acc;
+            },
+            {
+                errors: [] as boolean[],
+                items: [] as ItemList[],
+                statusCodes: [] as number[],
+            },
+        );
+
         const took = $perf.took();
-        return onlyDefined<DoSyncScanLastResult>({ last: last, count: count, took, list: itemList });
+        return onlyDefined<DoSyncScanLastResult>({
+            last: last,
+            count: count,
+            took,
+            list: flattened.items,
+            errors: flattened.errors,
+            statusCodes: flattened.statusCodes,
+        });
     }
 
     private async saveBulk(operations: any[]) {

@@ -738,34 +738,103 @@ describe('abstract-services', () => {
 
     it('should pass migrate search-index', async () => {
         const { service } = instance();
-        const result = await service.$test.doSyncScanLast({ limit: 3 });
-        expect2(() => result, 'count,last,took').toEqual({ count: 3, last: { _id: 'TT:test:1000243' }, took: 0.1 });
-        expect2(() => result.list[0], '!_version,!_seq_no').toEqual({
-            _id: 'TT:test:1000078',
-            _index: 'lemon-templates-v1',
-            _primary_term: 1,
-            _shards: { failed: 0, successful: 2, total: 2 },
-            _type: '_doc',
-            result: 'updated',
-            status: 200,
-        });
-        expect2(() => result.list[1], '!_version,!_seq_no').toEqual({
-            _id: 'TT:#query:1000017',
-            _index: 'lemon-templates-v1',
-            _primary_term: 1,
-            _shards: { failed: 0, successful: 2, total: 2 },
-            _type: '_doc',
-            result: 'updated',
-            status: 200,
-        });
-        expect2(() => result.list[2], '!_version,!_seq_no').toEqual({
-            _id: 'TT:test:1000243',
-            _index: 'lemon-templates-v1',
-            _primary_term: 1,
-            _shards: { failed: 0, successful: 2, total: 2 },
-            _type: '_doc',
-            result: 'updated',
-            status: 200,
-        });
+        const result = await service.$test.doSyncScanLast({ limit: 10 });
+        expect2(() => result.last).toEqual({ _id: 'TT:test:1000246' });
+        expect2(() => result.count).toEqual(10);
+        // expect2(() => result.took).toEqual(0.1);
+        expect2(() => result.list, '!_version,!_seq_no').toEqual([
+            {
+                _id: 'TT:test:1000078',
+                _index: 'lemon-templates-v1',
+                _primary_term: 1,
+                _shards: { failed: 0, successful: 2, total: 2 },
+                _type: '_doc',
+                result: 'updated',
+                status: 200,
+            },
+            {
+                _id: 'TT:#query:1000017',
+                _index: 'lemon-templates-v1',
+                _primary_term: 1,
+                _shards: { failed: 0, successful: 2, total: 2 },
+                _type: '_doc',
+                result: 'updated',
+                status: 200,
+            },
+            {
+                _id: 'TT:test:1000243',
+                _index: 'lemon-templates-v1',
+                _primary_term: 1,
+                _shards: { failed: 0, successful: 2, total: 2 },
+                _type: '_doc',
+                result: 'updated',
+                status: 200,
+            },
+            {
+                _id: 'TT:test:1000004',
+                _index: 'lemon-templates-v1',
+                _primary_term: 1,
+                _shards: { failed: 0, successful: 2, total: 2 },
+                _type: '_doc',
+                result: 'updated',
+                status: 200,
+            },
+            {
+                _id: 'TT:test:1000212',
+                _index: 'lemon-templates-v1',
+                _primary_term: 1,
+                _shards: { failed: 0, successful: 2, total: 2 },
+                _type: '_doc',
+                result: 'updated',
+                status: 200,
+            },
+            {
+                _id: 'TT:test:1000159',
+                _index: 'lemon-templates-v1',
+                _primary_term: 1,
+                _shards: { failed: 0, successful: 2, total: 2 },
+                _type: '_doc',
+                result: 'updated',
+                status: 200,
+            },
+            {
+                _id: 'TT:test:1000027',
+                _index: 'lemon-templates-v1',
+                _primary_term: 1,
+                _shards: { failed: 0, successful: 2, total: 2 },
+                _type: '_doc',
+                result: 'updated',
+                status: 200,
+            },
+            {
+                _id: 'TT:test:1000069',
+                _index: 'lemon-templates-v1',
+                _primary_term: 1,
+                _shards: { failed: 0, successful: 2, total: 2 },
+                _type: '_doc',
+                result: 'updated',
+                status: 200,
+            },
+            {
+                _id: 'TT:test:1000199',
+                _index: 'lemon-templates-v1',
+                _primary_term: 1,
+                _shards: { failed: 0, successful: 2, total: 2 },
+                _type: '_doc',
+                result: 'updated',
+                status: 200,
+            },
+            {
+                _id: 'TT:test:1000246',
+                _index: 'lemon-templates-v1',
+                _primary_term: 1,
+                _shards: { failed: 0, successful: 2, total: 2 },
+                _type: '_doc',
+                result: 'updated',
+                status: 200,
+            },
+        ]);
+        expect2(() => result.statusCodes).toEqual([200]);
+        expect2(() => result.errors).toEqual([false]);
     });
 });
