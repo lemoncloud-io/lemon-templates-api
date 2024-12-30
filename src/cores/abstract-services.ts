@@ -728,7 +728,7 @@ export abstract class MyCoreManager<
         });
 
         //* 4. make flattend results
-        const flattened = results.reduce(
+        const $flattened = results.reduce(
             (acc, result) => {
                 acc.errors.push(result.body.errors);
                 acc.items.push(...result.body.items.map(item => item.index));
@@ -747,9 +747,9 @@ export abstract class MyCoreManager<
             last: last,
             count: count,
             took,
-            list: flattened.items,
-            errors: flattened.errors,
-            statusCodes: flattened.statusCodes,
+            list: $flattened.items,
+            errors: $flattened.errors,
+            statusCodes: $flattened.statusCodes,
         });
     }
 
