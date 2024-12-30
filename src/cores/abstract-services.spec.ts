@@ -128,7 +128,7 @@ export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
     if (params?.roles && context?.identity) (context.identity as any).roles = params?.roles;
     const service = new (class extends BackendService {
         public constructor() {
-            super(isDummy ? 'dummy-data.yml' : 'lemon-sandbox-table-dev');
+            super(isDummy ? 'dummy-data.yml' : '');
         }
         public async doSearch<T>(body: SearchBody): Promise<SearchResult<T, any>> {
             //* returns the body as object.
@@ -737,6 +737,7 @@ describe('abstract-services', () => {
 
         //* 4. doScanLast with last _id
         const checkLast = await service.$test.doScanLast({ limit: 20, last: { _id: 'TT:test:1000216' } });
+        expect2(() => checkLast).toEqual();
         expect2(() => checkLast.count).toEqual(0);
         expect2(() => checkLast.limit).toEqual(20);
         expect2(() => checkLast.total).toEqual(0);
