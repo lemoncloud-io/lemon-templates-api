@@ -645,6 +645,19 @@ export abstract class MyCoreManager<
         return body;
     }
 
+    /**
+     * sync by scan with last record.
+     *
+     * **[좋은코드]**
+     * 1. 보기 좋아야함; 변수이름, 로직도 잘보이고, 함수의 목적
+     * 2. 테스트 가능한 코드 (또는 테스트가된 코드)
+     *  - Unit Test: 테스트 가능한 최소단위 (함수.. 블럭)
+     *  - Integrated Test: Group of Units (ex: my_sequence)
+     *
+     * @param $param
+     * @param options
+     * @returns
+     */
     public async doSyncScanLast(
         $param: ScanLastParams,
         options?: {
