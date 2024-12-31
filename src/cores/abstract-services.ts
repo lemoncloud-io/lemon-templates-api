@@ -731,10 +731,25 @@ export abstract class MyCoreManager<
         });
         // _log(this.logNS, `> results =`, $U.json(results));
 
+        // validate input and output _id
+        const _validateIds = (inputList: Model[], outputList: ItemList[]) => {
+            const mismatchedIds = outputList.filter(item => !inputList.some(input => input._id === item._id));
+
+            if (mismatchedIds.length > 0) {
+                const mismatchedIdsList = mismatchedIds.map(item => item._id);
+                return { isValid: false, mismatchedIds: mismatchedIdsList };
+            }
+            return { isValid: true, mismatchedIds: [] };
+        };
+
         //TODO - 초기 입력의 목록과 출력의 목록의 쌍이 서로 맞아야함.... @241230/steve
         const itemList = results.reduce<ItemList[]>((L, N) => {
             if (typeof N?.error == 'string') L.push({ error: N.error });
-            if (N?.list) L.push(...N.list);
+            if (N?.list) {
+                const validation = _validateIds(list, N?.list);
+                if (!validation.isValid) throw new Error(`Mismatched list id found: ${validation.mismatchedIds}`);
+                L.push(...N.list);
+            }
             return L;
         }, []);
 
