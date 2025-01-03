@@ -23,6 +23,7 @@
  * @date        2023-11-06 optimized `onAfterSave()` for post-processing.
  * @date        2024-11-14 renamed to `IdentityToken` from `SessionToken`
  * @date        2024-11-28 optimized `assertContext()` and `isAdminRole()` w/ `lemon-core@3.2.11`.
+ * @date        2025-01-03 optimized `buildQuery()` w/ sort + offset.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
@@ -54,7 +55,7 @@ import {
 } from 'lemon-core';
 import { IdentityToken, ListResult, PaginateParam } from './types';
 import { keys } from 'ts-transformer-keys';
-import { onlyDefined } from './commons';
+import { onlyDefined, parsePaginateParam } from './commons';
 const NAME = $U.env('NAME', 'lemon');
 
 /**
@@ -911,28 +912,27 @@ export class MyManagerProxy<
             throwable?: boolean;
             /** default limit (default 10) */
             limit?: number;
+            /** (optional) error scope to use */
+            errScope?: string;
         },
     ) {
-        const $page: PaginateParam = {};
         const $ctx = this.proxy.context;
         const type = this.$mgr.type;
         const useSession = options?.useSession ?? false;
-        const throwable = options?.throwable;
+        const throwable = options?.throwable ?? true;
+        const errScope = options?.errScope ?? `packSearchParam(${type})`;
         const isLocal = $ctx?.domain === 'localhost';
         const session = useSession ? this.proxy.getCurrentSession({ throwable }) : null;
 
         const _has = (name: string): boolean =>
             param && (typeof param[name] === 'string' || typeof param[name] === 'number');
         const _val = (name: string): string => (param ? $T.S2(param[name]) : undefined);
-        //TODO - extract as function below @241017
-        const _isAdm = () => session?.roles?.includes('admin');
+        const _hasAdm = () => this.proxy.isAdminRole('admin');
 
         // parse params
-        const limit = $T.N(param?.limit, options?.limit ?? 10);
-        const page = $T.N(param?.page, 0);
         const sort = _has('sort') ? $T.S2(param?.sort, '') : undefined;
-        if (page < 0) throw new Error(`@page[${page}] is invalid - doList(${type})`);
-        Object.assign($page, onlyDefined({ page, limit, sort }));
+        const $page = parsePaginateParam({ ...param, sort }, { limit: options?.limit ?? 10, page: 0 });
+        if ($page.page < 0) throw new Error(`@page[${$page.page}] is invalid - ${errScope}`);
 
         // extract filtering by properties.
         // WARN - has no internal properties like { sid, gid, uid }
@@ -948,7 +948,7 @@ export class MyManagerProxy<
 
         // use w/ `session-token`
         if (useSession && !isLocal) {
-            if (_isAdm()) {
+            if (_hasAdm()) {
                 $param['sid'] = _has('sid') ? (_val('sid') === '0' ? _val('sid') : _val('sid')) : session?.sid;
             } else {
                 $param['sid'] = session?.sid;

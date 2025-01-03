@@ -10,7 +10,7 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { expect2 } from 'lemon-core';
-import { $T } from './commons';
+import { $T, parsePaginateParam } from './commons';
 
 const $LUT = {
     /**
@@ -32,5 +32,19 @@ describe('commons', () => {
         expect2(() => $T.asLut('Korean', $LUT.Languages, 'lang')).toEqual('ko');
         expect2(() => $T.asLut(null, $LUT.Languages, 'lang')).toEqual('');
         expect2(() => $T.asLut('', $LUT.Languages, 'lang')).toEqual('');
+    });
+
+    it('should pass parsePaginateParam', async () => {
+        expect2(() => parsePaginateParam()).toEqual({ limit: 10, page: 0 });
+        expect2(() => parsePaginateParam({ limit: -1 })).toEqual({ limit: -1, page: 0 });
+        expect2(() => parsePaginateParam({ limit: -1 }, { noLimit: true })).toEqual({ limit: -1, page: 0 });
+        expect2(() => parsePaginateParam({ page: -1 })).toEqual({ limit: 10, page: -1 });
+        expect2(() => parsePaginateParam({ page: 1, sort: 'a' })).toEqual({ limit: 10, page: 1, sort: 'a' });
+        expect2(() => parsePaginateParam({ offset: '2' } as any)).toEqual({ limit: 10, page: 0, offset: 2 });
+        expect2(() => parsePaginateParam({ offset: '2' } as any, { limit: 4 })).toEqual({
+            limit: 4,
+            page: 0,
+            offset: 2,
+        });
     });
 });

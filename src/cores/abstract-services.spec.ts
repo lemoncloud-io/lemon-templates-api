@@ -305,6 +305,30 @@ describe('abstract-services', () => {
         });
     });
 
+    it('should pass packSearchParam(session)', async () => {
+        const { service, context } = instance('session');
+
+        expect2(
+            await service
+                .guardProxy(context, async proxy => {
+                    expect2(() => proxy.tests.packSearchParam({})).toEqual({
+                        $page: { limit: 10, page: 0 },
+                        $param: {},
+                    });
+                    expect2(() => proxy.tests.packSearchParam({ page: '1' })).toEqual({
+                        $page: { limit: 10, page: 1 },
+                        $param: {},
+                    });
+                    return proxy.tests.packSearchParam(
+                        { page: '1', offset: '2', limit: '3' },
+                        { name: '' },
+                        { useSession: true },
+                    );
+                })
+                .catch(GETERR),
+        ).toEqual({ $page: { limit: 3, offset: 2, page: 1 }, $param: { name: '', sid: '1000008' } });
+    });
+
     it('should pass buildQuery for ES', async () => {
         const { service } = instance();
 

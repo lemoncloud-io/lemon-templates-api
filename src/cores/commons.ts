@@ -5,6 +5,7 @@
  * @author      Steve <steve@lemoncloud.io>
  * @date        2022-11-01 optimized w/ `commons`
  * @date        2024-06-24 optimized `parseListParam()`
+ * @date        2025-01-03 optimized `parseListParam()` w/ `offset`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
@@ -48,10 +49,11 @@ export function parsePaginateParam(
 ): PaginateParam {
     const limit = options?.limit;
     const page = options?.page ?? 0;
-    const res: PaginateParam = {
+    const res = onlyDefined<PaginateParam>({
         ...parseListParam(param, { limit }),
         page: _T.N(param?.page, page),
-    };
+        offset: param?.offset !== undefined ? _T.N(param?.offset, 0) : undefined,
+    });
     const noLimit = options?.noLimit ?? res.limit == -1;
 
     //WARN! - limit the max result to 2000.
