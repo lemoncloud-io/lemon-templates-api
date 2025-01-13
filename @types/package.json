@@ -1,7 +1,7 @@
 {
-  "name": "@lemoncloud/lemon-templates-api",
+  "name": "@lemoncloud/lina-rag1-api",
   "version": "0.24.1224",
-  "description": "lemon-templates management api",
+  "description": "lina-rag1 management api",
   "types": "dist/view/types.d.ts",
   "scripts": {},
   "dependencies": {
