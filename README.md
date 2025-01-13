@@ -1,4 +1,4 @@
-# lina-rag1-api
+# lemon-templates-api
 
 - api microservice
 

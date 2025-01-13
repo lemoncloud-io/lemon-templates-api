@@ -1,7 +1,7 @@
 {
-  "name": "lina-rag1-api",
+  "name": "lemon-templates-api",
   "version": "0.25.103",
-  "description": "lina-rag1 management api",
+  "description": "lemon-templates management api",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "port": 8888,
@@ -102,6 +102,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git@github.com:lemoncloud-io/ssocio-chatbots-ai.git"
+    "url": "git@github.com:lemoncloud-io/lemon-templates-api.git"
   }
 }
