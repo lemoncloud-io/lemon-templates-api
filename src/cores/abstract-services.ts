@@ -623,6 +623,15 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
     }
 
     /**
+     * @override fetchIdentityAccess
+     * @deprecated not supported.
+     */
+    protected async fetchIdentityAccess(identityId: string, domain?: string): Promise<any> {
+        const errScope = `fetchIdentityAccess(${identityId ?? ''}/${domain ?? ''})`;
+        throw new Error(`400 NOT SUPPORTED - ${errScope}`);
+    }
+
+    /**
      * get the `identity-token` (as session) from current req-context.
      * - 1차 호출(front에서) 에서는 이 세션이 꼭 필요함.
      * - 2차 호출(protocol이용) 에서는 선택사항으로, 조절가능해야함! (#TODO - 이걸 어떻게 구불할것인가?)
