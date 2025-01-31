@@ -623,7 +623,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
     }
 
     /**
-     * get the `session-token` from current req-context.
+     * get the `identity-token` (as session) from current req-context.
      * - 1차 호출(front에서) 에서는 이 세션이 꼭 필요함.
      * - 2차 호출(protocol이용) 에서는 선택사항으로, 조절가능해야함! (#TODO - 이걸 어떻게 구불할것인가?)
      * - 로컬) 로컬 개발에서는 시뮬레이션 방법은 #TODO
@@ -655,14 +655,14 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         //* WARN - in case of local, no need to throw error.
         const isLocal = context?.domain === 'localhost';
 
-        // load the `session-token` from json file.
+        // load the `identity-token` from json file.
         const _load = (file: string): IdentityToken => {
             const data = loadJsonSync(file);
             if (typeof data?.error === 'string') throw new Error(`@file[${file}] is invalid, ${data.error}`);
             if (data?.context?.identity) return data?.context?.identity as IdentityToken;
             return data;
         };
-        // load the `session-token` with req or env.
+        // load the `identity-token` with req or env.
         const _session = (): IdentityToken => {
             //INFO - `userAgent`가 있다면, identity 생성 프로세스가 제대로 실행된것으로 판단해도됨! @240620.
             if (typeof (context?.identity as any)?.userAgent == 'string') return context?.identity;
@@ -827,7 +827,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
     }
 
     /**
-     * from `session-token`, make base of model { sid, uid }
+     * from `identity-token`, make base of model { sid, uid }
      * @param proxy the current proxy.
      * @returns base model
      */
@@ -906,7 +906,7 @@ export class MyManagerProxy<
         param: SimpleSet,
         model?: MyModel,
         options?: {
-            /** flag to use session-token (default false) */
+            /** flag to use identity-token (default false) */
             useSession?: boolean;
             /** flag to throw error (default true) */
             throwable?: boolean;
@@ -946,7 +946,7 @@ export class MyManagerProxy<
             return M;
         }, {} as SearchParam<MyModel>);
 
-        // use w/ `session-token`
+        // use w/ `identity-token` (known as session)
         if (useSession && !isLocal) {
             if (_hasAdm()) {
                 $param['sid'] = _has('sid') ? (_val('sid') === '0' ? _val('sid') : _val('sid')) : session?.sid;

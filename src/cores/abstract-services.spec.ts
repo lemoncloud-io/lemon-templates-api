@@ -13,7 +13,7 @@
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { $U, expect2, GETERR, NextContext, SearchBody, SearchResult, $info } from 'lemon-core';
+import { $U, expect2, GETERR, NextContext, SearchBody, SearchResult } from 'lemon-core';
 import { SimpleSet, CoreModel, filterFields, loadJsonSync, NextIdentityAccess } from 'lemon-core';
 import { MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
 import { keys } from 'ts-transformer-keys';

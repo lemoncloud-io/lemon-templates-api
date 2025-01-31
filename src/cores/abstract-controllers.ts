@@ -45,8 +45,8 @@ const _id = (id: any): string => (id === '' || id === 0 ? '' : $T.S2(id));
  */
 interface CRUDCreationOptions {
     /**
-     * (optional) flag to use `session-token` in CRUD
-     * - initialize this as `true` if required to use `session-token`
+     * (optional) flag to use `identity-token` (known as session) in CRUD
+     * - initialize this as `true` if required to use `identity-token`
      *
      * @see proxy.getCurrentSession()
      */
@@ -164,7 +164,7 @@ export abstract class AbstractCRUDController<
     }
 
     /**
-     * from `session-token`, make base of model { sid, uid }
+     * from `identity-token`, make base of model { sid, uid }
      * @param proxy the current proxy.
      * @returns base model
      */
