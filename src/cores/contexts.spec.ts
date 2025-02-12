@@ -155,6 +155,7 @@ const $context: {
                 sid: '1000008',
                 gid: null,
                 uid: '1000007',
+                aid: '#sess-auth',
                 roles: ['user'],
                 Site: {
                     code: 'B0008',

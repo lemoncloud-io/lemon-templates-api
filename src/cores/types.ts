@@ -32,6 +32,8 @@ export interface IdentityTokenUser {
     nick?: string;
     /** (optional) login-id of user */
     login?: string;
+    /** (optional) email of user */
+    email?: string;
 }
 
 /** type: `IdentityTokenGroup` */
@@ -43,10 +45,10 @@ export interface IdentityTokenGroup {
 }
 
 /**
- * type: `IdentityToken`
+ * type: `IdentityToken` (named as `session`)
  * - 계정토큰(= JWT(IdentityToken))으로, `/refresh`시 AWS Key와 함께 발급됨 (기본, 1일동안 유효함)
  * - `backend-api`에서 조직/그룹/사용자에 맞게 재설정됨!
- * - 세션토큰 검사는 `proxy.getCurrenSession()` 이용하기
+ * - 세션토큰 검사는 `proxy.getCurrentSession()` 이용하기
  */
 export interface IdentityToken<
     T = any,
@@ -195,6 +197,10 @@ export interface PaginateParam extends ListParam {
      * (optional) flag to filter by uid
      */
     uid?: string;
+    /**
+     * (optional) flag to filter by sid (only for admin role)
+     */
+    sid?: string;
 }
 
 /**

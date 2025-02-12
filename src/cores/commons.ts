@@ -152,4 +152,29 @@ export const $T = {
         }, {});
         return res as T;
     },
+    /**
+     * reduce aggregation from ES6
+     * NOTE - 이거 반드시 최신꺼로 업데이트 필요함 @steve/250212
+     */
+    reduceAggr: ($aggr: any) =>
+        Object.keys($aggr).reduce<{ [key: string]: { [key: string]: number } }>((M, key: string) => {
+            const N: any = $aggr[key];
+            if (key == 'doc_count' && typeof N == 'number') {
+                M['doc_count'] = { total: N };
+                return M;
+            }
+            M[key] = Object.keys(N).reduce<{ [key: string]: number }>((M, x) => {
+                const Y = N[x];
+                if (x == 'doc_count') M['total'] = $T.N(Y, 0);
+                if (x == 'buckets' && Array.isArray(Y))
+                    return Y.reduce((M, N) => {
+                        if (typeof N?.key === 'string' && typeof N?.doc_count === 'number') {
+                            M[N?.key] = N.doc_count;
+                        }
+                        return M;
+                    }, M);
+                return M;
+            }, {});
+            return M;
+        }, {}),
 };

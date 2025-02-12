@@ -408,13 +408,26 @@ export abstract class MyCoreManager<
      * build filter for scan.
      * @returns DynamoScanFilter
      */
-    public buildScanFilter($param?: SearchParam<Model>): DynamoScanFilter {
+    public buildScanFilter(params?: SearchParam<Model>): DynamoScanFilter {
         const filter: DynamoScanFilter = [
             { key: 'ns', comparator: '=', value: this.parent.NS },
             { key: 'type', comparator: '=', value: this.type },
             { not: { key: 'stereo', operator: 'begins_with', value: '#' } },
             { key: 'deletedAt', comparator: '=', value: 0 },
         ];
+
+        // filter by params
+        if (params) {
+            Object.entries(params).forEach(([key, val]) => {
+                if (val === undefined || val === null) {
+                    // ignore.
+                } else if (typeof val === 'string') {
+                    filter.push({ key, comparator: '=', value: val });
+                } else {
+                    throw new Error(`400 NOT SUPPORTED - filter param[${$U.json(params)}]`);
+                }
+            });
+        }
 
         return filter;
     }
@@ -436,7 +449,8 @@ export abstract class MyCoreManager<
         if (!options?.tableName || options?.tableName?.endsWith('.yml'))
             throw new Error(`400 NO DYNAMO - table:${options?.tableName ?? ''}!`);
         const $scan = new DynamoScanService(options);
-        // const $res = await $scan.scan(-1, null, filter);
+
+        //* scan all items with basic filter.
         const list0: Model[] = [];
         let $res: DynamoScanResult<GeneralItem>;
         while (true) {
@@ -447,7 +461,10 @@ export abstract class MyCoreManager<
             });
             if (!$res?.last[idName]) break;
         }
-        //* check if in unlimited..
+
+        //TODO - sort by some.
+
+        //* check if in unlimited. (or cut-off by page)
         const limit = $page?.limit ?? 10;
         const page = $page?.page ?? 0;
         const unLimited = limit === -1 ? true : false;
@@ -458,7 +475,9 @@ export abstract class MyCoreManager<
             return list.slice(page * limit, (page + 1) * limit);
         };
         const list = _page(list0, page, limit);
-        return { list, total, limit };
+
+        //* returns.
+        return { list, total, limit, aggr: [{ key: '#scan', count: total }] };
     }
 
     /**
@@ -794,7 +813,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
      * @param options optionals
      * @returns boolean
      */
-    public isAdminRole(role = 'admin', options?: { errScope?: string }) {
+    public hasAdminRole(role = 'admin', options?: { errScope?: string }) {
         const $option = { ...options, throwable: false };
         if (this.assertContext({ isLocal: true }, $option)) return true;
         if (this.assertContext({ isSigned: true, isAuthed: false }, $option)) return true;
@@ -936,7 +955,7 @@ export class MyManagerProxy<
         const _has = (name: string): boolean =>
             param && (typeof param[name] === 'string' || typeof param[name] === 'number');
         const _val = (name: string): string => (param ? $T.S2(param[name]) : undefined);
-        const _hasAdm = () => this.proxy.isAdminRole('admin');
+        const _hasAdm = () => this.proxy.hasAdminRole('admin');
 
         // parse params
         const sort = _has('sort') ? $T.S2(param?.sort, '') : undefined;
@@ -958,7 +977,7 @@ export class MyManagerProxy<
         // use w/ `identity-token` (known as session)
         if (useSession && !isLocal) {
             if (_hasAdm()) {
-                $param['sid'] = _has('sid') ? (_val('sid') === '0' ? _val('sid') : _val('sid')) : session?.sid;
+                $param['sid'] = _has('sid') ? (_val('sid') === '0' ? session?.sid : _val('sid')) : session?.sid;
             } else {
                 $param['sid'] = session?.sid;
             }

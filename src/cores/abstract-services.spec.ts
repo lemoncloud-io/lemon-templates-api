@@ -575,8 +575,8 @@ describe('abstract-services', () => {
         );
         expect2(() => proxy.assertContext({ isAuthed: true })).toEqual(true);
 
-        expect2(() => proxy.isAdminRole()).toEqual(false);
-        expect2(() => proxy.isAdminRole('user')).toEqual(false);
+        expect2(() => proxy.hasAdminRole()).toEqual(false);
+        expect2(() => proxy.hasAdminRole('user')).toEqual(false);
     });
 
     it('should pass ManagerProxy(signed)', async () => {
@@ -593,8 +593,8 @@ describe('abstract-services', () => {
             '403 NOT ALLOWED - invalid isAuthed[true] @assertContext()',
         );
 
-        expect2(() => proxy.isAdminRole()).toEqual(true);
-        expect2(() => proxy.isAdminRole('user')).toEqual(true);
+        expect2(() => proxy.hasAdminRole()).toEqual(true);
+        expect2(() => proxy.hasAdminRole('user')).toEqual(true);
     });
 
     it('should pass ManagerProxy(session)', async () => {
@@ -609,8 +609,8 @@ describe('abstract-services', () => {
         expect2(() => proxy.assertContext({ isSigned: true })).toEqual(true);
         expect2(() => proxy.assertContext({ isAuthed: true })).toEqual(true);
 
-        expect2(() => proxy.isAdminRole()).toEqual(false);
-        expect2(() => proxy.isAdminRole('user')).toEqual(true);
+        expect2(() => proxy.hasAdminRole()).toEqual(false);
+        expect2(() => proxy.hasAdminRole('user')).toEqual(true);
     });
 
     it('should pass ManagerProxy(session + local)', async () => {
@@ -625,7 +625,7 @@ describe('abstract-services', () => {
         expect2(() => proxy.assertContext({ isSigned: true })).toEqual(true);
         expect2(() => proxy.assertContext({ isAuthed: true })).toEqual(true);
 
-        expect2(() => proxy.isAdminRole()).toEqual(true);
-        expect2(() => proxy.isAdminRole('user')).toEqual(true);
+        expect2(() => proxy.hasAdminRole()).toEqual(true);
+        expect2(() => proxy.hasAdminRole('user')).toEqual(true);
     });
 });
