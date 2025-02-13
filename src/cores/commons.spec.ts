@@ -30,7 +30,10 @@ describe('commons', () => {
         expect2(() => $T.asLut('ko', $LUT.Languages, 'lang')).toEqual('ko');
         expect2(() => $T.asLut('en', $LUT.Languages, 'lang')).toEqual('en');
         expect2(() => $T.asLut('Korean', $LUT.Languages, 'lang')).toEqual('ko');
-        expect2(() => $T.asLut(null, $LUT.Languages, 'lang')).toEqual('');
+        expect2(() => $T.asLut(null, $LUT.Languages, 'lang')).toEqual(null);
+        expect2(() => $T.asLut(null, $LUT.Languages, { default: 'some' })).toEqual('some');
+        expect2(() => $T.asLut(undefined, $LUT.Languages, 'lang')).toEqual(undefined);
+        expect2(() => $T.asLut(undefined, $LUT.Languages, { default: 'some' })).toEqual(undefined);
         expect2(() => $T.asLut('', $LUT.Languages, 'lang')).toEqual('');
     });
 

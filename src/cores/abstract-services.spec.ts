@@ -246,8 +246,11 @@ describe('abstract-services', () => {
         });
 
         //* test of sample session.
-        const dir = `./src/cores/context-session.json`;
-        const { context } = loadJsonSync(dir);
+        expect2(() => loadJsonSync(`./src/cores/context-session.json`)).toEqual({
+            error: "ENOENT: no such file or directory, open './src/cores/context-session.json'",
+        });
+
+        const context = loadSample('session')?.context;
         expect2(() => context?.identity, 'sid,uid').toEqual({ sid: '1000008', uid: '1000007' });
         const identity = context?.identity;
 
@@ -266,13 +269,23 @@ describe('abstract-services', () => {
             return proxy.getCurrentSession(options);
         };
 
+        //! test with sample session.
+        const dir = `sample/context-session.json`;
         expect2(() => getCurrentSession({ useSession: false })).toEqual(null);
-
-        expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir })).toEqual(identity);
+        expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
+            sid: '1000008',
+            uid: '1000007',
+        });
         expect2(() => getCurrentSession({ useSession: true })).toEqual(null);
-        expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: dir })).toEqual(identity);
+        expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: dir }), 'sid,uid').toEqual({
+            sid: '1000008',
+            uid: '1000007',
+        });
         expect2(() => getCurrentSession({ useSession: '1' })).toEqual(null);
-        expect2(() => getCurrentSession({ useSession: dir })).toEqual(identity);
+        expect2(() => getCurrentSession({ useSession: dir }), 'sid,uid').toEqual({
+            sid: '1000008',
+            uid: '1000007',
+        });
 
         expect2(() => getCurrentSession({ useSession: 'wrongPath' })).toEqual(
             "@file[wrongPath] is invalid, ENOENT: no such file or directory, open './wrongPath'",

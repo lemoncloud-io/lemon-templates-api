@@ -121,6 +121,7 @@ export const $T = {
         const _def = $opts?.default ?? null;
         //* check of empty.
         if (key === undefined) return undefined as keyof T;
+        if (key === null) return _def as keyof T;
 
         //* check if key is defined.
         if (typeof $map[key as keyof T] === 'undefined') {
