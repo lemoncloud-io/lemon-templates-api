@@ -271,20 +271,25 @@ describe('abstract-services', () => {
 
         //! test with sample session.
         const dir = `sample/context-session.json`;
+        const $ctx = loadJsonSync(dir)?.context?.identity;
         expect2(() => getCurrentSession({ useSession: false })).toEqual(null);
         expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
-            sid: '1000008',
-            uid: '1000007',
+            sid: expect.any(String),
+            uid: expect.any(String),
+        });
+        expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
+            sid: $ctx.sid,
+            uid: $ctx.uid,
         });
         expect2(() => getCurrentSession({ useSession: true })).toEqual(null);
         expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: dir }), 'sid,uid').toEqual({
-            sid: '1000008',
-            uid: '1000007',
+            sid: $ctx.sid,
+            uid: $ctx.uid,
         });
         expect2(() => getCurrentSession({ useSession: '1' })).toEqual(null);
         expect2(() => getCurrentSession({ useSession: dir }), 'sid,uid').toEqual({
-            sid: '1000008',
-            uid: '1000007',
+            sid: $ctx.sid,
+            uid: $ctx.uid,
         });
 
         expect2(() => getCurrentSession({ useSession: 'wrongPath' })).toEqual(
