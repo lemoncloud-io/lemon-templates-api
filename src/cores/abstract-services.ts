@@ -29,7 +29,7 @@
  * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _log, _inf, _err, $ES6, NUL404 } from 'lemon-core';
+import { $U, $T, _log, _inf, _err, $ES6, NUL404, GETERR } from 'lemon-core';
 import {
     GETERR$,
     CoreManager,
@@ -52,11 +52,13 @@ import {
     GeneralItem,
     NextIdentity,
     NextIdentityCognito,
+    my_sequence,
 } from 'lemon-core';
 import { IdentityToken, ListResult, PaginateParam } from './types';
 import { keys } from 'ts-transformer-keys';
 import { onlyDefined, parsePaginateParam } from './commons';
 const NAME = $U.env('NAME', 'lemon');
+const NS = $U.NS('HDBS', 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
  * fields in core model.
@@ -64,6 +66,43 @@ const NAME = $U.env('NAME', 'lemon');
 const CORE_FIELDS: string[] = keys<CoreModel>();
 
 export type SearchParam<T> = T & { [key: string]: string | number };
+
+/**
+ * type: `ScanLastParams`
+ */
+export interface ScanLastParams<T = any> {
+    /** last cursor during scan */
+    last?: T;
+    /** (optional) limit to 1x scan */
+    limit?: number;
+    /** filter to scan */
+    filter?: DynamoScanFilter;
+}
+
+/**
+ * type: `ScanLastResult`
+ */
+export interface ScanLastResult<T = any> extends ListResult<T> {
+    /** count of scan */
+    count?: number;
+    /** (optinoal) last of scan if there are more */
+    last?: any;
+}
+/**
+ * type: `doSyncScanLastResult`
+ *
+ * @param .list can be BulkResponseItem[]
+ */
+export interface DoSyncScanLastResult<T = any> extends ListResult<T> {
+    /** count of scan */
+    count?: number;
+    /** (optinoal) last of scan if there are more */
+    last?: any;
+    /** errors of saveBulk */
+    errors?: boolean[];
+    /** statusCodes of saveBulk */
+    statusCodes?: number[];
+}
 
 /**
  * class: `MyCoreService`
@@ -481,6 +520,37 @@ export abstract class MyCoreManager<
     }
 
     /**
+     * execute scan-last with filter.
+     *
+     * @param $param ScanLastParams
+     * @returns
+     */
+    public async doScanLast($param: ScanLastParams): Promise<ScanLastResult<Model>> {
+        const options = this.parent.dynamoOptions;
+        const limit = $param?.limit ?? 2;
+        const last = $param?.last;
+        const filter = $param?.filter;
+
+        if (!options?.tableName || options?.tableName?.endsWith('.yml')) {
+            throw new Error(`400 NO DYNAMO - table:${options?.tableName ?? ''}!`);
+        }
+
+        const $scan = new DynamoScanService(options);
+        const $res = await $scan.scan(limit, last, filter);
+
+        const list: Model[] = $res.list as unknown as Model[];
+
+        const total = $U.N(list?.length || 0);
+        return onlyDefined({
+            list,
+            total,
+            limit: limit,
+            count: $res?.count,
+            last: Object.keys($res?.last || {}).length === 0 ? undefined : $res?.last,
+        });
+    }
+
+    /**
      * basic ElasticSearch Query.
      * you can override this method for customization.
      *
@@ -595,6 +665,132 @@ export abstract class MyCoreManager<
         _add_must_not({ term: { stereo: '#' } });
         _add_must_not({ term: { 'stereo.keyword': '#' } });
         return body;
+    }
+
+    /**
+     * sync by scan with last record.
+     *
+     * **[좋은코드]**
+     * 1. 보기 좋아야함; 변수이름, 로직도 잘보이고, 함수의 목적
+     * 2. 테스트 가능한 코드 (또는 테스트가된 코드)
+     *  - Unit Test: 테스트 가능한 최소단위 (함수.. 블럭)
+     *  - Integrated Test: Group of Units (ex: my_sequence)
+     *
+     * @param $param
+     * @param options
+     * @returns
+     */
+    public async doSyncScanLast(
+        $param: ScanLastParams,
+        options?: {
+            /** chunk-size of bulk (default: 10) */
+            size?: number;
+        },
+    ): Promise<DoSyncScanLastResult> {
+        //* 1. doScanLast(w/filter by type); scan-size = 100
+        const $perf = $T.perf();
+        const { list, last, count } = await this.doScanLast($param);
+
+        //* inner type.
+        type Chunks<T = any> = {
+            id: string;
+            error: any;
+            chunk: T[];
+        };
+        type BulkResponseBody = {
+            errors: boolean;
+            items: { index: ItemList }[];
+            took?: number;
+        };
+        type ItemList = {
+            _id?: string;
+            // _index?: string;
+            // _primary_term?: number;
+            // _seq_no?: number;
+            // _shards?: { failed: number; successful: number; total: number };
+            // _type?: string;
+            _version?: number;
+            error?: string;
+            // result?: string;
+            status?: number;
+        };
+
+        //* 2. chunk the list into smaller parts
+        const _makeChucks = <T = any>(list: T[], chunkSize: number) => {
+            const result: T[][] = [];
+            for (let i = 0; i < list.length; i += chunkSize) {
+                result.push(list.slice(i, i + chunkSize));
+            }
+            return result;
+        };
+
+        const _saveBulk = async <T = any>(operations: T[]) => {
+            const elastic = $ES6.client;
+            const $res = await elastic.bulk({ body: operations }).catch(e => {
+                _err(this.NS, `>> err=`, e);
+                throw e;
+            });
+            const list = ($res.body as BulkResponseBody)?.items?.map<ItemList>(item => ({
+                _id: item.index._id,
+                _version: item.index._version,
+                error: item.index.error,
+                status: item.index.status,
+            }));
+            return { list, error: null as string };
+        };
+
+        const chunkSize = options?.size ?? 10;
+        const chunks = _makeChucks(list, chunkSize);
+
+        //* 3. use my_sequence to bulk each chunk sequentially
+        const chunkList = chunks.map(
+            (chunk, index): Chunks => ({
+                id: `${index}`,
+                error: null,
+                chunk,
+            }),
+        );
+
+        const _transformBulkOperations = (dataChunk: Model[]) => {
+            return dataChunk.flatMap(doc => {
+                const { _id, ...items } = doc;
+                return [{ index: { _index: $ES6.options?.indexName, _id: doc._id } }, items as Model];
+            });
+        };
+
+        const results = await my_sequence(chunkList, async N => {
+            const operations = _transformBulkOperations(N.chunk);
+            return _saveBulk(operations).catch(e => {
+                return { list: null as ItemList[], error: GETERR(e) };
+            });
+        });
+        // _log(this.logNS, `> results =`, $U.json(results));
+
+        // validate input and output _id
+        const _validateIds = (inputList: Model[], outputList: ItemList[]) => {
+            const mismatchedIds = outputList.filter(item => !inputList.some(input => input._id === item._id));
+
+            if (mismatchedIds.length > 0) {
+                const mismatchedIdsList = mismatchedIds.map(item => item._id);
+                return { isValid: false, mismatchedIds: mismatchedIdsList };
+            }
+            return { isValid: true, mismatchedIds: [] };
+        };
+
+        //TODO - 초기 입력의 목록과 출력의 목록의 쌍이 서로 맞아야함.... @241230/steve
+        const itemList = results.reduce<ItemList[]>((L, N) => {
+            if (typeof N?.error == 'string') L.push({ error: N.error });
+            if (N?.list) {
+                const validation = _validateIds(list, N?.list);
+                if (!validation.isValid) throw new Error(`Mismatched list id found: ${validation.mismatchedIds}`);
+                L.push(...N.list);
+            }
+            return L;
+        }, []);
+
+        //* returns
+        const took = $perf.took();
+        return onlyDefined<DoSyncScanLastResult>({ last: last, count: count, took, list: itemList });
     }
 }
 

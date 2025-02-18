@@ -1,0 +1,1024 @@
+{
+  "list": [
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718688801255,
+      "createdAt": 1718688801255,
+      "id": "1000078",
+      "name": "1718688801037",
+      "type": "test",
+      "age": 2
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"query\":{\"query\":{\"bool\":{\"filter\":{\"term\":{\"type\":\"test\"}}}},\"aggs\":{\"test\":{\"terms\":{\"field\":\"count\"}}},\"sort\":[{\"count\":{\"order\":\"asc\",\"missing\":\"_last\"}}]}}",
+      "ns": "TT",
+      "updatedAt": 1734325286131,
+      "createdAt": 1734325286081,
+      "id": "1000017",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718703832286,
+      "createdAt": 1718703832286,
+      "id": "1000243",
+      "name": "1718703832078",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1711679260356,
+      "createdAt": 1711679260356,
+      "id": "1000004",
+      "name": "lemon",
+      "type": "test"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718701431833,
+      "createdAt": 1718701431833,
+      "id": "1000212",
+      "name": "1718701431689",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697350728,
+      "createdAt": 1718697350728,
+      "id": "1000159",
+      "name": "1718697350582",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1712124015422,
+      "createdAt": 1712124015422,
+      "id": "1000027",
+      "name": "lemon",
+      "gender": "male",
+      "type": "test",
+      "age": 20
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718687735910,
+      "createdAt": 1718687735910,
+      "id": "1000069",
+      "name": "1718687735679",
+      "type": "test",
+      "age": 12
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718700397213,
+      "createdAt": 1718700397213,
+      "id": "1000199",
+      "name": "1718700396982",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718703852775,
+      "createdAt": 1718703852775,
+      "id": "1000246",
+      "name": "1718703852600",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718691301182,
+      "createdAt": 1718691301182,
+      "id": "1000106",
+      "name": "1718691300977",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697644064,
+      "createdAt": 1718697644064,
+      "id": "1000186",
+      "name": "1718697643953",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718702182595,
+      "createdAt": 1718702182595,
+      "id": "1000235",
+      "name": "1718702182470",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"query\":{\"query\":{\"bool\":{\"filter\":{\"term\":{\"type\":\"test\"}}}},\"aggs\":{\"test\":{\"terms\":{\"field\":\"count\"}}},\"sort\":[{\"count\":{\"order\":\"asc\",\"missing\":\"_last\"}}]}}",
+      "ns": "TT",
+      "updatedAt": 1733963367679,
+      "createdAt": 1733963367615,
+      "id": "1000007",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"query\":{\"query\":{\"bool\":{\"filter\":{\"term\":{\"type\":\"test\"}}}},\"aggs\":{\"test\":{\"terms\":{\"field\":\"count\"}}},\"sort\":[{\"count\":{\"order\":\"asc\",\"missing\":\"_last\"}}]}}",
+      "ns": "TT",
+      "updatedAt": 1734325193210,
+      "createdAt": 1734325193163,
+      "id": "1000015",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "role": "normal",
+      "user_hidden": "1",
+      "ns": "TT",
+      "updatedAt": 1712223440613,
+      "createdAt": 1712223440613,
+      "id": "1000006",
+      "phone": "01012345678",
+      "name": "lemon",
+      "gender": "male",
+      "type": "user"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697424348,
+      "createdAt": 1718697424348,
+      "id": "1000173",
+      "name": "1718697424220",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697058109,
+      "createdAt": 1718697058109,
+      "id": "1000148",
+      "name": "1718697057964",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718763168336,
+      "createdAt": 1718763168336,
+      "id": "1000262",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"name\":\"a@b.c\"}",
+      "ns": "TT",
+      "updatedAt": 1733716879262,
+      "createdAt": 1733716879196,
+      "id": "1000002",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718703851665,
+      "createdAt": 1718703851665,
+      "id": "1000245",
+      "name": "1718703851461",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718696674586,
+      "createdAt": 1718696674586,
+      "id": "1000132",
+      "name": "1718696674342",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718691051087,
+      "createdAt": 1718691051087,
+      "id": "1000105",
+      "name": "1718691050939",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"query\":{\"sort\":[{\"name\":{\"order\":\"asc\",\"missing\":\"_last\"}}]}}",
+      "ns": "TT",
+      "updatedAt": 1734326296119,
+      "createdAt": 1734326296065,
+      "id": "1000021",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718701764187,
+      "createdAt": 1718701764187,
+      "id": "1000228",
+      "name": "1718701764028",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718699983394,
+      "createdAt": 1718699983394,
+      "id": "1000194",
+      "name": "1718699982812",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718604849695,
+      "createdAt": 1718604849695,
+      "id": "1000037",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718695421401,
+      "createdAt": 1718695421401,
+      "id": "1000120",
+      "name": "1718695421235",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718704158720,
+      "createdAt": 1718704158720,
+      "id": "1000259",
+      "name": "1718704158520",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1719292027395,
+      "createdAt": 1719292027395,
+      "id": "1000279",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718614131097,
+      "createdAt": 1718614131097,
+      "id": "1000046",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1711696332523,
+      "createdAt": 1711696332523,
+      "id": "1000013",
+      "name": "lemon",
+      "gender": "female",
+      "type": "test",
+      "age": 20
+    },
+    {
+      "deletedAt": 0,
+      "role": "normal",
+      "user_hidden": 1,
+      "ns": "TT",
+      "updatedAt": 1712575849629,
+      "createdAt": 1712575849629,
+      "id": "1000020",
+      "phone": "01012345678",
+      "name": "lemon",
+      "gender": "female",
+      "type": "user"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718691049398,
+      "createdAt": 1718691049398,
+      "id": "1000103",
+      "name": "1718691049236",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "role": "normal",
+      "user_hidden": 0,
+      "ns": "TT",
+      "updatedAt": 1712576807722,
+      "createdAt": 1712576807722,
+      "id": "1000023",
+      "phone": "01012345678",
+      "name": "lemon",
+      "gender": "female",
+      "type": "user"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718614371986,
+      "createdAt": 1718614371986,
+      "id": "1000052",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718704073902,
+      "createdAt": 1718704073902,
+      "id": "1000252",
+      "name": "1718704073696",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718695380023,
+      "createdAt": 1718695380023,
+      "id": "1000113",
+      "name": "1718695379863",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697375278,
+      "createdAt": 1718697375278,
+      "id": "1000163",
+      "name": "1718697375144",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697780219,
+      "createdAt": 1718697780219,
+      "id": "1000189",
+      "name": "1718697780057",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"query\":{\"sort\":[{\"name\":{\"order\":\"asc\",\"missing\":\"_last\"}}]}}",
+      "ns": "TT",
+      "updatedAt": 1734326243107,
+      "createdAt": 1734326243036,
+      "id": "1000020",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718687678065,
+      "createdAt": 1718687678065,
+      "id": "1000067",
+      "name": "1718687675971",
+      "type": "test",
+      "age": 12
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697375955,
+      "createdAt": 1718697375955,
+      "id": "1000164",
+      "name": "1718697375827",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718701498699,
+      "createdAt": 1718701498699,
+      "id": "1000223",
+      "name": "1718701498568",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718696691370,
+      "createdAt": 1718696691370,
+      "id": "1000134",
+      "name": "1718696691231",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"query\":{\"query\":{\"bool\":{\"filter\":{\"term\":{\"type\":\"test\"}}}},\"sort\":[{\"count\":{\"order\":\"asc\",\"missing\":\"_last\"}}]}}",
+      "ns": "TT",
+      "updatedAt": 1734325704713,
+      "createdAt": 1734325704643,
+      "id": "1000019",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718689028302,
+      "createdAt": 1718689028302,
+      "id": "1000087",
+      "name": "1718689028149",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697351304,
+      "createdAt": 1718697351304,
+      "id": "1000160",
+      "name": "1718697351147",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718687192643,
+      "createdAt": 1718687192643,
+      "id": "1000061",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718859944268,
+      "createdAt": 1718859944268,
+      "id": "1000270",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1721008626417,
+      "createdAt": 1721008626417,
+      "id": "1000281",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697379886,
+      "createdAt": 1718697379886,
+      "id": "1000168",
+      "name": "1718697379768",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718688797344,
+      "createdAt": 1718688797344,
+      "id": "1000077",
+      "name": "1718688796913",
+      "type": "test",
+      "age": 2
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718696949769,
+      "createdAt": 1718696949769,
+      "id": "1000146",
+      "name": "1718696949605",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1712109993513,
+      "createdAt": 1712109993513,
+      "id": "1000024",
+      "name": "lemon",
+      "gender": "male",
+      "type": "test",
+      "age": 20
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718695392770,
+      "createdAt": 1718695392770,
+      "id": "1000117",
+      "name": "1718695392620",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718701497053,
+      "createdAt": 1718701497053,
+      "id": "1000221",
+      "name": "1718701496926",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697077752,
+      "createdAt": 1718697077752,
+      "id": "1000149",
+      "name": "1718697077624",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697643467,
+      "createdAt": 1718697643467,
+      "id": "1000185",
+      "name": "1718697643325",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718692399882,
+      "createdAt": 1718692399882,
+      "id": "1000107",
+      "name": "1718692399562",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718604933653,
+      "createdAt": 1718604933653,
+      "id": "1000039",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718696902308,
+      "createdAt": 1718696902308,
+      "id": "1000138",
+      "name": "1718696902169",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718700111694,
+      "createdAt": 1718700111694,
+      "id": "1000196",
+      "name": "1718700111283",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718677063685,
+      "createdAt": 1718673329316,
+      "id": "1000060",
+      "name": "1718677063600",
+      "age": 0,
+      "type": "test"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718701497975,
+      "createdAt": 1718701497975,
+      "id": "1000222",
+      "name": "1718701497824",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718701492438,
+      "createdAt": 1718701492438,
+      "id": "1000215",
+      "name": "1718701492275",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697631726,
+      "createdAt": 1718697631726,
+      "id": "1000175",
+      "name": "1718697631571",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718690900970,
+      "createdAt": 1718690900970,
+      "id": "1000102",
+      "name": "1718690900676",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718763460592,
+      "createdAt": 1718763460592,
+      "id": "1000264",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718687835103,
+      "createdAt": 1718687835103,
+      "id": "1000071",
+      "name": "1718687834851",
+      "type": "test",
+      "age": 4
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718704123916,
+      "createdAt": 1718704123916,
+      "id": "1000257",
+      "name": "1718704123732",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"name\":\"a@b.c\"}",
+      "ns": "TT",
+      "updatedAt": 1733731380293,
+      "createdAt": 1733731380240,
+      "id": "1000006",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718607155062,
+      "createdAt": 1718607155062,
+      "id": "1000044",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "role": "admin",
+      "user_hidden": "0",
+      "ns": "TT",
+      "updatedAt": 1712223158719,
+      "createdAt": 1712223158719,
+      "id": "1000002",
+      "name": "lemon",
+      "gender": "male",
+      "type": "user"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718701495792,
+      "createdAt": 1718701495792,
+      "id": "1000219",
+      "name": "1718701495640",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697635230,
+      "createdAt": 1718697635230,
+      "id": "1000176",
+      "name": "1718697635115",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718676850753,
+      "createdAt": 1718617176282,
+      "id": "1000058",
+      "name": "1718676850664",
+      "age": 0,
+      "type": "test"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718676860025,
+      "createdAt": 1718616934728,
+      "id": "1000057",
+      "name": "1718676859933",
+      "age": 0,
+      "type": "test"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718770429777,
+      "createdAt": 1718770429777,
+      "id": "1000266",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718864983524,
+      "createdAt": 1718864983524,
+      "id": "1000274",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718607007414,
+      "createdAt": 1718607007414,
+      "id": "1000043",
+      "name": "123123123",
+      "type": "test",
+      "age": 123
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"query\":{\"sort\":[{\"name\":{\"order\":\"asc\",\"missing\":\"_last\"}}]}}",
+      "ns": "TT",
+      "updatedAt": 1734327486685,
+      "createdAt": 1734327486606,
+      "id": "1000023",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718690242062,
+      "createdAt": 1718690242062,
+      "id": "1000099",
+      "name": "1718690241880",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"name\":\"a@b.c\"}",
+      "ns": "TT",
+      "updatedAt": 1733731337297,
+      "createdAt": 1733731337231,
+      "id": "1000005",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697351829,
+      "createdAt": 1718697351829,
+      "id": "1000161",
+      "name": "1718697351699",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718696668127,
+      "createdAt": 1718696668127,
+      "id": "1000131",
+      "name": "1718696667936",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718695382603,
+      "createdAt": 1718695382603,
+      "id": "1000116",
+      "name": "1718695382435",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697376640,
+      "createdAt": 1718697376640,
+      "id": "1000165",
+      "name": "1718697376524",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1711619992721,
+      "createdAt": 1711619992721,
+      "id": "1000003",
+      "name": "lemon",
+      "type": "test"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697747282,
+      "createdAt": 1718697747282,
+      "id": "1000188",
+      "name": "1718697747161",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1733990238868,
+      "meta": "{\"name\":\"lemon\"}",
+      "createdAt": 1733990199390,
+      "id": "hello",
+      "type": "mock"
+    },
+    {
+      "deletedAt": 0,
+      "role": "admin",
+      "user_hidden": "0",
+      "ns": "TT",
+      "updatedAt": 1712223397754,
+      "createdAt": 1712223397754,
+      "id": "1000004",
+      "phone": "01012345678",
+      "name": "lemon",
+      "gender": "male",
+      "type": "user"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718697349135,
+      "createdAt": 1718697349135,
+      "id": "1000156",
+      "name": "1718697348973",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718695377126,
+      "createdAt": 1718695377126,
+      "id": "1000111",
+      "name": "1718695376836",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718699995012,
+      "createdAt": 1718699995012,
+      "id": "1000195",
+      "name": "1718699994766",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718704087240,
+      "createdAt": 1718704087240,
+      "id": "1000253",
+      "name": "1718704087027",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718689496811,
+      "createdAt": 1718689496811,
+      "id": "1000089",
+      "name": "1718689496481",
+      "type": "test",
+      "age": 1
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718688815639,
+      "createdAt": 1718688815639,
+      "id": "1000082",
+      "name": "1718688815446",
+      "type": "test",
+      "age": 8
+    },
+    {
+      "deletedAt": 0,
+      "query": "{\"query\":{\"query\":{\"bool\":{\"filter\":{\"term\":{\"type\":\"test\"}}}},\"sort\":[{\"age\":{\"order\":\"asc\",\"missing\":\"_last\"}}]}}",
+      "ns": "TT",
+      "updatedAt": 1734332102898,
+      "createdAt": 1734332102835,
+      "id": "1000026",
+      "name": "#",
+      "type": "#query"
+    },
+    {
+      "deletedAt": 0,
+      "ns": "TT",
+      "updatedAt": 1718689838331,
+      "createdAt": 1718689838331,
+      "id": "1000097",
+      "name": "1718689838187",
+      "type": "test",
+      "age": 1
+    }
+  ],
+  "total": 100,
+  "limit": 100,
+  "count": 100,
+  "last": {
+    "_id": "TT:test:1000097"
+  }
+}

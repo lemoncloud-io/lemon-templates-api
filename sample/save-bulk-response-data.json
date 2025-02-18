@@ -1,0 +1,261 @@
+{
+   "!": "response of saveBulk function",
+    "body": {
+      "errors": false,
+      "items": [
+        {
+          "index": {
+            "_id": "1000078",
+            "_index": "lemon-templates-v1",
+            "_primary_term": 1,
+            "_seq_no": 118,
+            "_shards": {
+              "failed": 0,
+              "successful": 2,
+              "total": 2
+            },
+            "_type": "_doc",
+            "_version": 6,
+            "result": "updated",
+            "status": 200
+          }
+        },
+        {
+          "index": {
+            "_id": "1000017",
+            "_index": "lemon-templates-v1",
+            "_primary_term": 1,
+            "_seq_no": 92,
+            "_shards": {
+              "failed": 0,
+              "successful": 2,
+              "total": 2
+            },
+            "_type": "_doc",
+            "_version": 6,
+            "result": "updated",
+            "status": 200
+          }
+        },
+        {
+          "index": {
+            "_id": "1000243",
+            "_index": "lemon-templates-v1",
+            "_primary_term": 1,
+            "_seq_no": 122,
+            "_shards": {
+              "failed": 0,
+              "successful": 2,
+              "total": 2
+            },
+            "_type": "_doc",
+            "_version": 6,
+            "result": "updated",
+            "status": 200
+          }
+        },
+        {
+          "index": {
+            "_id": "1000004",
+            "_index": "lemon-templates-v1",
+            "_primary_term": 1,
+            "_seq_no": 123,
+            "_shards": {
+              "failed": 0,
+              "successful": 2,
+              "total": 2
+            },
+            "_type": "_doc",
+            "_version": 10,
+            "result": "updated",
+            "status": 200
+          }
+        },
+        {
+          "index": {
+            "_id": "1000212",
+            "_index": "lemon-templates-v1",
+            "_primary_term": 1,
+            "_seq_no": 109,
+            "_shards": {
+              "failed": 0,
+              "successful": 2,
+              "total": 2
+            },
+            "_type": "_doc",
+            "_version": 6,
+            "result": "updated",
+            "status": 200
+          }
+        },
+        {
+          "index": {
+            "_id": "1000159",
+            "_index": "lemon-templates-v1",
+            "_primary_term": 1,
+            "_seq_no": 110,
+            "_shards": {
+              "failed": 0,
+              "successful": 2,
+              "total": 2
+            },
+            "_type": "_doc",
+            "_version": 6,
+            "result": "updated",
+            "status": 200
+          }
+        },
+        {
+          "index": {
+            "_id": "1000027",
+            "_index": "lemon-templates-v1",
+            "_primary_term": 1,
+            "_seq_no": 111,
+            "_shards": {
+              "failed": 0,
+              "successful": 2,
+              "total": 2
+            },
+            "_type": "_doc",
+            "_version": 6,
+            "result": "updated",
+            "status": 200
+          }
+        },
+        {
+          "index": {
+            "_id": "1000069",
+            "_index": "lemon-templates-v1",
+            "_primary_term": 1,
+            "_seq_no": 112,
+            "_shards": {
+              "failed": 0,
+              "successful": 2,
+              "total": 2
+            },
+            "_type": "_doc",
+            "_version": 6,
+            "result": "updated",
+            "status": 200
+          }
+        },
+        {
+          "index": {
+            "_id": "1000199",
+            "_index": "lemon-templates-v1",
+            "_primary_term": 1,
+            "_seq_no": 124,
+            "_shards": {
+              "failed": 0,
+              "successful": 2,
+              "total": 2
+            },
+            "_type": "_doc",
+            "_version": 6,
+            "result": "updated",
+            "status": 200
+          }
+        },
+        {
+          "index": {
+            "_id": "1000246",
+            "_index": "lemon-templates-v1",
+            "_primary_term": 1,
+            "_seq_no": 93,
+            "_shards": {
+              "failed": 0,
+              "successful": 2,
+              "total": 2
+            },
+            "_type": "_doc",
+            "_version": 6,
+            "result": "updated",
+            "status": 200
+          }
+        }
+      ],
+      "took": 14
+    },
+    "headers": {
+      "access-control-allow-origin": "*",
+      "connection": "keep-alive",
+      "content-length": "2015",
+      "content-type": "application/json; charset=UTF-8",
+      "date": "Thu, 26 Dec 2024 04:51:08 GMT"
+    },
+    "meta": {
+      "aborted": false,
+      "attempts": 0,
+      "connection": {
+        "_openRequests": 0,
+        "deadCount": 0,
+        "headers": {},
+        "id": "https://localhost:9683/",
+        "resurrectTimeout": 0,
+        "roles": {
+          "data": true,
+          "ingest": true,
+          "master": true,
+          "ml": false
+        },
+        "status": "alive",
+        "url": "https://localhost:9683/"
+      },
+      "context": null,
+      "name": "elasticsearch-js",
+      "request": {
+        "id": 1,
+        "options": {},
+        "params": {
+          "body": "",
+          "bulkBody": [
+            { "index": { "_id": "1000078", "_index": "lemon-templates-v1" } },
+            {
+              "age": 2,
+              "createdAt": 1718688801255,
+              "deletedAt": 0,
+              "id": "1000078",
+              "name": "1718688801037",
+              "ns": "TT",
+              "type": "test",
+              "updatedAt": 1718688801255
+            },
+            { "index": { "_id": "1000017", "_index": "lemon-templates-v1" } },
+            {
+              "createdAt": 1734325286081,
+              "deletedAt": 0,
+              "id": "1000017",
+              "name": "#",
+              "ns": "TT",
+              "query": "{\"query\":{\"query\":{\"bool\":{\"filter\":{\"term\":{\"type\":\"test\"}}}},\"aggs\":{\"test\":{\"terms\":{\"field\":\"count\"}}},\"sort\":[{\"count\":{\"order\":\"asc\",\"missing\":\"_last\"}}]}}",
+              "type": "#query",
+              "updatedAt": 1734325286131
+            },
+            { "index": { "_id": "1000243", "_index": "lemon-templates-v1" } },
+            {
+              "age": 1,
+              "createdAt": 1718703832286,
+              "deletedAt": 0,
+              "id": "1000243",
+              "name": "1718703832078",
+              "ns": "TT",
+              "type": "test",
+              "updatedAt": 1718703832286
+            }
+          ],
+          "headers": {
+            "content-length": "2144",
+            "content-type": "application/x-ndjson",
+            "user-agent": "elasticsearch-js/7.12.0 (darwin 23.6.0-arm64; Node.js v18.19.1)",
+            "x-elastic-client-meta": "es=7.12.0,js=18.19.1,t=7.12.0,hc=18.19.1"
+          },
+          "method": "POST",
+          "path": "/_bulk",
+          "querystring": "",
+          "timeout": 30000
+        }
+      }
+    },
+    "statusCode": 200
+  }
+  
