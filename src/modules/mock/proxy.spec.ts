@@ -10,10 +10,10 @@
  */
 import { loadProfile } from 'lemon-core/dist/environ';
 import { expect2, NextIdentityAccess, _it, $info, GETERR } from 'lemon-core';
+import { MockModel } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';
-import { MockModel } from './model';
 
 /**
  * make service and proxy

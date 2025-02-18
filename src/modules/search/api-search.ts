@@ -272,11 +272,11 @@ export class SearchAPIController extends GeneralWEBController {
             if (cmd && !$es6?.elastic) {
                 throw new Error(`.elastic(object) is required (mis-configuration) - ${errScope}`);
             } else if (cmd === 'create-index') {
-                return $es6.elastic?.createIndex();
+                return await $es6.elastic?.createIndex();
             } else if (cmd === 'destroy-index') {
-                return $es6.elastic?.destroyIndex();
+                return await $es6.elastic?.destroyIndex();
             } else if (cmd === 'describe-index') {
-                return $es6.elastic?.describe();
+                return await $es6.elastic?.describe();
             } else if (cmd !== null) {
                 throw new Error(`@cmd[${cmd}] is invalid (not-supported) - ${errScope}`);
             }
