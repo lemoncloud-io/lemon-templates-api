@@ -34,7 +34,7 @@ export class TestAPIController extends AbstractCRUDController<
      * public constructor
      */
     public constructor(service: BackendService = $service) {
-        super('tests', service, service.$test, $trans.test);
+        super('tests', service, service.$test, $trans.test, { useSession: false });
         _log(NS, `TestAPIController()...`);
     }
 
@@ -48,6 +48,9 @@ export class TestAPIController extends AbstractCRUDController<
      *
      * ```sh
      * $ http ':8800/tests/0/hello'
+     *
+     * # search test in deployed server.
+     * $ http --auth-type aws4 --auth profile=lemon https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/tests
      */
     public doGetHello: NextHandler = async (id, param, body, $ctx) => {
         return { id, hello: this.hello(), param, body, context: { clientIp: $ctx.clientIp } };
