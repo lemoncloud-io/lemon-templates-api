@@ -7,12 +7,12 @@
  * @copyright (C) 2021 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $T, $U, _log, _inf, _err, $ES6 } from 'lemon-core';
+import { $T, $U, _log, _inf, _err } from 'lemon-core';
 import { NextContext, NextIdentityAccess, $protocol, getIdentityId } from 'lemon-core';
 import { Model } from './backend-model';
 import { ModelType } from './backend-types';
 import { BackendProxy } from './backend-proxy';
-import { MyCoreService } from '../cores/abstract-services';
+import { $ES6, MyCoreService } from '../cores/abstract-services';
 import { SearchService, Elastic6Option } from '../modules/search/service';
 import { MockModelManager, TestModelManager } from '../modules/mock/service';
 const NS = $U.NS('BACK', 'magenta'); // NAMESPACE TO BE PRINTED.

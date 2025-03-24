@@ -29,37 +29,20 @@
  * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _log, _inf, _err, $ES6, NUL404, GETERR } from 'lemon-core';
-import {
-    GETERR$,
-    CoreManager,
-    CoreModel,
-    CoreService,
-    SearchBody,
-    ManagerProxy,
-    AbstractProxy,
-    NextContext,
-    getIdentityId,
-    waited,
-    SearchQuery,
-    SortTerm,
-    SimpleSet,
-    SearchResult,
-    loadJsonSync,
-    DynamoScanService,
-    DynamoScanFilter,
-    DynamoScanResult,
-    GeneralItem,
-    NextIdentity,
-    NextIdentityCognito,
-    my_sequence,
-} from 'lemon-core';
+import $cores, { $U, $T, _log, _inf, _err, NUL404, GETERR } from 'lemon-core';
+import { my_parrallel, SearchType, _ES6, createSigV4Proxy, my_sequence } from 'lemon-core';
+import { Elastic6Service, Elastic6Option, Elastic6QueryService, Elastic6Synchronizer } from 'lemon-core';
+import { $ERROR, Incrementable, GETERR$, CoreManager, CoreModel, CoreService } from 'lemon-core';
+import { SearchBody, SearchQuery, SearchResult, ManagerProxy, AbstractProxy, loadJsonSync } from 'lemon-core';
+import { NextContext, NextIdentity, NextIdentityCognito, getIdentityId, waited, SortTerm, SimpleSet } from 'lemon-core';
+import { DynamoScanService, DynamoScanFilter, DynamoScanResult, GeneralItem, Elastic6Instance } from 'lemon-core';
+import { ApiHttpProxy, APIHeaders, elasticsearch, SearchResponse, DynamoOption, Elastic6Item } from 'lemon-core';
 import { IdentityToken, ListResult, PaginateParam } from './types';
 import { keys } from 'ts-transformer-keys';
 import { onlyDefined, parsePaginateParam } from './commons';
+import AWS from 'aws-sdk';
 const NAME = $U.env('NAME', 'lemon');
-const NS = $U.NS('HDBS', 'green'); // NAMESPACE TO BE PRINTED.
-
+const NS = $U.NS('HDBS', 'green');
 /**
  * fields in core model.
  */
@@ -1257,3 +1240,773 @@ export class MyManagerProxy<
         return hasId ? this.override($org, $def3) : $org;
     }
 }
+
+/**
+ * parameters for Elasticsearch operations.
+ *
+ * @template T type of the body content.
+ */
+interface ElasticParams<T extends object = any> {
+    /**
+     * index name.
+     */
+    index: string;
+    /**
+     * document ID.
+     */
+    id: string;
+    /**
+     * body content.
+     */
+    body: T;
+    /**
+     * document type (optional).
+     */
+    type?: string;
+}
+/**
+ * parameters for Elasticsearch search operations.
+ *
+ * @template T type of the body content.
+ */
+interface ElasticSearchParams<T extends object = any> {
+    /**
+     * index name.
+     */
+    index: string;
+    /**
+     * search body content.
+     */
+    body: T;
+    /**
+     * document type (optional).
+     */
+    type?: string;
+    /**
+     * search type
+     * (e.g., 'query_then_fetch', 'dfs_query_then_fetch').
+     */
+    searchType: SearchType;
+}
+
+/**
+ * class: `OS2Service`
+ * - Master 권한 전용 Elasticsearch 관리 서비스
+ * - elasticsearch service for OS2.
+ */
+export class OS2Service<T extends Elastic6Item = any> extends Elastic6Service<any> {
+    protected _options: Elastic6Option;
+    public readonly _client: elasticsearch.Client;
+    public readonly $fgac: OS2FGACManager;
+
+    public static override instance(endpoint: string) {
+        const _config = (n: string) => $cores.cores.config.config.get(n);
+        const masterUser = _config('OS2_MASTER_UID');
+        const masterPass = _config('OS2_MASTER_PWD');
+        // if (!masterUser || !masterPass) throw new Error('400 NO MASTER - OS2_MASTER_UID/OS2_MASTER_PWD is required!');
+
+        const client = new elasticsearch.Client({
+            node: endpoint,
+            ssl: {
+                ca: process.env.elasticsearch_certificate,
+                rejectUnauthorized: false,
+            },
+            auth: {
+                username: masterUser,
+                password: masterPass,
+            },
+        });
+        return { client };
+    }
+
+    public constructor(options: Elastic6Option, fgac: OS2FGACManager) {
+        super(options);
+        if (!options.endpoint) throw new Error('.endpoint (URL) is required');
+        if (!options.indexName) throw new Error('.indexName (string) is required');
+
+        const { client } = OS2Service.instance(options.endpoint);
+        this._options = { docType: '_doc', idName: '$id', version: '6.8', ...options };
+        this._client = client;
+        this.$fgac = fgac;
+    }
+
+    public get client(): elasticsearch.Client {
+        return this._client;
+    }
+
+    public get options(): Elastic6Option {
+        return this._options;
+    }
+
+    /**
+     * describe `settings` and `mappings` of index.
+     */
+    public async describe() {
+        const { indexName } = this.options;
+        //* call create index..
+        _log(NS, `- describe(${indexName})`);
+
+        //* read settings.
+        // const { client } = instance(endpoint);
+        const client = this.client;
+        const res = await client.indices.getSettings({ index: indexName }).catch(
+            // $ERROR.throwAsJson,
+            $ERROR.handler('describe', e => {
+                const msg = GETERR(e);
+                if (msg.startsWith('404 INDEX NOT FOUND')) throw new Error(`404 NOT FOUND - index:${indexName}`);
+                throw e;
+            }),
+        );
+        _log(NS, `> settings[${indexName}] =`, $U.json({ ...res, meta: undefined }));
+
+        const settings = (res.body && res.body[indexName] && res.body[indexName].settings) || {};
+        _log(NS, `> number_of_shards =`, settings.index && settings.index.number_of_shards); // 5
+        _log(NS, `> number_of_replicas =`, settings.index && settings.index.number_of_replicas); // 1
+
+        //* read mappings.
+        const res2 = await client.indices.getMapping({ index: indexName });
+        _log(NS, `> mappings[${indexName}] =`, $U.json(res2));
+        const mappings: any = (res2.body && res2.body[indexName] && res2.body[indexName].mappings) || {};
+
+        //* returns
+        return { settings, mappings };
+    }
+
+    /**
+     * create index by name
+     * @param settings - creating settings
+     */
+    public async createIndex(settings?: any) {
+        const { indexName, docType, idName, timeSeries, version } = this.options;
+        settings = settings || Elastic6Service.prepareSettings({ docType, idName, timeSeries, version });
+        if (!indexName) new Error('@index is required!');
+        _log(NS, `- createIndex(${indexName})`);
+
+        //* prepare payload
+        const payload = {
+            settings: {
+                number_of_shards: 5,
+                number_of_replicas: 1,
+            },
+            ...settings,
+        };
+        _log(NS, `> settings[${indexName}] = `, $U.json(payload));
+
+        //* call create index..
+        const client = this.client;
+        const res = await client.indices.create({ index: indexName, body: payload }).catch(
+            // $ERROR.throwAsJson,
+            $ERROR.handler('create', e => {
+                const msg = GETERR(e);
+                if (msg.startsWith('400 RESOURCE ALREADY EXISTS')) throw new Error(`400 IN USE - index:${indexName}`);
+                throw e;
+            }),
+        );
+        // if (res) throw res;
+        _log(NS, `> create[${indexName}] =`, $U.json({ ...res, meta: undefined }));
+
+        //* build result.
+        return {
+            status: res.statusCode,
+            index: indexName,
+            acknowledged: res.body.shards_acknowledged,
+        };
+    }
+
+    /**
+     * save single item
+     *
+     * @param id - id
+     * @param item - item to save
+     * @param type - document type (default: doc-type given at construction time)
+     */
+    public async saveItem(id: string, item: T): Promise<T> {
+        const { indexName, idName } = this.options;
+        _log(NS, `- saveItem(${id})`);
+        // const { client } = instance(endpoint);
+
+        // prepare item body and autocomplete fields
+        const body: any = { ...item, [idName]: id };
+        const body2 = this.popullateAutocompleteFields(body);
+
+        const params: ElasticParams = { index: indexName, id, body: body2 };
+
+        if (idName === '_id') delete params.body[idName]; //WARN! `_id` is reserved in ES6.
+        _log(NS, `> params[${id}] =`, $U.json(params));
+
+        //NOTE - use npm `elasticsearch#13.2.0` for avoiding error.
+        const res = await this.$fgac.doFgacCreate(params).catch(e => {
+            const msg = GETERR(e);
+
+            if (msg.startsWith('409 VERSION CONFLICT ENGINE') || msg.startsWith('409 Conflict')) {
+                const param2: ElasticParams = { index: indexName, id, body: { ...body2 } };
+
+                return this.$fgac.doFgacSave(param2);
+            }
+            throw e;
+        });
+
+        _log(NS, `> create[${id}].res =`, $U.json({ ...res, meta: undefined }));
+
+        const _version: number = $U.N(res?._version, 0);
+        const _id: string = res?._id;
+        const res2: T = { ...body, _id, _version };
+
+        return res2;
+    }
+
+    /**
+     * push item for time-series data.
+     *
+     * @param item - item to push
+     * @param type - document type (default: doc-type given at construction time)
+     */
+    public async pushItem(item: T, type?: string): Promise<T> {
+        const { indexName, docType } = this.options;
+        const id = (item.id as string) ?? '';
+
+        type = `${type || docType}`;
+        const body: any = { ...item };
+        const body2 = this.popullateAutocompleteFields(body);
+
+        _log(NS, `- pushItem(${id})`);
+        const params = { index: indexName, type, body: body2, id };
+        _log(NS, `> params[${id}] =`, $U.json(params));
+
+        //NOTE - use npm `elasticsearch#13.2.0` for avoiding error.
+        // const { client } = instance(endpoint);
+
+        const res = await this.$fgac.doFgacSave(params).catch(
+            // $ERROR.throwAsJson,
+            $ERROR.handler('index', e => {
+                _err(NS, `> index[${indexName}].err =`, e instanceof Error ? e : $U.json(e));
+                throw e;
+            }),
+        );
+        // {"_index":"test-v3","_type":"_doc","_id":"rTeHiW4BPb_liACrA9qa","_version":1,"result":"created","_shards":{"total":2,"successful":2,"failed":0},"_seq_no":2,"_primary_term":1}
+        _log(NS, `> create[${id}].res =`, $U.json({ ...res, meta: undefined }));
+
+        const _id = res.body?._id;
+        const _version = res.body?._version;
+        const res2: T = { ...body, _id, _version };
+        return res2;
+    }
+
+    /**
+     * read item with projections
+     *
+     * @param id - item-id
+     * @param views - projections
+     */
+    public async readItem(id: string, views?: string[] | object): Promise<T> {
+        const { indexName, docType } = this.options;
+        const type = `${docType}`;
+        _log(NS, `- readItem(${id})`);
+
+        const params: any = { index: indexName, type, id };
+        if (views) {
+            const fields: string[] = [];
+            const keys: string[] = Array.isArray(views) ? views : Object.keys(views);
+            keys.forEach((k: string) => {
+                fields.push(k);
+            });
+            params._source = fields;
+        }
+        _log(NS, `> params[${id}] =`, $U.json(params));
+        // const { client } = instance(endpoint);
+
+        const res = await this.$fgac.doFgacRead(params).catch(
+            // $ERROR.throwAsJson,
+            $ERROR.handler('read', e => {
+                const msg = GETERR(e);
+                if (msg.startsWith('404 NOT FOUND')) throw new Error(`404 NOT FOUND - id:${id}`);
+                if (msg.startsWith('404 INDEX NOT FOUND')) throw new Error(`404 NOT FOUND - index:${indexName}`);
+                throw e;
+            }),
+        );
+        _log(NS, `> read[${id}].res =`, $U.json({ ...res, meta: undefined }));
+
+        const _id = res._id;
+        const _version = res._version;
+        const data: T = (res as any)?._source || res._source || {};
+        // delete internal (analyzed) field
+        delete data[Elastic6Service.DECOMPOSED_FIELD];
+        delete data[Elastic6Service.QWERTY_FIELD];
+
+        const res2: T = { ...data, _id, _version };
+        return res2;
+    }
+
+    /**
+     * delete item with projections
+     *
+     * @param id - item-id
+     */
+    public async deleteItem(id: string): Promise<T> {
+        const { indexName, docType } = this.options;
+        const type = `${docType}`;
+        _log(NS, `- readItem(${id})`);
+
+        const params: ElasticParams = { index: indexName, type, id, body: {} };
+        _log(NS, `> params[${id}] =`, $U.json(params));
+        // const { client } = instance(endpoint);
+
+        const res = await this.$fgac.doFgacDelete(params).catch(
+            $ERROR.handler('delete', e => {
+                const msg = GETERR(e);
+                if (msg.startsWith('404 NOT FOUND')) throw new Error(`404 NOT FOUND - id:${id}`);
+                if (msg.startsWith('404 INDEX NOT FOUND')) throw new Error(`404 NOT FOUND - index:${indexName}`);
+                throw e;
+            }),
+            // $ERROR.throwAsJson,
+        );
+        _log(NS, `> delete[${id}].res =`, $U.json({ ...res, meta: undefined }));
+
+        const _id = res._id;
+        const _version = res._version;
+        const data: T = res._source || res._source || {};
+        const res2: T = { ...data, _id, _version };
+        return res2;
+    }
+
+    /**
+     * update item (throw if not exist)
+     * `update table set a=1, b=b+2 where id='a1'`
+     * 0. no of `a1` -> 1,2 (created)
+     * 1. a,b := 10,20 -> 11,22
+     * 2. a,b := 10,null -> 11,2 (upsert)
+     * 3. a,b := null,20 -> 1,22
+     *
+     * @param id - item-id
+     * @param item - item to update
+     * @param increments - item to increase
+     * @param options - (optional) request option of client.
+     */
+    public async updateItem(
+        id: string,
+        item: T | null,
+        increments?: Incrementable,
+        options?: { maxRetries?: number },
+    ): Promise<T> {
+        const errScope = `updateItem(${id ?? ''})`;
+        if (increments) throw new Error(`400 NOT SUPPORTED - invalid increments[${$U.json(increments)}] @${errScope}`);
+        // return this.saveItem(id, item);
+        //NOTE - 이후 saveItem() 호출을 위한 tricky solution.
+        throw new Error(`404 NOT FOUND - ${errScope}`);
+    }
+    /**
+     * run search and get the raw response.
+     * @param body - Elasticsearch Query DSL that defines the search request (e.g., size, query, filters).
+     * @param searchType - type of search (e.g., 'query_then_fetch', 'dfs_query_then_fetch').
+     */
+    public async searchRaw<T extends object = any>(body: SearchBody, searchType?: SearchType): Promise<T> {
+        if (!body) throw new Error('@body (SearchBody) is required');
+        const { indexName, docType } = this.options;
+        _log(NS, `- search(${indexName}, ${searchType || ''})....`);
+        _log(NS, `> body =`, $U.json(body));
+
+        const tmp = docType ? docType : '';
+        const params: ElasticSearchParams = { index: indexName, body, searchType };
+
+        // check version to include 'type' in params
+        _log(NS, `> params[${tmp}] =`, $U.json({ ...params, body: undefined }));
+        const $res = await this.$fgac.doFgacSearch(params).catch(
+            $ERROR.handler('search', e => {
+                _err(NS, `> search[${indexName}].err =`, e);
+                throw e;
+            }),
+        );
+
+        //* return raw results.
+        return $res;
+    }
+
+    /**
+     * run search, and get the formatmted response.
+     * @param body - Elasticsearch Query DSL that defines the search request (e.g., size, query, filters).
+     * @param searchType - type of search (e.g., 'query_then_fetch', 'dfs_query_then_fetch').
+     *
+     */
+    public async search(body: SearchBody, searchType?: SearchType): Promise<SearchResponse> {
+        const size = $U.N(body.size, 0);
+        const response = await this.searchRaw(body, searchType);
+        // return w/ transformed id
+        const hits = response.hits;
+        if (typeof hits !== 'object') throw new Error(`.hits (object) is required - hits:${$U.json(hits)}`);
+        //NOTE - ES6.8 w/ OS1.1
+        return {
+            total: typeof (hits.total as any)?.value === 'number' ? (hits.total as any)?.value : hits.total,
+            list: hits.hits.map((hit: any) => ({
+                ...(hit._source as any),
+                _id: hit._id,
+                _score: hit._score,
+            })),
+            last: hits.hits.length === size && size > 0 ? hits.hits[size - 1]?.sort : undefined,
+            aggregations: response.aggregations,
+        };
+    }
+}
+
+/**
+ * type: `OS2FGACManager`
+ * - FGAC(Fine Grained Access Controll) Proxy for OS2
+ */
+class OS2FGACManager {
+    private _fgacProxy: ApiHttpProxy;
+
+    public constructor(options: Elastic6Option, accessKey: string, secretKey: string) {
+        const endpoint = options.endpoint;
+        const host = endpoint.split('://')[1];
+        const jwtToken = $U.env('OS2_JWT_TOKEN', '');
+
+        const sigConfig = {
+            accessKey,
+            secretKey,
+            region: 'ap-northeast-2',
+            serviceName: 'es',
+            host,
+        };
+
+        const headers: APIHeaders = {
+            Authorization: `Bearer ${jwtToken}`,
+            'Content-Type': 'application/json',
+        };
+
+        this._fgacProxy = createSigV4Proxy('fgac', endpoint, sigConfig, { headers });
+    }
+
+    public hello = () => `FGACService`;
+
+    public get proxy(): ApiHttpProxy {
+        if (!this._fgacProxy) throw new Error('FGAC Proxy not initialized.');
+        return this._fgacProxy;
+    }
+
+    /** FGAC 기반 검색 */
+    public async doFgacSearch(params: ElasticSearchParams): Promise<any> {
+        const index = params?.index ?? '';
+        const body = onlyDefined(params?.body ?? undefined);
+        const queryParams = params?.searchType ? { search_type: params?.searchType } : undefined;
+        return this.proxy.doProxy('POST', index, `_search`, queryParams, body);
+    }
+
+    /** FGAC 기반 읽기: client.get() 대응 */
+    public async doFgacRead(params: ElasticParams): Promise<any> {
+        const index = params?.index ?? '';
+        const id = encodeURIComponent(params?.id ?? '');
+        const body = onlyDefined(params?.body ?? undefined);
+        return this.proxy.doProxy('GET', index, `_doc/${id}`, undefined, body);
+    }
+
+    /** FGAC 기반 저장: client.index() 대응 */
+    public async doFgacSave(params: ElasticParams): Promise<any> {
+        const index = params?.index ?? '';
+        const id = encodeURIComponent(params?.id ?? '');
+        const body = onlyDefined(params?.body ?? undefined);
+        return this.proxy.doProxy('PUT', index, `_doc/${id}`, undefined, body);
+    }
+
+    /** FGAC 기반 업데이트: client.update() 대응 */
+    public async doFgacUpdate(params: ElasticParams): Promise<any> {
+        const index = params?.index ?? '';
+        const id = encodeURIComponent(params?.id ?? '');
+        const body = onlyDefined(params?.body ?? undefined);
+        return this.proxy.doProxy('POST', index, `_update/${id}`, undefined, body);
+    }
+
+    /** FGAC 기반 삭제: client.delete() 대응 */
+    public async doFgacDelete(params: ElasticParams): Promise<any> {
+        const index = params?.index ?? '';
+        const id = encodeURIComponent(params?.id ?? '');
+        return this.proxy.doProxy('DELETE', index, `_doc/${id}`);
+    }
+
+    /** FGAC 기반 Create (Strict - 존재하면 실패): client.create() 대응 */
+    public async doFgacCreate(params: ElasticParams): Promise<any> {
+        const index = params?.index ?? '';
+        const id = encodeURIComponent(params?.id ?? '');
+        const body = onlyDefined(params?.body ?? undefined);
+        return this.proxy.doProxy('PUT', index, `_doc/${id}`, { op_type: 'create' }, body);
+    }
+}
+
+/** extended option for `OS2Instance` */
+export interface OS2Option extends Elastic6Option {
+    /** (optional) role-name in FGAC */
+    roleName?: string;
+    /** (optional) user-name in FGAC */
+    userName?: string;
+}
+
+/**
+ * OS2 인스턴스
+ * - describeIndex(), destroyIndex(), search() with elastic initialized by master-key
+ */
+export class OS2Instance extends Elastic6Instance {
+    public readonly client?: elasticsearch.Client;
+    public readonly elastic?: OS2Service;
+    public readonly query?: Elastic6QueryService<any>;
+    public readonly synchronizer?: Elastic6Synchronizer;
+    public readonly fgac?: OS2FGACManager;
+
+    public constructor({
+        endpoint,
+        indexName,
+        esVersion,
+        esDocType,
+        tableName,
+        autocompleteFields,
+        accessKey,
+        secretKey,
+        roleName,
+        userName,
+    }: {
+        endpoint: string;
+        indexName: string;
+        esVersion: string;
+        esDocType: string;
+        tableName: string;
+        autocompleteFields: string[];
+        accessKey: string;
+        secretKey: string;
+        roleName?: string;
+        userName?: string;
+    }) {
+        super({ endpoint, indexName, esVersion, esDocType, tableName, autocompleteFields });
+        const options: OS2Option = onlyDefined<OS2Option>({
+            endpoint,
+            indexName,
+            version: esVersion,
+            autocompleteFields,
+            roleName,
+            userName,
+        });
+        if (endpoint && indexName) {
+            if (esDocType) options.docType = esDocType;
+
+            this.fgac = new OS2FGACManager(options, accessKey, secretKey);
+            this.elastic = new OS2Service(options, this.fgac);
+            this.client = this.elastic.client;
+            this.query = new Elastic6QueryService<any>(this.elastic);
+            this.synchronizer = new Elastic6Synchronizer(this.elastic, { tableName });
+        }
+    }
+
+    public hello = () => `OS2Instance`;
+
+    public get options(): OS2Option {
+        if (!this.elastic) return null;
+        return this.elastic.options;
+    }
+
+    /**
+     * display index settings and mappings
+     */
+    public async describeIndex(): Promise<any> {
+        return this.elastic && (await this.elastic.describe());
+    }
+
+    /**
+     * create Elasticsearch index with ES7+ mapping structure
+     */
+    public async createIndex(): Promise<any> {
+        if (!this.elastic) return null;
+
+        const { docType, idName } = this.options;
+        const settings = Elastic6Service.prepareSettings({ docType, idName }); // 기본 설정
+        const $set = { score_: { type: 'half_float' } };
+
+        // 기존 _doc 구조 제거 및 병합
+        if (settings.mappings?._doc) {
+            const { dynamic_templates, properties } = settings.mappings._doc;
+
+            // _doc 안에 있는 내용 꺼내서 mappings로 병합
+            settings.mappings = {
+                ...settings.mappings,
+                dynamic_templates,
+                properties: {
+                    ...(properties || {}),
+                    ...settings.mappings.properties, // 혹시 기존 score_ 추가분까지 합쳐줌
+                },
+            };
+
+            delete settings.mappings._doc; // _doc 제거
+        }
+
+        // 추가 필드(score_) 병합 처리
+        settings.mappings.properties = {
+            ...(settings.mappings.properties || {}),
+            ...$set,
+        };
+
+        return this.elastic.createIndex(settings);
+    }
+
+    /**
+     * search
+     */
+    public async search<T>(
+        body: SearchBody,
+        params?: {
+            indexName?: string;
+            searchType?: 'query_then_fetch' | 'dfs_query_then_fetch';
+        },
+    ): Promise<SearchResult<T>> {
+        if (!this.elastic) throw new Error(`Could not read Elasticsearch endpoint or index setting.`);
+        const searchType = params?.searchType;
+        const elastic = this.elastic;
+        return elastic.search(body, searchType);
+    }
+
+    /** synchronize dynamo contents to os2  */
+    public async synchronizeContents(): Promise<{
+        index: string;
+        total: number;
+        failed: (CoreModel<any> & GeneralItem)[];
+    }> {
+        type Model = CoreModel<any> & GeneralItem;
+        const filter: DynamoScanFilter = null;
+        // STEP 1. get source items
+        const dynamoOptions: DynamoOption = {
+            tableName: $U.env('MY_DYNAMO_TABLE', ''),
+            idName: '_id',
+        };
+
+        const $scan = new DynamoScanService<Model>(dynamoOptions);
+        const { limit } = parsePaginateParam();
+
+        // STEP 2. get role model
+        const indexName = this.options.indexName;
+
+        // STEP 3. migrate items using doFgacSave
+        let last: Model = null;
+        const results: Model[] = [];
+        while (true) {
+            if (last) _inf(NS, `> last =`, $U.json(last));
+            const $res = await $scan.scan(limit, last, filter);
+            const items = await my_parrallel($res?.list, async N => {
+                try {
+                    const id = N._id ?? N.id;
+                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                    const { _id, ...rest } = N;
+                    await this.fgac.doFgacSave({ index: indexName, id, body: rest });
+                    return { id, error: null as string };
+                } catch (error) {
+                    return { id: N._id, error: GETERR(error) };
+                }
+            });
+            results.push(...items);
+            if (!$res?.last?._id) break;
+            last = $res?.last;
+        }
+        const total = results.length;
+        const failed = results.filter(N => !!N.error);
+        return { index: indexName, total, failed };
+    }
+}
+
+export function sourceToItem<T>(_source: T, idName = '$id'): T {
+    const item: any = { ..._source };
+    if (idName in item) {
+        item._id = item[idName];
+        delete item[idName];
+    }
+    return item;
+}
+
+/**
+ * internal tools
+ */
+const $X2 = {
+    /** describe endpoint-url into component */
+    describeEndpointUrl: (url: string, options?: { throwable?: boolean; errScope?: string }) => {
+        const errScope = options?.errScope ?? `describeEndpointUrl()`;
+        const throwable = options?.throwable ?? true;
+        url = /^\/\/[a-z0-9]+/.test(url) ? `https:${url}` : url;
+        if (throwable) {
+            if (!url) throw new Error(`@url(string) is required - ${errScope}`);
+            if (!(url?.startsWith('http://') || url?.startsWith('https://')))
+                throw new Error(`@url[${url ?? ''}] is invalid (no http) - ${errScope}`);
+        }
+
+        const $url = new URL(url);
+
+        const host = $U.S($url.hostname || $url.host);
+        const isTunnel = $url.hostname === 'localhost';
+        const protocol = $U.S($url.protocol).split(':')[0] ?? '';
+        const port = $U.N($url.port, url?.startsWith('https') ? 443 : 80);
+        const hosts = host.split('.');
+        const isProxy = host.endsWith('.amazonaws.com') && hosts[hosts.length - 4] == 'execute-api';
+        const region = isProxy ? hosts[hosts.length - 3] : undefined;
+
+        return {
+            protocol,
+            host,
+            port,
+            region,
+            isTunnel,
+            isProxy,
+        };
+    },
+    /** load local credentials (for dev) */
+    loadCredentials: (profile?: string): AWS.Credentials => {
+        const errScope = `loadCredentials(${profile ?? ''})`;
+        const _profile = (name: string) => {
+            if (typeof name === 'string') return name ? name : null;
+            const NAME = $U.env('NAME', '');
+            return NAME && NAME !== 'none' ? NAME : null;
+        };
+        profile = _profile(profile);
+        const credentials = new AWS.SharedIniFileCredentials({ profile });
+        if (!credentials?.accessKeyId) throw new Error(`@profile[${profile ?? ''}] is invalid - ${errScope}`);
+        return credentials;
+    },
+};
+
+/**
+ * factory of `OS2Instance`
+ */
+export const _OS2 = (options?: OS2Option): OS2Instance => {
+    return new (class extends OS2Instance {
+        public constructor() {
+            // 0. load from env configuration.
+            const endpoint = options?.endpoint ?? $U.env('OS2_ENDPOINT', '');
+            const indexName = options?.indexName ?? $U.env('OS2_INDEX', 'test-x1');
+            const esVersion = options?.version ?? $U.env('OS2_VERSION', '2.10');
+            const esDocType = options?.docType ?? $U.env('OS2_DOCTYPE', '');
+            const tableName = $U.env('MY_DYNAMO_TABLE', '');
+            const autocompleteFields = options?.autocompleteFields ?? $T.SS($U.env('OS2_AUTOCOMPLETE_FIELDS', ''));
+            const accessKey = $U.env('OS2_ACCESS_KEY', '');
+            const secretKey = $U.env('OS2_SECRET_KEY', '');
+
+            const roleName = options?.roleName;
+            const userName = options?.userName;
+
+            // 1. initialize instance.
+            super({
+                endpoint,
+                indexName,
+                esVersion,
+                esDocType,
+                tableName,
+                autocompleteFields,
+                accessKey,
+                secretKey,
+                roleName,
+                userName,
+            });
+        }
+
+        /**
+         * expose the internal helpers. (ONLY for debugging)
+         */
+        get $X2() {
+            return $X2;
+        }
+    })();
+};
+
+/** dynamically load the OS2 instance if `OS2_ENDPOINT` is set */
+const hasOS2 = $U.env('OS2_ENDPOINT', '').startsWith('https://');
+export const $OS2 = _OS2();
+export const $ES6 = hasOS2 ? _OS2() : _ES6();
