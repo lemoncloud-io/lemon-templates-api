@@ -51,6 +51,7 @@ export class TestAPIController extends AbstractCRUDController<
      *
      * # search test in deployed server.
      * $ http --auth-type aws4 --auth profile=lemon https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/tests
+     * $ http --auth-type aws4 --auth profile=lemon https://5fuh6hjfve.execute-api.ap-northeast-2.amazonaws.com/prod/tests
      */
     public doGetHello: NextHandler = async (id, param, body, $ctx) => {
         return { id, hello: this.hello(), param, body, context: { clientIp: $ctx.clientIp } };

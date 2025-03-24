@@ -24,6 +24,7 @@
  * @date        2024-11-14 renamed to `IdentityToken` from `SessionToken`
  * @date        2024-11-28 optimized `assertContext()` and `isAdminRole()` w/ `lemon-core@3.2.11`.
  * @date        2025-01-03 optimized `buildQuery()` w/ sort + offset.
+ * @date        2025-03-24 optimized `OS2Instance` with `lemon-core@3.2.13`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
