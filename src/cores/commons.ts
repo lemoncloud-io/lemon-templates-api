@@ -79,7 +79,7 @@ export const $T = {
     SS: <T extends string = string>(v?: any): T[] =>
         (v && Array.isArray(v) ? v : _T.SS(v)).map(v => _T.S2(v, '', ' ').trim() as T),
     /** convert to `boolean`. */
-    B: (v: number | string, def?: 0 | 1 | boolean): boolean =>
+    B: (v: number | string | boolean, def?: 0 | 1 | boolean): boolean =>
         typeof v === 'number' || typeof v === 'string'
             ? Boolean($T.BN(v, typeof def === 'boolean' ? (def ? 1 : 0) : def))
             : Boolean(def),
@@ -113,12 +113,13 @@ export const $T = {
     asLut: <T extends object>(
         key: string,
         $map: T,
-        options?: { name?: string; throwable?: boolean; default?: string } | string,
+        options?: { name?: string; throwable?: boolean; default?: string; errScope?: string } | string,
     ) => {
         const $opts = typeof options === 'string' ? { name: options } : options;
         const name = $opts?.name ?? 'name';
         const throwable = $opts?.throwable ?? true;
         const _def = $opts?.default ?? null;
+        const errScope = $opts?.errScope ?? '';
         //* check of empty.
         if (key === undefined) return undefined as keyof T;
         if (key === null) return _def as keyof T;
@@ -134,6 +135,7 @@ export const $T = {
 
             //! throw or default
             if (!throwable) return _def as keyof T;
+            if (errScope) throw new Error(`.${name}[${key}] is invalid key - ${errScope}`);
             throw new Error(`.${name}[${key}] is invalid!`);
         }
         return key as keyof T;

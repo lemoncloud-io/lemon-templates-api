@@ -14,21 +14,27 @@ default_env: &default_env
   USE_SESSION: 1          # use session (default yes w/ session-token)
   REPORT_ERROR: 1         # for lemon-core#2. report error in lambda-handler.
 
-  ES6_VERSION: '7.10'
-  ES6_INDEX: 'lemon-templates-v1'
-  ES6_ENDPOINT: 'https://vpc-eureka-es72-isal7yrmwmw3ifhftfyia2qcxy.aos.ap-northeast-2.on.aws'
+  # ES6_VERSION: '7.10'
+  # ES6_INDEX: 'lemon-templates-v1'
+  # ES6_ENDPOINT: 'https://vpc-eureka-es72-isal7yrmwmw3ifhftfyia2qcxy.aos.ap-northeast-2.on.aws'
+
+  # NOTE - use os2 search endpoint. w/o using search-proxy.
+  OS2_ENDPOINT: 'https://search-eureka-os2-uxoajmyfedwmpd3zzue7cwdfrm.ap-northeast-2.es.amazonaws.com'
+  OS2_INDEX: 'lemon-templates-v1-25034178'
+  OS2_JWT_TOKEN: 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTI1MDM0MTc4Iiwicm9sZXMiOiJyb2xlLTI1MDM0MTc4IiwiaXNzIjoia21zL2xlbW9uLWlkZW50aXR5LWtleSIsImlhdCI6MTc0MjgxNTAwMSwiZXhwIjoxNzQ1NDA3MDAxfQ.ruVXfaQFyHVA3Vh-DZwiWOZz02tbiI3nesNIZ1sfShdqGXqLw1oS6PXCiEOXAxMHtVis9-JnzxdgebyVkKQBXnUctvGSe4TnKQkgdkmXkTbO10-5ct_klVsg0CDxZsLiIkUH1wKSuQ9zTi4z1_krZaK57LKPZyQu4V9kXTbFuCbvj50mdCg1fYObEz4i8Erykbqobk34ayjaeP56cidwqVUm3XAea_Lbm49nvAaLSpIyOUaz5eTHgYhV71oguqXw4BbZ-HNbiMBmcRb_5xx2DXlxgvIZ-R1leictTUO0iN9HlFy_NjqIhCR5TwvgGdd1JaSlhW6lQWeLMlc_mUx0pQ'
+  OS2_ACCESS_KEY: 'AKIA5RTAVML3DNUOAVNZ'
+  OS2_SECRET_KEY: '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'
 
 #-----------------------------------
 # test for jest in local
 test:
   <<: *default_env
-  ES6_ENDPOINT: https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy
+  # ES6_ENDPOINT: https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy
 
 #-----------------------------------
 # local development configuration.
 local:
   <<: *default_env
-  # ES6_ENDPOINT: 'https://localhost:9683'              # INFO! - use ssh tunneling (alias `lmes72`)
   REPORT_ERROR_ARN: arn:aws:sns:ap-northeast-2:540298831859:lemon-hello-sns
 
   # WARN - for development.
@@ -36,7 +42,7 @@ local:
   NS: TT
   MY_DYNAMO_TABLE:  lemon-templates-table-dev
   USE_SESSION: sample/context-session.json             # Load sample for session use in local env
-  ES6_ENDPOINT: https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy    # use search-proxy after deployment.
+  # ES6_ENDPOINT: https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy    # use search-proxy after deployment.
 
   #WARN - for prod debugging.
   # STAGE: '!production'

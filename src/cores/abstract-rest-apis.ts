@@ -71,13 +71,14 @@ export class RestAPI<View extends object = any, Body = View, Model = View> {
 
     /** enqueue vis SQS */
     public enqueue = (
-        params: { id?: string; cmd?: string; mode?: string; param?: any; body?: any },
+        params: { id?: string; cmd?: string; mode?: string; param?: any; body?: any; callback?: string },
         delay?: number,
     ) => {
         const id = params?.id ?? '';
         const cmd = params?.cmd ?? null;
         const mode = params?.mode || 'POST';
-        return this.asProtocol(id, cmd).enqueue(params?.param, params?.body, mode, null, delay);
+        const callback = params?.callback;
+        return this.asProtocol(id, cmd).enqueue(params?.param, params?.body, mode, callback, delay);
     };
 
     /** execute vis API */

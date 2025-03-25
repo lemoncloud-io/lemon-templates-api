@@ -47,7 +47,7 @@ export class MockAPIController extends AbstractCRUDController<
      * GET /mocks/0/hello
      *
      * ```sh
-     * $ http ':8888/mocks/0' name=hello stereo=#
+     * $ http ':8800/mocks/0' name=hello stereo=#
      */
     public doGetHello: NextHandler = async (id, param, body, $ctx) => {
         return { id, hello: this.hello(), param, body, context: { clientIp: $ctx.clientIp } };
@@ -60,13 +60,13 @@ export class MockAPIController extends AbstractCRUDController<
      * @param id    model-id or name of mock
      *
      * ```sh
-     * $ http :8888/mocks/0
-     * $ http :8888/mocks/404
-     * $ http :8888/mocks/400
-     * $ http :8888/mocks/hello
-     * $ http ':8888/mocks/site'        # load `mocks-site.yml`
-     * $ http ':8888/mocks/site?i=0'    # 0th elements in list.
-     * $ http ':8888/mocks/100001'      # pull by mock-id.
+     * $ http :8800/mocks/0
+     * $ http :8800/mocks/404
+     * $ http :8800/mocks/400
+     * $ http :8800/mocks/hello
+     * $ http ':8800/mocks/site'        # load `mocks-site.yml`
+     * $ http ':8800/mocks/site?i=0'    # 0th elements in list.
+     * $ http ':8800/mocks/100001'      # pull by mock-id.
      */
     public doGet: NextHandler = async (id, param, body, context) => {
         const errScope = `doGet(${this.type()}/${id ?? ''})`;
@@ -99,8 +99,8 @@ export class MockAPIController extends AbstractCRUDController<
      * @returns list of mocks saved.
      *
      * ```sh
-     * $ http :8888/mocks/0 name=hello
-     * $ http :8888/mocks/0 name=hello type=world
+     * $ http :8800/mocks/0 name=hello
+     * $ http :8800/mocks/0 name=hello type=world
      */
     public doPost: NextHandler = async (id, param, body, context) => {
         const errScope = `doPost(${this.type()}/${id ?? ''})`;
