@@ -12,13 +12,14 @@
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { do_parrallel, expect2, GETERR, NUL404, _it, $ES6, $U, _ES6 } from 'lemon-core';
+import { do_parrallel, expect2, GETERR, NUL404, _it, $U, _ES6 } from 'lemon-core';
 import { SearchBody } from './model';
 import { BatchHandler, SearchService } from './service';
+import { $ES6 } from '../../cores/abstract-services';
 import * as $service from '../../service/backend-service.spec';
 
 //! create service + search instance.
-export const instance = (type: string = 'dummy') => {
+export const instance = (type = 'dummy') => {
     const { service, current } = $service.instance(type ? 'public' : 'authed');
     const _search = () => {
         if (type === '') {
@@ -92,7 +93,7 @@ describe('SearchService', () => {
             new Promise((resolve, reject) => {
                 setTimeout(() => (err ? reject(err) : resolve(ret)), 2);
             });
-        const plus = async (a: number, x: number = 1) => Promise.resolve(a + x);
+        const plus = async (a: number, x = 1) => Promise.resolve(a + x);
         const plus1: BatchHandler = async (list: { count?: number }[]) => {
             const results = await do_parrallel(list, async item => {
                 const count = await plus(item?.count || 0, 1);

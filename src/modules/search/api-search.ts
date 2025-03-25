@@ -11,7 +11,7 @@
  * @copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { _log, _inf, _err, $U, NUL404, GETERR, $ES6, $info, $protocol } from 'lemon-core';
+import { $T, $U, _log, _inf, _err, NUL404, GETERR, $info, $slack } from 'lemon-core';
 import {
     NextHandler,
     GeneralWEBController,
@@ -20,10 +20,12 @@ import {
     Elastic6SearchParams,
     SearchProxyBody,
 } from 'lemon-core';
-import { BatchParams, SearchService } from './service';
 import { SearchBatchModel, SearchBody, SearchResult, SearchQueryModel } from './model';
-import { $slack, $T } from 'lemon-core';
+import { $ES6, _OS2 } from '../../cores/abstract-services';
+import { BatchParams, SearchService } from './service';
 import { performance } from 'perf_hooks';
+
+//WARN - use `BackendService` from main service due to proper `BackendProxy`.
 import $service, { BackendService } from '../../service/backend-service';
 const NS = $U.NS('search', 'yellow'); // NAMESPACE TO BE PRINTED.
 
@@ -93,11 +95,11 @@ export class SearchAPIController extends GeneralWEBController {
         const runProxy = (cmd: string) => this.search.instance.search(null, { indexName: `#${cmd}` });
         const $elastic = this.search?.instance?.elastic;
 
-        //! $ http ':8888/search/init-elastic/hello'
+        //! $ http ':8800/search/init-elastic/hello'
         if (id == 'init-elastic') return useProxy ? runProxy('create-index') : $elastic?.createIndex();
-        //! $ http ':8888/search/destroy-elastic/hello'
+        //! $ http ':8800/search/destroy-elastic/hello'
         if (id == 'destroy-elastic') return useProxy ? runProxy('destroy-index') : $elastic?.destroyIndex();
-        //! $ http ':8888/search/desc-elastic/hello'
+        //! $ http ':8800/search/desc-elastic/hello'
         if (id == 'desc-elastic') return useProxy ? runProxy('describe-index') : $elastic?.describe();
 
         return { id, hello };
@@ -107,10 +109,10 @@ export class SearchAPIController extends GeneralWEBController {
      * Search by params
      *
      * ```sh
-     * $ http ':8888/search/'
-     * $ http ':8888/search/?name=test'
-     * $ http ':8888/search?page=2'
-     * $ http ':8888/search/ticket?page=2'
+     * $ http ':8800/search/'
+     * $ http ':8800/search/?name=test'
+     * $ http ':8800/search?page=2'
+     * $ http ':8800/search/ticket?page=2'
      */
     public listSearch: NextHandler = async (id, param) => {
         _log(NS, `listSearch(${id})....`);
@@ -134,8 +136,8 @@ export class SearchAPIController extends GeneralWEBController {
      * - show the current query by { name | id }
      *
      * ```sh
-     * $ http :8888/search/0
-     * $ http :8888/search/1000002
+     * $ http :8800/search/0
+     * $ http :8800/search/1000002
      */
     public getSearch: NextHandler = async (id, param, body, ctx) => {
         _log(NS, `getSearch(${id})..`);
@@ -152,8 +154,8 @@ export class SearchAPIController extends GeneralWEBController {
      * - show the current query by { name | id }
      *
      * ```sh
-     * $ http :8888/search/0
-     * $ http :8888/search/prods-not-matched/batch
+     * $ http :8800/search/0
+     * $ http :8800/search/prods-not-matched/batch
      */
     public getSearchBatch: NextHandler = async (id, param, body, ctx) => this.postSearchBatch(id, param, body, ctx);
     public postSearchBatch: NextHandler = async (id, param, body, ctx) => {
@@ -181,17 +183,17 @@ export class SearchAPIController extends GeneralWEBController {
      * run query, and get the search results. (GET/POST)
      *
      * ```sh
-     * $ http :8888/search/echo/query
-     * $ http :8888/search/1000002/query
-     * $ http :8888/search/events-in-valid/query
-     * $ http :8888/search/mappings-no-hash-option/query
-     * $ http :8888/search/mappings-has-hash-option/query
-     * $ http :8888/search/texts-has-not-norm1/query
-     * $ http :8888/search/texts-only-if-norm1/query
-     * $ http :8888/search/norm1-has-not-rule1/query
-     * $ http :8888/search/mappings-no-norm1-prio/query
-     * $ http POST :8888/search/1000002/query
-     * $ http POST :8888/search/mappings-no-norm1-prio/query priority=2
+     * $ http :8800/search/echo/query
+     * $ http :8800/search/1000002/query
+     * $ http :8800/search/events-in-valid/query
+     * $ http :8800/search/mappings-no-hash-option/query
+     * $ http :8800/search/mappings-has-hash-option/query
+     * $ http :8800/search/texts-has-not-norm1/query
+     * $ http :8800/search/texts-only-if-norm1/query
+     * $ http :8800/search/norm1-has-not-rule1/query
+     * $ http :8800/search/mappings-no-norm1-prio/query
+     * $ http POST :8800/search/1000002/query
+     * $ http POST :8800/search/mappings-no-norm1-prio/query priority=2
      */
     public getSearchQuery: NextHandler = async (id, param, body, $ctx) => this.postSearchQuery(id, param, body, $ctx);
     public postSearchQuery: NextHandler = async (id, param, body, $ctx) => {
@@ -243,7 +245,7 @@ export class SearchAPIController extends GeneralWEBController {
         }
 
         //NOTE - prevent the infite loop to use `search-proxy`
-        // http POST :8888/search/0/proxy
+        // http POST :8800/search/0/proxy
         const $es6 = this.search?.instance;
         if (this.search?.isProxy()) {
             throw new Error(`.search[${$es6?.hello()}] is invalid (should not in proxy) - ${errScope}`);
@@ -297,11 +299,11 @@ export class SearchAPIController extends GeneralWEBController {
     //  * run query, and get the search results. (POST)
     //  *
     //  * ```sh
-    //  * $ http POST ':8888/search/norm1-has-not-rule1/export?size=1&limit=2'
+    //  * $ http POST ':8800/search/norm1-has-not-rule1/export?size=1&limit=2'
     //  *
     //  * # 정규화(1차) 텍스트 정보 저장하기.
-    //  * $ http POST ':8888/search/texts-only-if-norm1/export?size=200&limit=150'
-    //  * $ http POST ':8888/search/texts-only-if-norm1/export?size=200&limit=150' last=1640227180722
+    //  * $ http POST ':8800/search/texts-only-if-norm1/export?size=200&limit=150'
+    //  * $ http POST ':8800/search/texts-only-if-norm1/export?size=200&limit=150' last=1640227180722
     //  */
     // public postSearchExport: NextHandler = async (id, param, body, ctx) => {
     //     _log(NS, `postSearchExport(${id})..`);
@@ -357,8 +359,8 @@ export class SearchAPIController extends GeneralWEBController {
      * - insert (or update) the current query
      *
      * ```sh
-     * $ http POST :8888/search/events-in-valid
-     * $ http POST :8888/search/accounts-in-valid
+     * $ http POST :8800/search/events-in-valid
+     * $ http POST :8800/search/accounts-in-valid
      */
     public postSearch: NextHandler = async (id, param, body, ctx) => {
         _log(NS, `postSearch(${id})..`);
@@ -390,7 +392,7 @@ export class SearchAPIController extends GeneralWEBController {
      * - update the current query
      *
      * ```sh
-     * $ http PUT :8888/search/1000001 size=1
+     * $ http PUT :8800/search/1000001 size=1
      */
     public putSearch: NextHandler = async (id, param, body, ctx) => {
         _log(NS, `putSearch(${id})..`);
@@ -423,7 +425,7 @@ export class SearchAPIController extends GeneralWEBController {
      * @param body the meta object to replace query {{key}}
      *
      * ```sh
-     * $ http POST ':8888/search/events-in-valid/start-batch?size=10&limit=1&target=extend-expired-at'
+     * $ http POST ':8800/search/events-in-valid/start-batch?size=10&limit=1&target=extend-expired-at'
      */
     public postSearchStartBatch: NextHandler = async (id, param, body, $ctx) => {
         _log(NS, `postSearchStartBatch(${id})..`);
@@ -496,7 +498,7 @@ export class SearchAPIController extends GeneralWEBController {
      * start batch with search-query.
      *
      * ```sh
-     * $ http POST :8888/search/1000001/run-batch-next?count=1
+     * $ http POST :8800/search/1000001/run-batch-next?count=1
      */
     public postSearchRunBatchNext: NextHandler = async (id, param, body, $ctx) => {
         _log(NS, `postSearchRunBatchNext(${id})..`);
@@ -613,6 +615,37 @@ export class SearchAPIController extends GeneralWEBController {
             // eslint-disable-next-line prettier/prettier
             slack && await $slack(`#batch[${hl(name)}] has ${hl('ignored')} at ${hl(count)}.`, { $batch, param, body, $ctx });
         }
+    };
+
+    /**
+     * POST /search/0/migrate
+     * - migrate the search index.
+     *
+     * ```sh
+     * $ http POST ':8800/search/0/migrate'
+     * $ http POST ':8800/search/0/migrate?limit=10'
+     */
+    public doPostMigrate: NextHandler = async (id, param, body, $ctx) => {
+        const errScope = `doPostMigrate(${this.type()}/${id ?? ''})`;
+        id = id == '0' ? '' : $T.S2(id);
+
+        const isLocal = $ctx?.domain === 'localhost';
+        if (!isLocal) throw new Error(`403 NOT ALLOWED - domain[${$ctx?.domain ?? ''}] is invali  @${errScope}`);
+        if (id) throw new Error(`@id[${id}] is invalid - ${errScope}`);
+
+        const $OS2 = _OS2();
+        _inf(NS, `> option =`, $U.json($OS2.options));
+        // const $res = await $OS2.describeIndex().catch(e => {
+        //     _err(NS, `! err =`, e);
+        //     return GETERR(e);
+        // });
+        const opts = { stopOnError: true, limit: $T.N(param?.limit, 5) };
+        const $res = await $OS2.synchronizeContents(opts).catch(e => {
+            _err(NS, `! err =`, e);
+            return GETERR(e);
+        });
+
+        return $res;
     };
 }
 

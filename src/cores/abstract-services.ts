@@ -1255,7 +1255,7 @@ interface ElasticParams<T extends object = any> {
     /**
      * document ID.
      */
-    id: string;
+    id?: string;
     /**
      * body content.
      */
@@ -1656,9 +1656,11 @@ class OS2FGACManager {
     private _fgacProxy: ApiHttpProxy;
 
     public constructor(options: Elastic6Option, accessKey: string, secretKey: string) {
+        const errScope = `OS2FGACManager(${options?.indexName ?? ''})`;
         const endpoint = options.endpoint;
         const host = endpoint.split('://')[1];
         const jwtToken = $U.env('OS2_JWT_TOKEN', '');
+        if (!jwtToken) throw new Error(`env.OS2_JWT_TOKEN is required - ${errScope}`);
 
         const sigConfig = {
             accessKey,
@@ -1667,6 +1669,7 @@ class OS2FGACManager {
             serviceName: 'es',
             host,
         };
+        _log(NS, `> sigConfig =`, $U.json({ ...sigConfig, secretKey: `${sigConfig?.secretKey ? '***' : ''}` }));
 
         const headers: APIHeaders = {
             Authorization: `Bearer ${jwtToken}`,
@@ -1705,6 +1708,30 @@ class OS2FGACManager {
         const id = encodeURIComponent(params?.id ?? '');
         const body = onlyDefined(params?.body ?? undefined);
         return this.proxy.doProxy('PUT', index, `_doc/${id}`, undefined, body);
+    }
+
+    /** FGAC 기반 저장: client.index() 대응 */
+    public async doFgacBulk<T extends { _id: string }, R = any>(params: ElasticParams<T[]>): Promise<R[]> {
+        const errScope = `doFgacBulk(${params?.index ?? ''})`;
+        const index = params?.index ?? '';
+        if (!Array.isArray(params?.body)) throw new Error(`@body(array) is required - ${errScope}`);
+        if (params.body.length === 0) return [] as R[];
+        const content = params.body
+            .reduce<object[]>((L, N, i) => {
+                if (typeof N?._id !== 'string') throw new Error(`@body[${i}]._id is required - ${errScope}`);
+                L.push({ index: { _index: index, _id: N._id } });
+                L.push(onlyDefined({ ...N, _id: undefined }));
+                return L;
+            }, [])
+            .map(N => $U.json(N))
+            .join('\n');
+        const result = await this.proxy.doProxy('POST', index, `_bulk`, undefined, `${content}\n`);
+        const $bulk = typeof result === 'string' ? JSON.parse(result) : result;
+        if (typeof $bulk?.items !== 'object' || !Array.isArray($bulk?.items)) {
+            _log(NS, `> bulk[${index}] =`, typeof result, $U.json(result));
+            throw new Error(`400 INVALID BULK RESULT - ${$U.json($bulk)}`);
+        }
+        return $bulk?.items as R[];
     }
 
     /** FGAC 기반 업데이트: client.update() 대응 */
@@ -1860,12 +1887,15 @@ export class OS2Instance extends Elastic6Instance {
     }
 
     /** synchronize dynamo contents to os2  */
-    public async synchronizeContents(): Promise<{
+    public async synchronizeContents(options?: { stopOnError?: boolean } & PaginateParam): Promise<{
         index: string;
         total: number;
         failed: (CoreModel<any> & GeneralItem)[];
+        list?: (CoreModel<any> & GeneralItem)[];
     }> {
         type Model = CoreModel<any> & GeneralItem;
+        type _KEY_ = { id?: string; _id?: string; stereo?: string };
+        const stopOnError = options?.stopOnError ?? false;
         const filter: DynamoScanFilter = null;
         // STEP 1. get source items
         const dynamoOptions: DynamoOption = {
@@ -1874,10 +1904,50 @@ export class OS2Instance extends Elastic6Instance {
         };
 
         const $scan = new DynamoScanService<Model>(dynamoOptions);
-        const { limit } = parsePaginateParam();
+        const { limit } = parsePaginateParam(options);
 
         // STEP 2. get role model
         const indexName = this.options.indexName;
+
+        //* runs in parallel
+        const _parrallel = async <T extends _KEY_>(list: T[], $res?: DynamoScanResult<Model>) => {
+            const items = await my_parrallel(list, async (N): Promise<Model> => {
+                const id = N._id ?? N.id;
+                try {
+                    const stereo = $T.S2(N?.stereo);
+                    if (!stereo || !stereo?.startsWith('#')) {
+                        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                        const { _id, ...rest } = N;
+                        await this.fgac.doFgacSave({ index: indexName, id, body: rest });
+                        return { id, error: null };
+                    }
+                    return { id };
+                } catch (error) {
+                    if (stopOnError && $res) {
+                        _err(NS, `> error[${id}] =`, error);
+                        $res.last = null;
+                    }
+                    return { id, error: GETERR(error) };
+                }
+            });
+            return items;
+        };
+
+        // runs with bulk
+        const _bulks = async <T extends _KEY_>(list: T[], $res?: DynamoScanResult<Model>) => {
+            const body = list
+                .map(N => {
+                    const _id = N._id ?? N.id;
+                    const stereo = $T.S2(N?.stereo);
+                    if (!stereo || !stereo?.startsWith('#')) {
+                        return { ...N, _id };
+                    }
+                    return null;
+                })
+                .filter(N => !!N);
+            const items = await this.fgac.doFgacBulk({ index: indexName, body });
+            return items?.map((N: any) => N?.index ?? N?.create);
+        };
 
         // STEP 3. migrate items using doFgacSave
         let last: Model = null;
@@ -1885,24 +1955,16 @@ export class OS2Instance extends Elastic6Instance {
         while (true) {
             if (last) _inf(NS, `> last =`, $U.json(last));
             const $res = await $scan.scan(limit, last, filter);
-            const items = await my_parrallel($res?.list, async N => {
-                try {
-                    const id = N._id ?? N.id;
-                    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-                    const { _id, ...rest } = N;
-                    await this.fgac.doFgacSave({ index: indexName, id, body: rest });
-                    return { id, error: null as string };
-                } catch (error) {
-                    return { id: N._id, error: GETERR(error) };
-                }
-            });
-            results.push(...items);
+            // const items = await _parrallel($res?.list, $res);
+            const items = await _bulks($res?.list, $res);
+            _log(NS, `>> len =`, items?.length ?? '-');
+            if (items) results.push(...items);
             if (!$res?.last?._id) break;
             last = $res?.last;
         }
         const total = results.length;
         const failed = results.filter(N => !!N.error);
-        return { index: indexName, total, failed };
+        return { index: indexName, total, failed, list: results?.slice(results?.length - limit) };
     }
 }
 

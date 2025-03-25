@@ -646,4 +646,164 @@ describe('abstract-services', () => {
         expect2(() => proxy.hasAdminRole()).toEqual(true);
         expect2(() => proxy.hasAdminRole('user')).toEqual(true);
     });
+
+    it('should pass doScanLast', async () => {
+        const { service } = instance();
+        if (PROFILE !== 'lemon') return; // ignore this.
+        const result = await service.$test.doScanLast({ limit: 3 });
+        //* 1. doScanLast with { limit }
+        expect2(() => result.count).toEqual(3);
+        expect2(() => result.limit).toEqual(3);
+        expect2(() => result.total).toEqual(3);
+        expect2(() => result.last).toEqual({ _id: 'TT:test:1000243' });
+        expect2(() => result.list).toEqual([
+            {
+                _id: 'TT:test:1000078',
+                age: 2,
+                createdAt: 1718688801255,
+                deletedAt: 0,
+                id: '1000078',
+                name: '1718688801037',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718688801255,
+            },
+            {
+                _id: 'TT:#query:1000017',
+                createdAt: 1734325286081,
+                deletedAt: 0,
+                id: '1000017',
+                name: '#',
+                ns: 'TT',
+                query: '{"query":{"query":{"bool":{"filter":{"term":{"type":"test"}}}},"aggs":{"test":{"terms":{"field":"count"}}},"sort":[{"count":{"order":"asc","missing":"_last"}}]}}',
+                type: '#query',
+                updatedAt: 1734325286131,
+            },
+            {
+                _id: 'TT:test:1000243',
+                age: 1,
+                createdAt: 1718703832286,
+                deletedAt: 0,
+                id: '1000243',
+                name: '1718703832078',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718703832286,
+            },
+        ]);
+        //* 2. doScanLast with { limit, last }
+        const resultWithLast = await service.$test.doScanLast({ limit: 3, last: { _id: 'TT:test:1000243' } });
+        expect2(() => resultWithLast.count).toEqual(3);
+        expect2(() => resultWithLast.limit).toEqual(3);
+        expect2(() => resultWithLast.total).toEqual(3);
+        expect2(() => resultWithLast.last).toEqual({ _id: 'TT:test:1000159' });
+        expect2(() => resultWithLast.list).toEqual([
+            {
+                _id: 'TT:test:1000004',
+                createdAt: 1711679260356,
+                deletedAt: 0,
+                id: '1000004',
+                name: 'lemon',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1711679260356,
+            },
+            {
+                _id: 'TT:test:1000212',
+                age: 1,
+                createdAt: 1718701431833,
+                deletedAt: 0,
+                id: '1000212',
+                name: '1718701431689',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718701431833,
+            },
+            {
+                _id: 'TT:test:1000159',
+                age: 1,
+                createdAt: 1718697350728,
+                deletedAt: 0,
+                id: '1000159',
+                name: '1718697350582',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718697350728,
+            },
+        ]);
+
+        //* 2.1 check whether $params works well
+        const resultForVerification = await service.$test.doScanLast({ limit: 6 });
+
+        expect2(() => resultForVerification.count).toEqual(6);
+        expect2(() => resultForVerification.limit).toEqual(6);
+        expect2(() => resultForVerification.total).toEqual(6);
+        // expectedLast should be the last of doScanLast with { limit, last }
+        const expectedLast = resultWithLast.last;
+        expect2(() => resultForVerification.last).toEqual(expectedLast);
+        // expectedList should be the list results of test step 1 & 2
+        const expectedList = result.list.concat(resultWithLast.list);
+        expect2(() => resultForVerification.list).toEqual(expectedList);
+
+        //* 3. doScanLast with { limit, filter }
+        const resultWithFilter = await service.$test.doScanLast({
+            limit: 3,
+            filter: { key: 'type', operator: 'contains', value: 'test' },
+        });
+        expect2(() => resultWithFilter.count).toEqual(2);
+        expect2(() => resultWithFilter.limit).toEqual(3);
+        expect2(() => resultWithFilter.total).toEqual(2);
+        expect2(() => resultWithFilter.last).toEqual({ _id: 'TT:test:1000243' });
+        expect2(() => resultWithFilter.list).toEqual([
+            {
+                _id: 'TT:test:1000078',
+                age: 2,
+                createdAt: 1718688801255,
+                deletedAt: 0,
+                id: '1000078',
+                name: '1718688801037',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718688801255,
+            },
+            {
+                _id: 'TT:test:1000243',
+                age: 1,
+                createdAt: 1718703832286,
+                deletedAt: 0,
+                id: '1000243',
+                name: '1718703832078',
+                ns: 'TT',
+                type: 'test',
+                updatedAt: 1718703832286,
+            },
+        ]);
+
+        //* 4. doScanLast with last _id
+        const checkLast = await service.$test.doScanLast({ limit: 20, last: { _id: 'TT:test:1000216' } });
+        expect2(() => checkLast).toEqual();
+        expect2(() => checkLast.count).toEqual(0);
+        expect2(() => checkLast.limit).toEqual(20);
+        expect2(() => checkLast.total).toEqual(0);
+        expect2(() => checkLast.last).toEqual();
+        expect2(() => checkLast.list).toEqual([]);
+    });
+
+    it('should pass migrate search-index', async () => {
+        const { service } = instance();
+        const result = await service.$test.doSyncScanLast({ limit: 10 });
+        expect2(() => result.last).toEqual({ _id: 'TT:test:1000246' });
+        expect2(() => result.count).toEqual(10);
+        // expect2(() => result.took).toEqual(0.1);
+        expect2(() => result.list[0], '!_version').toEqual({ _id: 'TT:test:1000078', error: undefined, status: 200 });
+        expect2(() => result.list[1], '!_version').toEqual({ _id: 'TT:#query:1000017', error: undefined, status: 200 });
+        expect2(() => result.list[2], '!_version').toEqual({ _id: 'TT:test:1000243', error: undefined, status: 200 });
+
+        //* doSyncScanLast with last _id
+        const checkLast = await service.$test.doSyncScanLast({ limit: 20, last: { _id: 'TT:test:1000216' } });
+        expect2(() => checkLast.last).toEqual();
+        expect2(() => checkLast.count).toEqual(0);
+        // expect2(() => checkLast.took).toEqual(0.1);
+        expect2(() => checkLast.list[0], '!_version').toEqual();
+    });
 });
