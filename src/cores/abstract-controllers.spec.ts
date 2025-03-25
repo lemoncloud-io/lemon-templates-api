@@ -16,7 +16,8 @@
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { $ES6, $rand, $T, expect2, GETERR } from 'lemon-core';
+import { $rand, $T, expect2, GETERR } from 'lemon-core';
+import { $ES6 } from './abstract-services';
 import { AbstractCRUDController, AbstractTransformer } from './abstract-controllers';
 import { View, Body } from './types';
 
