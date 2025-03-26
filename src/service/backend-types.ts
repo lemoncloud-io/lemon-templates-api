@@ -8,6 +8,7 @@
  * Copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
 import { SimpleSet } from 'lemon-model';
+import $callback from '../modules/callback/types';
 import $mocks from '../modules/mock/types';
 export { SimpleSet };
 
@@ -22,6 +23,7 @@ const $LUT = {
      */
     ModelType: {
         //* use sub-modules.
+        ...$callback.ModelType,
         ...$mocks.ModelType,
     },
     /**

@@ -53,7 +53,7 @@ export interface MockModelExt<T = string> extends MockModel<T> {
 }
 /**
  * type: `TestHead`
- * - common head of test-model.
+ * - common head of ㅎtest-model.
  */
 export interface TestHead {
     /** internal reference */
