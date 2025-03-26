@@ -14,6 +14,7 @@ import { CallbackModel } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';
+import { $trans } from './transformer';
 
 /**
  * make service and proxy
@@ -33,14 +34,14 @@ describe('BackendProxy', () => {
     const PROFILE = loadProfile(process); // override process.env.
     PROFILE && console.info('! PROFILE =', PROFILE);
 
-    //! basic function
+    //* basic function
     it('should pass basic function', async () => {
         const { service } = instance();
         expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
     });
 
-    //! test of CallbackManagerProxy
-    it('should pass CallbackManagerProxy', async () => {
+    //* test of basic CallbackManagerProxy
+    it('should pass basic CallbackManagerProxy', async () => {
         const { proxy, _ts } = instance();
 
         const $prx = proxy.callback;
@@ -48,21 +49,42 @@ describe('BackendProxy', () => {
             'typed-storage-service:callback/proxy-storage-service:dummy-storage-service:dummy-data/_id',
         );
 
-        const $model: CallbackModel = {
+        const model: CallbackModel = {
             stereo: '',
             name: 'parent',
         };
         expect2(await $prx.validateModel({ name: '#' }).catch(GETERR)).toEqual(
-            `.name[#] is invalid - validateModel(callback/)`,
+            `.name[#] is invalid - validateModel(callback/)`, // from manager.
         );
         expect2(await $prx.validateModel({ name: '!' }).catch(GETERR)).toEqual(
             `.name[!] is invalid - validate(callback/)`,
         );
-        const parent$ = await $prx.makeModel({ ...$model });
-        expect2(() => parent$).toEqual({
+        const $model = await $prx.makeModel({ ...model });
+        expect2(() => $model).toEqual({
             ..._ts('1000001', 'callback'),
             stereo: '',
-            name: $model.name,
+            name: model.name,
+        });
+        expect2(await $prx.validateModel({ name: '#' }, $model.id).catch(GETERR)).toEqual(
+            `.name[#] is invalid - validate(callback/${$model.id})`, // from proxy
+        );
+
+        //* check of updateHead()
+        expect2(await $prx.updateHead({ callbackId: $model.id })).toEqual({
+            callbackId: '1000001',
+            callback$: $prx.trans.asHead($model),
+        });
+        expect2(await $prx.updateHead({ callbackId: null })).toEqual({
+            callbackId: null,
+            callback$: undefined,
+        });
+        expect2(await $prx.updateHead({ callbackId: '' })).toEqual({
+            callbackId: '',
+            callback$: null,
+        });
+        expect2(await $prx.updateHead({ callbackId: 'xxxx' })).toEqual({
+            callbackId: '',
+            callback$: null,
         });
     });
 });

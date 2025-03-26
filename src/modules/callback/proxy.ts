@@ -10,8 +10,8 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, _inf, _log, _err } from 'lemon-core';
-import { CallbackModel, ModelType } from './model';
-import { MyCoreProxy, MyManagerProxy } from '../../cores';
+import { $T, MyCoreProxy, MyManagerProxy } from '../../cores';
+import { CallbackHead, CallbackModel, ModelType } from './model';
 import { BackendService, CallbackModelManager } from './service';
 import { $trans, CallbackTransformer } from './transformer';
 const NS = $U.NS('callback', 'green'); // NAMESPACE TO BE PRINTED.
@@ -37,6 +37,25 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
     /** get transformer */
     public get trans(): CallbackTransformer {
         return $trans.callback;
+    }
+
+    /**
+     * update the model-head if id has changed.
+     *
+     * @param $new the new model to update.
+     * @param $org (optional) the original model
+     * @returns the final model
+     */
+    // eslint-disable-next-line prettier/prettier
+    public async updateHead<T extends { callbackId?: string; callback$?: CallbackHead }>($new: T, $org?: T): Promise<T> {
+        const callbackId = $new?.callbackId ?? $org?.callbackId;
+        if (callbackId !== $org?.callbackId) {
+            const model = callbackId ? await this.get(callbackId, false) : null;
+            $new.callbackId = $T.S(model?.id, '');
+            $new.callback$ = model ? this.trans.asHead(model) : null;
+            return $new;
+        }
+        return $new;
     }
 
     /**
