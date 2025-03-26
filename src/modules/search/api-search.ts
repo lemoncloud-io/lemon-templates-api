@@ -21,7 +21,7 @@ import {
     SearchProxyBody,
 } from 'lemon-core';
 import { SearchBatchModel, SearchBody, SearchResult, SearchQueryModel } from './model';
-import { $ES6 } from '../../cores/abstract-services';
+import { $ES6, _OS2 } from '../../cores/abstract-services';
 import { BatchParams, SearchService } from './service';
 import { performance } from 'perf_hooks';
 
@@ -124,6 +124,7 @@ export class SearchAPIController extends GeneralWEBController {
         const $param = { ...param, $page, $limit, page: undefined, ipp: undefined, limit: undefined };
         const res = await (async () => {
             if (id) throw new Error(`404 NOT FOUND - invalid index: ${id}`);
+            //TODO - opt below `$ES6.query.searchSimple` w/ `$OS2`
             return $ES6.query.searchSimple($param);
         })();
 
@@ -615,6 +616,37 @@ export class SearchAPIController extends GeneralWEBController {
             // eslint-disable-next-line prettier/prettier
             slack && await $slack(`#batch[${hl(name)}] has ${hl('ignored')} at ${hl(count)}.`, { $batch, param, body, $ctx });
         }
+    };
+
+    /**
+     * POST /search/0/migrate
+     * - migrate the search index.
+     *
+     * ```sh
+     * $ http POST ':8800/search/0/migrate'
+     * $ http POST ':8800/search/0/migrate?limit=10'
+     */
+    public doPostMigrate: NextHandler = async (id, param, body, $ctx) => {
+        const errScope = `doPostMigrate(${this.type()}/${id ?? ''})`;
+        id = id == '0' ? '' : $T.S2(id);
+
+        const isLocal = $ctx?.domain === 'localhost';
+        if (!isLocal) throw new Error(`403 NOT ALLOWED - domain[${$ctx?.domain ?? ''}] is invali  @${errScope}`);
+        if (id) throw new Error(`@id[${id}] is invalid - ${errScope}`);
+
+        const $OS2 = _OS2();
+        _inf(NS, `> option =`, $U.json($OS2.options));
+        // const $res = await $OS2.describeIndex().catch(e => {
+        //     _err(NS, `! err =`, e);
+        //     return GETERR(e);
+        // });
+        const opts = { stopOnError: true, limit: $T.N(param?.limit, 5) };
+        const $res = await $OS2.synchronizeContents(opts).catch(e => {
+            _err(NS, `! err =`, e);
+            return GETERR(e);
+        });
+
+        return $res;
     };
 }
 
