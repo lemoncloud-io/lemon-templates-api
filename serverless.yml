@@ -110,8 +110,6 @@ provider:
     #NOTE! - remove할때 lambda ENI Interface를 제거하지 못해서 블럭당하고 있을때, EC2 콘솔에서 강제 지우기 하면 됨!.. (VPC 안쓰면 관계 없음!)
     - Effect: Allow
       Action:
-        - cloudwatch:PutMetricData
-        - lambda:InvokeFunction
         - ec2:CreateNetworkInterface
         - ec2:DescribeNetworkInterfaces
         - ec2:AttachNetworkInterface
@@ -137,6 +135,7 @@ provider:
     # Lambda + SNS + SQS
     - Effect: "Allow"
       Action:
+        - cloudwatch:PutMetricData
         - lambda:InvokeFunction
         - sns:GetEndpointAttributes
         - sns:Publish
