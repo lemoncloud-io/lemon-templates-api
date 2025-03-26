@@ -22,6 +22,7 @@
     "!express": "---- 로컬/개발 서버에서 express로 안정적으로 돌리기 위함 -----",
     "express.lemon": "ENV=lemon STAGE=local npm run start",
     "!deploy": "-----  빌드후 dist 폴더에 압축한 다음, serverless를 통해서 deploy 실행 -----",
+    "deploy.lemon-vpc": "npm run build && sls deploy --param='profile=lemon' --stage dev --config serverless-vpc.yml",
     "deploy.lemon": "npm run build && sls deploy --param='profile=lemon' --stage dev",
     "deploy.lemon.prod": "npm run build && sls deploy --param='profile=lemon' --stage prod",
     "!info": "------- print sls infor by profile -----",

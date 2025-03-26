@@ -1,0 +1,379 @@
+#------------------------------------------------
+# Serverless Configuration.
+#------------------------------------------------
+service: lemon-templates-api
+
+# You can pin your service to only deploy with a specific Serverless version
+# Check out our docs for more details
+frameworkVersion: "3"
+
+plugins:
+  - serverless-offline
+  - serverless-aws-documentation
+  - serverless-prune-plugin
+  - serverless-plugin-log-retention
+  - '@cruglobal/serverless-merge-config'
+
+#------------------------------------------------
+# Custome: 초기 환경 설정 로딩을 위한 핵심 설정.
+# - config.js 에서 profile별 core 정보를 얻음.
+#------------------------------------------------
+custom:
+  CORE:                                         # Core Configuration.
+    profile: ${param:profile, 'none'}             # run option `--profile`
+    region: ${opt:region, 'ap-northeast-2'}     # run option `--region` `-r`
+    stage: ${opt:stage, 'dev'}                  # run option `--stage` `-s`
+    env: ${param:env, './env/none.yml'}           # run option `--env`
+  CONF: ${file(./env/config.js):CONF}           # `config.js` 에서 CONF() 함수 호출하여 가져옴.
+  #------------------------------------------------
+  # serverless-offline
+  #------------------------------------------------
+  serverless-offline:
+    httpPort: 8888
+  #------------------------------------------------
+  # Documentation
+  #   - https://github.com/9cookies/serverless-aws-documentation
+  #------------------------------------------------
+  documentation: ${file(./swagger/documentation.yml):documentation}
+  #------------------------------------------------
+  # SNS Registration: ${self:custom.topicName.${self:custom.CORE.stage}}
+  #------------------------------------------------
+  topicName:
+    local: lemon-templates-sns-dev
+    dev: lemon-templates-sns-dev
+    prod: lemon-templates-sns
+  #------------------------------------------------
+  # Dynamo:
+  #------------------------------------------------
+  tableName:
+    local: lemon-templates-table-dev
+    dev: lemon-templates-table-dev
+    prod: lemon-templates-table
+  #------------------------------------------------
+  # SQS Registration:
+  #------------------------------------------------
+  queueName:
+    local: lemon-templates-sqs-dev
+    dev: lemon-templates-sqs-dev
+    prod: lemon-templates-sqs
+  #------------------------------------------------
+  # pruning old versions
+  #------------------------------------------------
+  prune:
+    automatic: true
+    number: 3
+  #------------------------------------------------
+  # retention of cloudwatch logs. (see serverless-plugin-log-retention)
+  #------------------------------------------------
+  logRetentionInDays: 14 # default for all functions
+  #------------------------------------------------
+  # CORS Default (use like `cors: ${self:custom.cors, true}`)
+  #------------------------------------------------
+  cors:
+    origin: "*"
+    headers:
+      # Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-Amz-User-Agent
+      - Authorization
+      - Content-Type
+      - X-Amz-Date
+      - X-Amz-Security-Token
+      - X-Amz-User-Agent
+      - X-Api-Key
+      - X-Lemon-Language
+      - X-Lemon-Identity
+    allowCredentials: true
+
+
+#==============================================================
+# Provider
+#--------------------------------------------------------------
+provider:
+  name: aws
+  profile: ${param:profile, 'none'}
+  stage: ${opt:stage, 'dev'}
+
+  # Lambda Runtime Environment
+  memorySize: 512
+  timeout: 180
+  runtime: ${self:custom.CONF.${self:custom.CORE.profile}.runtime, 'nodejs12.x'}
+  region: ${self:custom.CONF.${self:custom.CORE.profile}.region, self:custom.CORE.region}      # profile의 region를 먼저 사용하고, 없으면 실행 옵션값.
+
+
+  # VPC Configuration for Lambda. (see env/config.js)
+  vpc:
+    securityGroupIds: ${self:custom.CONF.${self:custom.CORE.profile}.securityGroupIds}
+    subnetIds: ${self:custom.CONF.${self:custom.CORE.profile}.subnetIds}
+
+  # Lambda function's IAM Role here
+  iamRoleStatements:
+    #NOTE! - remove할때 lambda ENI Interface를 제거하지 못해서 블럭당하고 있을때, EC2 콘솔에서 강제 지우기 하면 됨!.. (VPC 안쓰면 관계 없음!)
+    - Effect: Allow
+      Action:
+        - cloudwatch:PutMetricData
+        - lambda:InvokeFunction
+        - ec2:CreateNetworkInterface
+        - ec2:DescribeNetworkInterfaces
+        - ec2:AttachNetworkInterface
+        - ec2:DescribeNetworkInterfaces
+        - ec2:DeleteNetworkInterface
+        - ec2:DetachNetworkInterface
+        - ec2:ModifyNetworkInterfaceAttribute
+        - ec2:ResetNetworkInterfaceAttribute
+      Resource: "*"
+    # KMS
+    - Effect: Allow
+      Action:
+        - kms:Decrypt
+        - kms:Encrypt
+        - kms:Verify
+      Resource: "arn:aws:kms:${self:provider.region}:*:key/${self:custom.CONF.${self:custom.CORE.profile}.kmsKey, ''}"   #TODO - improve resource setting.
+    # NOTE - only required from `xxxx-backend-api` which make `session-token`.
+    # # KMS (#NOTE - kms:Sign is ONLY possible by exact ARN. so use `kmsSignKey` in config.js)
+    # - Effect: Allow
+    #   Action:
+    #     - kms:Sign                            #WARN - it would not work with `*` resource.
+    #   Resource: "arn:aws:kms:${self:provider.region}:${aws:accountId}:key/${self:custom.CONF.${self:custom.CORE.profile}.kmsSignKey}"
+    # Lambda + SNS + SQS
+    - Effect: "Allow"
+      Action:
+        - lambda:InvokeFunction
+        - sns:GetEndpointAttributes
+        - sns:Publish
+        - sqs:SendMessage
+      Resource: "*"
+    # SQS
+    - Effect: "Allow"
+      Action:
+        - sqs:DeleteMessage
+        - sqs:ReceiveMessage
+        - sqs:GetQueueAttributes
+      Resource: "arn:aws:sqs:${opt:region, self:provider.region}:*:${self:custom.queueName.${self:custom.CORE.stage}}"
+    # DynamoDB (ModelTable)
+    - Effect: Allow
+      Action:
+        - dynamodb:Query
+        - dynamodb:Scan
+        - dynamodb:GetItem
+        - dynamodb:PutItem
+        - dynamodb:UpdateItem
+        - dynamodb:DeleteItem
+        - dynamodb:GetRecords
+        - dynamodb:GetShardIterator
+        - dynamodb:DescribeTable
+        - dynamodb:DescribeStream
+        - dynamodb:ListStreams
+      Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.tableName.${self:custom.CORE.stage}}"
+
+  # -------------------------------------------------------
+  # Environment variables
+  # `$ npm install --save-dev @cruglobal/serverless-merge-config`
+  # -------------------------------------------------------
+  environment:
+    DEFAULT_REGION: '${self:provider.region}'
+    REPORT_ERROR_ARN: 'arn:aws:sns:${self:provider.region}:${aws:accountId}:lemon-hello-sns'
+    MY_DYNAMO_TABLE: '${self:custom.tableName.${self:custom.CORE.stage}}'
+    MY_SQS_ENDPOINT: 'https://sqs.${self:provider.region}.amazonaws.com/${aws:accountId}/${self:custom.queueName.${self:custom.CORE.stage}}' # see `sqs-service`
+    MY_SNS_ENDPOINT: 'arn:aws:sns:${self:provider.region}:${aws:accountId}:${self:custom.topicName.${self:custom.CORE.stage}}'               # see `sns-service`
+    $<<: ${file(./env/${self:custom.CONF.${self:custom.CORE.profile}.env}):${self:custom.CORE.stage}}
+
+
+#==============================================================
+# Functions
+#--------------------------------------------------------------
+functions:
+  #INFO - use seperated function for so many dynamo-stream.
+  backend:
+    handler: handler.lambda     # use core `lambda-handler`.
+    timeout: 300                # max timeout. (= 5 min)
+    events:
+      # -------------------------------------------------------
+      # Shared DynamoStream Service.
+      - stream:
+          type: dynamodb
+          batchSize: 1
+          startingPosition: LATEST
+          arn:
+            Fn::GetAtt:
+              - MyTable
+              - StreamArn
+      # -------------------------------------------------------
+      # Shared SNS Service.
+      - sns: 'arn:aws:sns:${self:provider.region}:${aws:accountId}:${self:custom.topicName.${self:custom.CORE.stage}}'
+      # -------------------------------------------------------
+      # Shared SQS Service.
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - MyQueue
+              - Arn
+          # the maximum number of SQS messages of AWS to send on a single trigger. (default: 10)
+          batchSize: 1
+  #WARN - must be `lambda` to support `lemon-protocol`.
+  lambda:
+    handler: handler.lambda     # use core `lambda-handler`.
+    timeout: 30                 # max timeout(30s) by API Gateway.
+    events:
+      # -------------------------------------------------------
+      # Schedule: cron
+      - schedule:
+          name: lemon-templates-${self:custom.CORE.stage}-1min
+          description: 'run every minute to keep alive'
+          rate: 'cron(0/1 * * * ? *)'
+          enabled: false
+          input:
+            cron:
+              name: 1MIN
+              stage: ${self:custom.CORE.stage}
+      # -------------------------------------------------------
+      # REST API : /
+      - http:
+          path: /
+          method: get
+          cors: true
+          documentation:
+            summary: "show service name and version"
+      # -------------------------------------------------------
+      # REST API : /hello
+      - http:
+          path: /hello
+          method: get
+          cors: ${self:custom.cors, true}
+      - http:
+          path: /hello/{id}
+          method: get
+          cors: ${self:custom.cors, true}
+      - http:
+          path: /hello/{id}
+          method: post
+          cors: ${self:custom.cors, true}
+      - http:
+          path: /hello/{id}/{cmd}
+          method: get
+          cors: ${self:custom.cors, true}
+      # -------------------------------------------------------
+      # REST API : /mocks
+      - http:
+          path: /mocks
+          method: get
+          cors: ${self:custom.cors, true}
+      - http:
+          path: /mocks/{id}
+          method: get
+          cors: ${self:custom.cors, true}
+      - http:
+          path: /mocks/{id}
+          method: post
+          cors: ${self:custom.cors, true}
+      - http:
+          path: /mocks/{id}/{cmd}
+          method: post
+          cors: ${self:custom.cors, true}
+      # -------------------------------------------------------
+      # REST API : General Controller.
+      - http:
+          path: /{type}
+          method: get
+          cors: ${self:custom.cors, true}
+          authorizer: aws_iam
+      - http:
+          path: /{type}/{id}
+          method: get
+          cors: ${self:custom.cors, true}
+          authorizer: aws_iam
+      - http:
+          path: /{type}/{id}/{cmd}
+          method: get
+          cors: ${self:custom.cors, true}
+          authorizer: aws_iam
+      - http:
+          path: /{type}/{id}
+          method: put
+          cors: ${self:custom.cors, true}
+          authorizer: aws_iam
+      - http:
+          path: /{type}/{id}/{cmd}
+          method: put
+          cors: ${self:custom.cors, true}
+          authorizer: aws_iam
+      - http:
+          path: /{type}/{id}
+          method: post
+          cors: ${self:custom.cors, true}
+          authorizer: aws_iam
+      - http:
+          path: /{type}/{id}/{cmd}
+          method: post
+          cors: ${self:custom.cors, true}
+          authorizer: aws_iam
+      - http:
+          path: /{type}/{id}
+          method: delete
+          cors: ${self:custom.cors, true}
+          authorizer: aws_iam
+      - http:
+          path: /{type}/{id}/{cmd}
+          method: delete
+          cors: ${self:custom.cors, true}
+          authorizer: aws_iam
+
+#--------------------------------------------------------------
+# ! INCLUDE ONLY DISTRIBUTIONS !
+#--------------------------------------------------------------
+package:
+  exclude:
+    - ./**
+    - '!node_modules/**'
+  include:
+    - handler.js
+    - package.json
+    - dist/**
+    - data/**
+  excludeDevDependencies: true
+
+
+#==============================================================
+# Resources
+# ## 리소스 생성.
+#   - 리소스를 deploy 시점에 생성할 수 있다
+#   - 주위! 테스트 목적으로 자동 생성하도록 함.
+#   - 운영시, 이 항목은 안쓰일듯.
+#--------------------------------------------------------------
+resources:
+  # 리소스 지정.
+  Resources:
+    # -------------------------------
+    # This SNS Topic
+    # -------------------------------
+    MyTopic:
+      Type: 'AWS::SNS::Topic'
+      Properties:
+        TopicName: '${self:custom.topicName.${self:custom.CORE.stage}}'
+    # -------------------------------
+    # SQS Queue
+    # -------------------------------
+    MyQueue:
+      Type: 'AWS::SQS::Queue'
+      Properties:
+        QueueName: '${self:custom.queueName.${self:custom.CORE.stage}}'
+        MessageRetentionPeriod: 1800      # 30 mins
+        VisibilityTimeout: 300            # 5 mins
+        MaximumMessageSize: 4096          # 4 Kb
+        DelaySeconds: 3                   # 3 seconds
+        ReceiveMessageWaitTimeSeconds: 20 # 20 seconds
+    # -------------------------------
+    # Dynamo Table
+    # -------------------------------
+    MyTable:
+      Type: 'AWS::DynamoDB::Table'
+      DeletionPolicy: Retain
+      Properties:
+        TableName: '${self:custom.tableName.${self:custom.CORE.stage}}'
+        AttributeDefinitions:
+          - AttributeName: '_id'
+            AttributeType: S
+        KeySchema:
+          - AttributeName: '_id'
+            KeyType: HASH
+        BillingMode: PAY_PER_REQUEST
+        StreamSpecification:
+          StreamViewType: "NEW_AND_OLD_IMAGES"
