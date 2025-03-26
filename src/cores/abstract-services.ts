@@ -1840,32 +1840,24 @@ export class OS2Instance extends Elastic6Instance {
     public async createIndex(): Promise<any> {
         if (!this.elastic) return null;
 
-        const { docType, idName } = this.options;
-        const settings = Elastic6Service.prepareSettings({ docType, idName }); // 기본 설정
-        const $set = { score_: { type: 'half_float' } };
+        const { docType, idName, version = '2.10' } = this.options;
+        const settings = Elastic6Service.prepareSettings({ docType, idName, version });
 
-        // 기존 _doc 구조 제거 및 병합
+        // _doc 제거 및 properties 병합
         if (settings.mappings?._doc) {
-            const { dynamic_templates, properties } = settings.mappings._doc;
+            const { dynamic_templates, properties: docProperties } = settings.mappings._doc;
 
-            // _doc 안에 있는 내용 꺼내서 mappings로 병합
             settings.mappings = {
                 ...settings.mappings,
-                dynamic_templates,
+                ...(dynamic_templates ? { dynamic_templates } : {}),
                 properties: {
-                    ...(properties || {}),
-                    ...settings.mappings.properties, // 혹시 기존 score_ 추가분까지 합쳐줌
+                    ...(docProperties || {}),
+                    ...(settings.mappings.properties || {}),
                 },
             };
 
-            delete settings.mappings._doc; // _doc 제거
+            delete settings.mappings._doc;
         }
-
-        // 추가 필드(score_) 병합 처리
-        settings.mappings.properties = {
-            ...(settings.mappings.properties || {}),
-            ...$set,
-        };
 
         return this.elastic.createIndex(settings);
     }

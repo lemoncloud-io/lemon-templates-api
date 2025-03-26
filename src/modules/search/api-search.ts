@@ -124,6 +124,7 @@ export class SearchAPIController extends GeneralWEBController {
         const $param = { ...param, $page, $limit, page: undefined, ipp: undefined, limit: undefined };
         const res = await (async () => {
             if (id) throw new Error(`404 NOT FOUND - invalid index: ${id}`);
+            //TODO - opt below `$ES6.query.searchSimple` w/ `$OS2`
             return $ES6.query.searchSimple($param);
         })();
 

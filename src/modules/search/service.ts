@@ -9,21 +9,21 @@
  * @origin      lemon-templates-api
  * @copyright (C) 2021 LemonCloud Co Ltd. - All Rights Reserved.
  */
-import { $U, _err, _inf, _log, _ES6 } from 'lemon-core';
+import { $U, _err, _inf, _log, $protocol, SimpleSet, GETERR, NextContext } from 'lemon-core';
 import {
     CoreModelFilterable,
     Elastic6Option,
     GeneralKeyMaker,
     GeneralModelFilter,
-    NextContext,
     ProxyStorageService,
     StorageMakeable,
     TypedStorageService,
     UniqueFieldManager,
-    GETERR,
     Elastic6SearchParams,
     Elastic6Instance,
 } from 'lemon-core';
+import { $T } from '../../cores/commons';
+import { _OS2 } from '../../cores/abstract-services';
 import {
     $FIELD,
     SearchBody,
@@ -33,7 +33,7 @@ import {
     SearchQueryModel,
     SearchResult,
 } from './model';
-import { $protocol, $T, SimpleSet } from 'lemon-core';
+
 const NS = $U.NS('search', 'blue'); // NAMESPACE TO BE PRINTED.
 
 export { Elastic6Option };
@@ -104,7 +104,7 @@ export class SearchService
         super(ns);
         _log(NS, `SearchService(${tableName}, ${ns})..`);
         this.tableName = tableName;
-        const $es6 = _ES6(options);
+        const $es6 = _OS2(options);
         this.instance = $es6;
         this.$query = new MyQueryManager(this);
         this.$batch = new MyBatchManager(this);

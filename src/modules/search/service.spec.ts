@@ -254,14 +254,13 @@ describe('SearchService', () => {
     //* search-proxy runing in local w/ access-key
     it('should pass search proxy(lemon)', async () => {
         //* lemon.dev 에 배포된 상태에서 테스트 진행함!
-        const indexName = 'lemon-templates-v1';
-        const endpoint = 'https://ag1qbtayhj.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy';
+        const indexName = 'lemon-templates-v1-25034178';
+        const endpoint = 'https://search-eureka-os2-uxoajmyfedwmpd3zzue7cwdfrm.ap-northeast-2.es.amazonaws.com';
 
         //! WARN - must config the test section in `env/lemon.yml`
-        expect2(() => $U.env('ES6_INDEX', '')).toEqual(indexName);
         if (PROFILE !== 'lemon') return; //* ignore if not in lemon profile.
-
-        expect2(() => $U.env('ES6_ENDPOINT', '')).toEqual(endpoint);
+        expect2(() => $U.env('OS2_INDEX', '')).toEqual(indexName);
+        expect2(() => $U.env('OS2_ENDPOINT', '')).toEqual(endpoint);
         expect2(() => $ES6.options).toEqual(null);
 
         const $es = _ES6({ endpoint, indexName });
