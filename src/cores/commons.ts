@@ -101,7 +101,8 @@ export const $T = {
             ? _T.N(v, def)
             : undefined,
     /** convert to `float` w/ fixed(3) */
-    F: (n: number) => (typeof n === 'string' || typeof n === 'number' ? parseFloat(Number(n).toFixed(3)) : undefined),
+    F: (n: number | string) =>
+        typeof n === 'string' || typeof n === 'number' ? parseFloat(Number(n).toFixed(3)) : undefined,
     /** cleanup if in undefined */
     clear: <T extends object>(N: T): T =>
         Object.entries(N).reduce((N, [k, v]) => {
