@@ -35,7 +35,7 @@ test:
 # local development configuration.
 local:
   <<: *default_env
-  REPORT_ERROR_ARN: arn:aws:sns:ap-northeast-2:540298831859:lemon-hello-sns
+  REPORT_ERROR_ARN: arn:aws:sns:ap-northeast-2:085403634746:lemon-hello-sns
 
   # WARN - for development.
   STAGE: '!develop'

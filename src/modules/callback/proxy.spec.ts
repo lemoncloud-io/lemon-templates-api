@@ -10,7 +10,7 @@
  */
 import { loadProfile } from 'lemon-core/dist/environ';
 import { expect2, _it, GETERR, $info } from 'lemon-core';
-import { CallbackModel } from './model';
+import { CallbackModel, CallbackRequest } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';
@@ -85,6 +85,54 @@ describe('BackendProxy', () => {
         expect2(await $prx.updateHead({ callbackId: 'xxxx' })).toEqual({
             callbackId: '',
             callback$: null,
+        });
+    });
+
+    //* test of basic CallbackManagerProxy
+    it('should pass basic CallbackManagerProxy.doRequest', async () => {
+        const { proxy, _ts } = instance('authed');
+        const $prxy = proxy.callback;
+
+        const body: CallbackModel = {
+            stereo: '',
+            name: 'parent',
+        };
+        const model = await $prxy.makeModel(body);
+        expect2(() => model).toEqual({
+            ..._ts('1000001', 'callback'),
+            stereo: '',
+            name: body.name,
+        });
+
+        // expect2(await $prxy.doRequest(null, null).catch(GETERR)).toEqual(
+        //     '@model.id (string) is required - doRequest(callback/)',
+        // );
+        // expect2(await $prxy.doRequest({}, null).catch(GETERR)).toEqual(
+        //     '@model.id (string) is required - doRequest(callback/)',
+        // );
+        expect2(await $prxy.doRequest(null, null).catch(GETERR)).toEqual(
+            '@request (object) is required - doRequest(-/-)',
+        );
+
+        const req: CallbackRequest = {
+            service: 'lemon-hello-api',
+            type: 'hello',
+            id: 'echo',
+            // cmd: 'cmd',
+        };
+        expect2(await $prxy.doRequest({}, { isSimul: true }).catch(GETERR)).toEqual(
+            '@request.service (string) is required - doRequest(-/-)',
+        );
+        expect2(await $prxy.doRequest({ ...req }, { parent: model, isSimul: true }).catch(GETERR)).toEqual({
+            ..._ts('1000001:1', 'callback'),
+            stereo: '',
+            name: 'parent',
+            no: 1,
+            parentId: '1000001',
+            parent$: { id: '1000001', name: 'parent', stereo: '' },
+            target: '//lemon-hello-api/hello/echo',
+            request$: { ...req },
+            error: '! in simulate mode - doRequest(lemon-hello-api/echo)',
         });
     });
 });

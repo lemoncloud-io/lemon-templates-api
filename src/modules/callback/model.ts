@@ -11,7 +11,7 @@
 import { CoreModel } from 'lemon-model';
 //WARN - DO NOT IMPORT FROM `../../service/backend-model`
 // import { ModelType } from '../../service/backend-types';
-import $LUT, { CallbackStereo } from './types';
+import $LUT, { CallbackState, CallbackStereo } from './types';
 import { keys } from 'ts-transformer-keys';
 
 /**
@@ -29,6 +29,23 @@ export type Model = CoreModel<ModelType>;
  */
 export type BoolFlag = 0 | 1;
 
+/** request to target api */
+export interface CallbackRequest<Param = any, Body = any> {
+    /** parameter */
+    param?: Param;
+    /** body to call */
+    body?: Body;
+
+    /** service name (ex: lemon-hello-api) */
+    service?: string;
+    /** type name (ex: hello) */
+    type?: string;
+    /** id of type */
+    id?: string;
+    /** cmd */
+    cmd?: string;
+}
+
 /**
  * Type: `CallbackHead`
  */
@@ -42,14 +59,40 @@ export interface CallbackHead {
 }
 
 /**
- * type: `CallbackModel` (카테고리)
- * - 카테고리(분류) 모델
+ * type: `CallbackModel` (콜백)
+ * - 콜백 모델
+ * - 콜백 요청과 응답에 대한 내용을 기록 관리하기 위함.
  */
 export interface CallbackModel extends Model, CallbackHead {
+    /** auto-seq or child-no */
+    id?: string;
     /** stereo */
     stereo?: CallbackStereo;
     /** name of callback */
     name?: string;
+
+    /** state of callback */
+    state?: CallbackState;
+
+    /** (optional) parent of this */
+    parentId?: string;
+    /** parent info */
+    parent$?: CallbackHead;
+
+    /** (optional) child-no to tracking */
+    no?: number;
+
+    /** target url */
+    target?: string;
+    /** queue-id */
+    qid?: string;
+
+    /** partial of request-body */
+    request$?: CallbackRequest;
+    /** time of requested */
+    requestedAt?: number;
+    /** time of responsed */
+    responsedAt?: number;
 
     /**
      * hidden(숨김) flag

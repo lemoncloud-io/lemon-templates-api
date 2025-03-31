@@ -27,7 +27,18 @@ export class CallbackTransformer extends AbstractTransformer<CallbackModel, Call
             stereo: model?.stereo,
             name: model?.name,
             hidden: model?.hidden !== undefined ? $T.B(model.hidden) : undefined,
-            optional: model?.optional !== undefined ? Boolean(model.optional) : undefined,
+            optional: model?.optional !== undefined ? $T.B(model.optional) : undefined,
+
+            state: model?.state,
+            parentId: model?.parentId,
+            parent$: model?.parent$ ? this.modelAsView(model.parent$) : undefined,
+            no: model?.no,
+            target: model?.target,
+            qid: model?.qid,
+
+            request$: model?.request$,
+            requestedAt: model?.requestedAt,
+            responsedAt: model?.responsedAt,
         });
     }
 

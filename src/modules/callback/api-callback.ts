@@ -10,9 +10,9 @@
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _log, _inf, _err, NextHandler, SearchQuery } from 'lemon-core';
-import { $T, AbstractCRUDController, MyManagerProxy } from '../../cores';
-import { Model, CallbackModel } from './model';
+import { $U, _log, _inf, _err, NextHandler, SearchQuery, $protocol, $slack } from 'lemon-core';
+import { $T, AbstractCRUDController, MyManagerProxy, onlyDefined } from '../../cores';
+import { Model, CallbackModel, CallbackRequest } from './model';
 import { CallbackModelManager } from './service';
 import { $trans, CallbackTransformer } from './transformer';
 import $LUT, { CallbackBody, CallbackView } from './views';
@@ -69,10 +69,10 @@ export class CallbackAPIController extends AbstractCRUDController<
     };
 
     /**
-     * 카테고리를 등록하는 API
+     * 콜백를 등록하는 API
      *
      * ```sh
-     * $ http POST ':8800/callback/0'
+     * $ http POST ':8800/callback/0' stereo= name=hello01
      * @override
      */
     public doPost: NextHandler<any, CallbackView, CallbackBody> = async (id, param, body, $ctx) => {
@@ -111,6 +111,79 @@ export class CallbackAPIController extends AbstractCRUDController<
 
             const $final = await _create($prx, $model);
             return this.modelAsView($final);
+        });
+    };
+
+    /**
+     * 콜백 요청을 시작함.
+     * 1. 콜백 요청 시작
+     * 2. 콜백 요청에 대한 응답을 받음.
+     * 3. 콜백 핸들러에 요청 전달함.
+     *
+     * ```sh
+     * $ http POST ':8800/callback/0' stereo= name=hello01
+     * $ http POST ':8800/callback/1000001/request' service=lemon-hello-api type=hello id=echo 'body[name]=hello'
+     */
+    public doPostRequest: NextHandler = async (id, param, body: CallbackRequest, $ctx) => {
+        const errScope = `doPostRequest(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
+        param && _log(this.logNS, `> param =`, $U.json(param));
+        body && _log(this.logNS, `> body =`, $U.json(body));
+        id = id === '0' ? '' : $T.S2(id);
+
+        // STEP.0 validate parameter
+        const isLocal = $ctx?.domain === 'localhost';
+        const isProd = !!$T.BN(param?.prod, param?.prod === '' ? 1 : 1);
+        // if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
+        // if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
+
+        const _S2 = (name: string, required = false) => {
+            const s = $T.S2((body as any)?.[name]);
+            if (!s && required) throw new Error(`@body.${name} (string) is required - ${errScope}`);
+            return s;
+        };
+
+        //* runs in guarded proxy.
+        return this.service.guardProxy($ctx, async proxy => {
+            const model = await proxy.callback.get(id);
+            const [service, type, _id, cmd] = [_S2('service'), _S2('type'), _S2('id'), _S2('cmd', false)];
+            const target = `//${service}/${type}/${_id}` + (cmd ? `/${cmd}` : '');
+            const context = proxy.asNextContext(null, { domain: 'localhost' });
+            const callback = `callback/${model.id}/response`;
+            const $prot = $protocol(context, target, { isProd });
+            const qid = await $prot.enqueue(body.param, body.body, 'POST', callback, 5);
+            const $ups = onlyDefined<CallbackModel>({
+                target,
+                qid,
+            });
+            const $valid = await proxy.callback.validateModel($ups, model.id);
+            const $final = await proxy.callback.set(model.id, $valid);
+            return this.modelAsView($final);
+        });
+    };
+
+    /**
+     * 콜백 요청에 대한 응답처리
+     *
+     * ```sh
+     * $ http POST ':8800/callback/1000001/response' data=world
+     */
+    public doPostResponse: NextHandler = async (id, param, body, $ctx) => {
+        const errScope = `doPostResponse(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
+        param && _log(this.logNS, `> param =`, $U.json(param));
+        body && _log(this.logNS, `> body =`, $U.json(body));
+        id = id === '0' ? '' : $T.S2(id);
+
+        // STEP.0 validate parameter
+        // const isLocal = $ctx?.domain === 'localhost';
+        // if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
+        // if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
+
+        return this.service.guardProxy($ctx, async proxy => {
+            await $slack(`#callback/\`${id ?? ''}\` response`, { param, body, $ctx });
+            const model = await proxy.callback.get(id);
+            return this.modelAsView(model);
         });
     };
 

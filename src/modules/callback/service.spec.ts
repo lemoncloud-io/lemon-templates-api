@@ -45,7 +45,21 @@ describe('BackendProxy', () => {
         expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
 
         //* expected fields in designed model.
-        const expFields = ['name', 'hidden', 'optional', 'id'];
+        const expFields = [
+            'id',
+            'name',
+            'state',
+            'parentId',
+            'parent$',
+            'no',
+            'target',
+            'qid',
+            'request$',
+            'requestedAt',
+            'responsedAt',
+            'hidden',
+            'optional',
+        ];
 
         const $mgr = service.$callback;
         expect2(() => notInModel($mgr.FIELDS)).toEqual(expFields);

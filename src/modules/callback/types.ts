@@ -28,19 +28,32 @@ const $LUT = {
         callback: 'callback',
     },
     /**
-     * 카테고리의 종류
+     * 콜백의 종류
      */
     CallbackStereo: {
-        '': '',
+        '': 'initial',
         /** # means not to index */
         '#': '#',
+    },
+    /**
+     * 콜백의 상태
+     */
+    CallbackState: {
+        '': 'initial',
+        requested: 'requested',
+        responsed: 'responsed',
     },
 };
 
 /**
- * type: `MockStereo`
+ * type: `CallbackStereo`
  */
 export type CallbackStereo = keyof typeof $LUT.CallbackStereo;
+
+/**
+ * type: `CallbackState`
+ */
+export type CallbackState = keyof typeof $LUT.CallbackState;
 
 /** must export $LUT as default */
 export default $LUT;

@@ -9,9 +9,9 @@
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _inf, _log, _err } from 'lemon-core';
-import { $T, MyCoreProxy, MyManagerProxy } from '../../cores';
-import { CallbackHead, CallbackModel, ModelType } from './model';
+import { $U, _inf, _log, _err, $protocol, GETERR } from 'lemon-core';
+import { $T, MyCoreProxy, MyManagerProxy, onlyDefined } from '../../cores';
+import { CallbackHead, CallbackModel, CallbackRequest, ModelType } from './model';
 import { BackendService, CallbackModelManager } from './service';
 import { $trans, CallbackTransformer } from './transformer';
 const NS = $U.NS('callback', 'green'); // NAMESPACE TO BE PRINTED.
@@ -72,5 +72,75 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
         if (isCreate && validated?.name == '!') throw new Error(`.name[${validated.name}] is invalid - ${errScope}`);
 
         return validated as T;
+    }
+
+    /**
+     * make request to target api.
+     */
+    public async doRequest(
+        request: CallbackRequest,
+        options?: {
+            parent?: CallbackModel;
+            isProd?: boolean;
+            current?: number;
+            isSimul?: boolean;
+        },
+    ): Promise<CallbackModel> {
+        const errScope = `doRequest(${request?.service ?? '-'}/${request?.id ?? '-'})`;
+        const parent = options?.parent ?? null;
+        const isProd = options?.isProd;
+        const isSimul = options?.isSimul;
+        const current = options?.current ?? this.$mgr.storage.storage.getTime();
+
+        // STEP.0 validate parameters.
+        if (!request) throw new Error(`@request (object) is required - ${errScope}`);
+        // if (!parent?.id) throw new Error(`@model.id (string) is required - ${errScope}`);
+
+        // STEP.1 build target url.
+        const _S2 = (name: string, required = true) => {
+            const s = $T.S2((request as any)?.[name]);
+            if (!s && required) throw new Error(`@request.${name} (string) is required - ${errScope}`);
+            return s;
+        };
+        const [service, type, _id, cmd] = [_S2('service'), _S2('type'), _S2('id'), _S2('cmd', false)];
+        const target = `//${service}/${type}/${_id}` + (cmd ? `/${cmd}` : '');
+
+        // STEP.2 prepare model to track
+        const _modelId = async (): Promise<{ id: string; no?: number }> => {
+            if (!parent) {
+                const id = await this.nextId();
+                return { id };
+            }
+            const { no } = await this.inc(parent?.id, { no: 1 });
+            const id = [parent?.id, no].join(':');
+            return { id, no };
+        };
+        const { id: modelId, no } = await _modelId();
+        const $model = onlyDefined<CallbackModel>({
+            id: modelId,
+            no,
+            target,
+            stereo: parent.stereo ?? '#',
+            name: parent.name,
+            parentId: parent ? parent?.id : undefined,
+            parent$: parent ? this.trans.asHead(parent) : undefined,
+            request$: request,
+        });
+        const $valid = await this.validateModel($model, null);
+        const $final = await this.makeModel($valid, false);
+        const $ups = onlyDefined<CallbackModel>({});
+        try {
+            if (isSimul) throw new Error(`! in simulate mode - ${errScope}`);
+            const context = this.proxy.asNextContext(null, { domain: 'localhost' });
+            const callback = `callback/${parent.id}/response`;
+            const $prot = $protocol(context, target, { isProd });
+            const qid = await $prot.enqueue(request.param, request.body, 'POST', callback, 5);
+            $ups.qid = qid;
+            $ups.requestedAt = current;
+        } catch (e) {
+            _err(NS, `! err =`, e);
+            $ups.error = GETERR(e);
+        }
+        return this.set($final.id, $ups);
     }
 }

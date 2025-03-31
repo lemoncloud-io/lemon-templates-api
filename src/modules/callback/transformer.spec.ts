@@ -49,11 +49,28 @@ describe('transformer', () => {
             name: '아파트',
             hidden: 0,
             optional: 1,
+            state: 'requested',
+            parentId: 'parentId',
+            parent$: {},
+            no: 1,
+            target: 'target',
+            qid: 'qid',
+
+            request$: {},
+            requestedAt: 0,
+            responsedAt: 0,
         };
         const $imune: CallbackModel = {
-            // id: undefined,
             stereo: undefined,
-            // name: undefined,
+            no: undefined,
+            target: undefined,
+            qid: undefined,
+            state: undefined,
+            parentId: undefined,
+            parent$: undefined,
+            request$: undefined,
+            requestedAt: undefined,
+            responsedAt: undefined,
         };
         expect2(() => checkAllKeys($model, FIELD)).toEqual([]);
         expect2(() => trans.modelAsView($model), 'hidden,optional').toEqual({
@@ -70,6 +87,15 @@ describe('transformer', () => {
         // check ONLY in view
         expect2(() => viewOnly(trans, $model), '').toEqual({
             // stereo: $model.stereo,
+            no: $model.no,
+            target: $model.target,
+            qid: $model.qid,
+            state: $model.state,
+            parentId: $model.parentId,
+            parent$: $model.parent$,
+            request$: $model.request$,
+            requestedAt: $model.requestedAt,
+            responsedAt: $model.responsedAt,
         });
 
         //* loop transform
