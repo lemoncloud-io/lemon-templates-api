@@ -79,7 +79,7 @@ export class CallbackAPIController extends AbstractCRUDController<
 
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         return this.service.guardProxy($ctx, async proxy => {
-            const model = await proxy.callback.get(id, true);
+            const model = await proxy.callback.findModel(id);
             if (!model) throw new Error(`@id[${id}] is invalid - doGetDetail(${this.type()}/${id})`);
             const $trans = proxy.callback.trans;
             return $trans?.modelAsView(model);
@@ -185,7 +185,7 @@ export class CallbackAPIController extends AbstractCRUDController<
         // if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
         return this.service.guardProxy($ctx, async proxy => {
-            const model = await proxy.callback.get(id, true);
+            const model = await proxy.callback.findModel(id);
             const $final = await proxy.callback.doResponse(model, body);
             return this.modelAsView($final);
         });

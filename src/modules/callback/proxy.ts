@@ -41,11 +41,9 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
 
     /**
      * get the model by id.
-     *
-     * @override
      */
-    public async get(id: string, defaultOrThrow?: boolean | CallbackModel): Promise<CallbackModel> {
-        const model = await super.get(id, defaultOrThrow);
+    public async findModel(id: string, defaultOrThrow?: boolean | CallbackModel): Promise<CallbackModel> {
+        const model = await this.get(id, defaultOrThrow ?? true);
         if (!model) return model;
         const meta = model?.meta;
         if (typeof meta === 'string' && meta.startsWith('{') && meta.endsWith('}')) {
@@ -210,7 +208,7 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
         const $ups = onlyDefined<CallbackModel>({
             responsedAt: current,
             state: 'responsed',
-            error: undefined,
+            error: '',
         });
         try {
             if (isSimul) throw new Error(`! in simulate mode(res) - ${errScope}`);
