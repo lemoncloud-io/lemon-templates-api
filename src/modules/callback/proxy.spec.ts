@@ -9,7 +9,7 @@
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 import { loadProfile } from 'lemon-core/dist/environ';
-import { expect2, _it, GETERR, $info } from 'lemon-core';
+import { expect2, _it, GETERR, $info, $U } from 'lemon-core';
 import { CallbackModel, CallbackRequest } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
@@ -128,8 +128,12 @@ describe('BackendProxy', () => {
             parent$: { id: '1000001', name: 'parent', stereo: '' },
             target: '//lemon-hello-api/hello/echo',
             error: '! in simulate mode(req) - doRequest(echo)',
-            $request: { ...req },
             handler: 'echo',
+            clientIp: '222.0.0.192',
+            domain: 'oauth.lemoncloud.io',
+            userAgent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_2 like Mac OS X) Mobile/15E148',
+            meta: $U.json(req),
+            // $request: { ...req },
         };
         expect2(await $prxy.doRequest('echo', {}, { isSimul: true }).catch(GETERR)).toEqual(
             '@request.service (string) is required - doRequest(echo)',

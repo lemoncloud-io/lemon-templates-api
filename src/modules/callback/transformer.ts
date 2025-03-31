@@ -41,6 +41,10 @@ export class CallbackTransformer extends AbstractTransformer<CallbackModel, Call
             $request: model?.$request,
             requestedAt: model?.requestedAt,
             responsedAt: model?.responsedAt,
+
+            domain: model?.domain,
+            clientIp: model?.clientIp,
+            userAgent: model?.userAgent,
         });
     }
 

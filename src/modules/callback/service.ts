@@ -76,10 +76,11 @@ export class CallbackModelManager extends MyCoreManager<CallbackModel, ModelType
     }
 
     /** register callback handler */
-    public registerCallback(name: string, handler: CallbackHandler) {
+    public registerCallback(name: string, handler: CallbackHandler, options?: { force?: boolean }) {
         const errScope = `registerHandler(${this.type}/${name ?? ''})`;
+        const force = options?.force ?? false;
         if (!handler) throw new Error(`@handler(function) is required - ${errScope}`);
-        if (this._callback.has(name)) throw new Error(`@name[${name}] already registered - ${errScope}`);
+        if (!force && this._callback.has(name)) throw new Error(`@name[${name}] already registered - ${errScope}`);
         this._callback.set(name, handler);
     }
 

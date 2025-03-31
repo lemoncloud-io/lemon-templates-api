@@ -58,6 +58,10 @@ describe('transformer', () => {
             handler: 'handler',
             result: 'result',
 
+            domain: 'domain',
+            clientIp: 'clientIp',
+            userAgent: 'userAgent',
+
             $request: {},
             requestedAt: 0,
             responsedAt: 0,
@@ -75,6 +79,9 @@ describe('transformer', () => {
             $request: undefined,
             requestedAt: undefined,
             responsedAt: undefined,
+            domain: undefined,
+            clientIp: undefined,
+            userAgent: undefined,
         };
         expect2(() => checkAllKeys($model, FIELD)).toEqual([]);
         expect2(() => trans.modelAsView($model), 'hidden,optional').toEqual({
@@ -102,6 +109,9 @@ describe('transformer', () => {
             $request: $model.$request,
             requestedAt: $model.requestedAt,
             responsedAt: $model.responsedAt,
+            domain: $model.domain,
+            clientIp: $model.clientIp,
+            userAgent: $model.userAgent,
         });
 
         //* loop transform

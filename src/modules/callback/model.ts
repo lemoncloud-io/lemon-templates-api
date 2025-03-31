@@ -71,6 +71,13 @@ export interface CallbackModel extends Model, CallbackHead {
     /** name of callback */
     name?: string;
 
+    /** domain of origin context */
+    domain?: string;
+    /** client-ip requested */
+    clientIp?: string;
+    /** user-agent requested */
+    userAgent?: string;
+
     /** state of callback */
     state?: CallbackState;
 

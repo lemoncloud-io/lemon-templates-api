@@ -48,6 +48,9 @@ describe('BackendProxy', () => {
         const expFields = [
             'id',
             'name',
+            'domain',
+            'clientIp',
+            'userAgent',
             'state',
             'parentId',
             'parent$',

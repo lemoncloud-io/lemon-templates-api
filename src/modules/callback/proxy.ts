@@ -159,12 +159,15 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
             id: modelId,
             no,
             target,
-            stereo: parent?.stereo ?? '#',
+            stereo: parent?.stereo ?? '',
             name: parent?.name ?? `POST ${path}`,
             parentId: parent ? parent?.id : undefined,
             parent$: parent ? this.trans.asHead(parent) : undefined,
             $request: request,
             handler,
+            domain: this.proxy.context?.domain,
+            clientIp: this.proxy.context?.clientIp,
+            userAgent: this.proxy.context?.userAgent,
         });
         const $valid = await this.validateModel($model, null);
         const $final = await this.makeModel($valid, false);
