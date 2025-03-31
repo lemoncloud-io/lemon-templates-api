@@ -40,6 +40,27 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
     }
 
     /**
+     * get the model by id.
+     *
+     * @override
+     */
+    public async get(id: string, defaultOrThrow?: boolean | CallbackModel): Promise<CallbackModel> {
+        const model = await super.get(id, defaultOrThrow);
+        if (!model) return model;
+        const meta = model?.meta;
+        if (typeof meta === 'string' && meta.startsWith('{') && meta.endsWith('}')) {
+            try {
+                const $request: CallbackRequest = JSON.parse(meta);
+                return onlyDefined({ ...model, $request, meta: undefined });
+            } catch (e) {
+                _err(NS, `! err =`, e);
+                model.error = GETERR(e);
+            }
+        }
+        return model;
+    }
+
+    /**
      * update the model-head if id has changed.
      *
      * @param $new the new model to update.
@@ -71,13 +92,29 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
         if (validated?.name == '#') throw new Error(`.name[${validated.name}] is invalid - ${errScope}`);
         if (isCreate && validated?.name == '!') throw new Error(`.name[${validated.name}] is invalid - ${errScope}`);
 
+        //* serialize the `$request` to meta JSON string.
+        if (validated?.$request !== undefined) {
+            if (validated.$request) {
+                validated.meta = $U.json(validated.$request);
+            } else {
+                validated.meta = '';
+            }
+        }
+
         return validated as T;
     }
 
     /**
      * make request to target api.
+     *
+     * **[Usage]**
+     * 1. register handler.
+     *  see `service.callback.registerCallback('some', fx)`
+     * 2. call `doRequest('some', $request)`
+     * 3. wait for response via callback handler.
      */
     public async doRequest(
+        handler: string,
         request: CallbackRequest,
         options?: {
             parent?: CallbackModel;
@@ -86,15 +123,16 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
             isSimul?: boolean;
         },
     ): Promise<CallbackModel> {
-        const errScope = `doRequest(${request?.service ?? '-'}/${request?.id ?? '-'})`;
         const parent = options?.parent ?? null;
-        const isProd = options?.isProd;
+        const errScope = `doRequest(${handler ?? '-'})`;
+        const isProd = options?.isProd ?? false;
         const isSimul = options?.isSimul;
         const current = options?.current ?? this.$mgr.storage.storage.getTime();
 
         // STEP.0 validate parameters.
+        if (!handler) throw new Error(`@handler (string) is required - ${errScope}`);
         if (!request) throw new Error(`@request (object) is required - ${errScope}`);
-        // if (!parent?.id) throw new Error(`@model.id (string) is required - ${errScope}`);
+        if (!this.$mgr.hasCallback(handler)) throw new Error(`@handler[${handler}] not registered - ${errScope}`);
 
         // STEP.1 build target url.
         const _S2 = (name: string, required = true) => {
@@ -103,11 +141,12 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
             return s;
         };
         const [service, type, _id, cmd] = [_S2('service'), _S2('type'), _S2('id'), _S2('cmd', false)];
-        const target = `//${service}/${type}/${_id}` + (cmd ? `/${cmd}` : '');
+        const path = `/${type}/${_id}` + (cmd ? `/${cmd}` : '');
+        const target = `//${service}${path}`;
 
         // STEP.2 prepare model to track
         const _modelId = async (): Promise<{ id: string; no?: number }> => {
-            if (!parent) {
+            if (!parent?.id) {
                 const id = await this.nextId();
                 return { id };
             }
@@ -120,27 +159,67 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
             id: modelId,
             no,
             target,
-            stereo: parent.stereo ?? '#',
-            name: parent.name,
+            stereo: parent?.stereo ?? '#',
+            name: parent?.name ?? `POST ${path}`,
             parentId: parent ? parent?.id : undefined,
             parent$: parent ? this.trans.asHead(parent) : undefined,
-            request$: request,
+            $request: request,
+            handler,
         });
         const $valid = await this.validateModel($model, null);
         const $final = await this.makeModel($valid, false);
         const $ups = onlyDefined<CallbackModel>({});
         try {
-            if (isSimul) throw new Error(`! in simulate mode - ${errScope}`);
+            if (isSimul) throw new Error(`! in simulate mode(req) - ${errScope}`);
             const context = this.proxy.asNextContext(null, { domain: 'localhost' });
             const callback = `callback/${parent.id}/response`;
-            const $prot = $protocol(context, target, { isProd });
+            const $prot = $protocol(context, target, { isProd: isProd ? true : undefined });
             const qid = await $prot.enqueue(request.param, request.body, 'POST', callback, 5);
             $ups.qid = qid;
             $ups.requestedAt = current;
+            $ups.state = 'requested';
         } catch (e) {
             _err(NS, `! err =`, e);
             $ups.error = GETERR(e);
         }
         return this.set($final.id, $ups);
+    }
+
+    /**
+     * make request to target api.
+     */
+    public async doResponse(
+        model: CallbackModel,
+        body: any,
+        options?: {
+            current?: number;
+            isSimul?: boolean;
+        },
+    ): Promise<CallbackModel> {
+        const errScope = `doResponse(${model?.id ?? '-'})`;
+        const isSimul = options?.isSimul;
+        const current = options?.current ?? this.$mgr.storage.storage.getTime();
+        if (!model?.id) throw new Error(`@model (object) is required - ${errScope}`);
+
+        const handler = model.handler;
+        if (!this.$mgr.hasCallback(handler)) throw new Error(`@handler[${handler}] not registered - ${errScope}`);
+
+        // STEP.1 validate parameters.
+        const $ups = onlyDefined<CallbackModel>({
+            responsedAt: current,
+            state: 'responsed',
+            error: undefined,
+        });
+        try {
+            if (isSimul) throw new Error(`! in simulate mode(res) - ${errScope}`);
+            const result = await this.$mgr.doCallback(handler, this.proxy, body, model);
+            $ups.result = result;
+        } catch (e) {
+            _err(NS, `! err =`, e);
+            $ups.error = GETERR(e);
+        }
+
+        // STEP.3 update the model
+        return this.set(model.id, $ups);
     }
 }

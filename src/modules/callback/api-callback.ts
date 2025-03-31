@@ -121,8 +121,11 @@ export class CallbackAPIController extends AbstractCRUDController<
      * 3. 콜백 핸들러에 요청 전달함.
      *
      * ```sh
+     * # make callback-model
      * $ http POST ':8800/callback/0' stereo= name=hello01
-     * $ http POST ':8800/callback/1000001/request' service=lemon-hello-api type=hello id=echo 'body[name]=hello'
+     *
+     * # make callback-request via hello-api
+     * $ http POST ':8800/callback/echo/request?prod' service=lemon-hello-api type=hello id=echo 'body[name]=hello'
      */
     public doPostRequest: NextHandler = async (id, param, body: CallbackRequest, $ctx) => {
         const errScope = `doPostRequest(${this.type()}/${id ?? ''})`;
@@ -133,32 +136,15 @@ export class CallbackAPIController extends AbstractCRUDController<
 
         // STEP.0 validate parameter
         const isLocal = $ctx?.domain === 'localhost';
-        const isProd = !!$T.BN(param?.prod, param?.prod === '' ? 1 : 1);
-        // if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
-        // if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
-
-        const _S2 = (name: string, required = false) => {
-            const s = $T.S2((body as any)?.[name]);
-            if (!s && required) throw new Error(`@body.${name} (string) is required - ${errScope}`);
-            return s;
-        };
+        const isProd = !!$T.BN(param?.prod, param?.prod === '' ? 1 : 0);
+        const isSimul = !!$T.BN(param?.simul, param?.simul === '' ? 1 : 0);
+        if (id && !isLocal) throw new Error(`@id[${id}] is invalid - ${errScope}`);
+        if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
         //* runs in guarded proxy.
         return this.service.guardProxy($ctx, async proxy => {
-            const model = await proxy.callback.get(id);
-            const [service, type, _id, cmd] = [_S2('service'), _S2('type'), _S2('id'), _S2('cmd', false)];
-            const target = `//${service}/${type}/${_id}` + (cmd ? `/${cmd}` : '');
-            const context = proxy.asNextContext(null, { domain: 'localhost' });
-            const callback = `callback/${model.id}/response`;
-            const $prot = $protocol(context, target, { isProd });
-            const qid = await $prot.enqueue(body.param, body.body, 'POST', callback, 5);
-            const $ups = onlyDefined<CallbackModel>({
-                target,
-                qid,
-            });
-            const $valid = await proxy.callback.validateModel($ups, model.id);
-            const $final = await proxy.callback.set(model.id, $valid);
-            return this.modelAsView($final);
+            const $model = await proxy.callback.doRequest(id, body, { isProd, isSimul });
+            return this.modelAsView($model);
         });
     };
 
@@ -176,14 +162,14 @@ export class CallbackAPIController extends AbstractCRUDController<
         id = id === '0' ? '' : $T.S2(id);
 
         // STEP.0 validate parameter
-        // const isLocal = $ctx?.domain === 'localhost';
+        const isLocal = $ctx?.domain === 'localhost';
         // if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
         // if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
         return this.service.guardProxy($ctx, async proxy => {
-            await $slack(`#callback/\`${id ?? ''}\` response`, { param, body, $ctx });
             const model = await proxy.callback.get(id);
-            return this.modelAsView(model);
+            const $final = await proxy.callback.doResponse(model, body);
+            return this.modelAsView($final);
         });
     };
 

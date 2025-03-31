@@ -86,13 +86,18 @@ export interface CallbackModel extends Model, CallbackHead {
     target?: string;
     /** queue-id */
     qid?: string;
+    /** callback handler */
+    handler?: string;
+    /** callback result */
+    result?: string;
 
-    /** partial of request-body */
-    request$?: CallbackRequest;
     /** time of requested */
     requestedAt?: number;
     /** time of responsed */
     responsedAt?: number;
+
+    /** request-info (will be exchanged with `.meta`) */
+    readonly $request?: CallbackRequest;
 
     /**
      * hidden(숨김) flag

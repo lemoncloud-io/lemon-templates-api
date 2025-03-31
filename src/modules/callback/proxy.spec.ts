@@ -14,7 +14,6 @@ import { CallbackModel, CallbackRequest } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';
-import { $trans } from './transformer';
 
 /**
  * make service and proxy
@@ -90,7 +89,7 @@ describe('BackendProxy', () => {
 
     //* test of basic CallbackManagerProxy
     it('should pass basic CallbackManagerProxy.doRequest', async () => {
-        const { proxy, _ts } = instance('authed');
+        const { proxy, _ts, current } = instance('authed');
         const $prxy = proxy.callback;
 
         const body: CallbackModel = {
@@ -104,14 +103,14 @@ describe('BackendProxy', () => {
             name: body.name,
         });
 
-        // expect2(await $prxy.doRequest(null, null).catch(GETERR)).toEqual(
-        //     '@model.id (string) is required - doRequest(callback/)',
-        // );
-        // expect2(await $prxy.doRequest({}, null).catch(GETERR)).toEqual(
-        //     '@model.id (string) is required - doRequest(callback/)',
-        // );
         expect2(await $prxy.doRequest(null, null).catch(GETERR)).toEqual(
-            '@request (object) is required - doRequest(-/-)',
+            '@handler (string) is required - doRequest(-)',
+        );
+        expect2(await $prxy.doRequest('echo', null).catch(GETERR)).toEqual(
+            '@request (object) is required - doRequest(echo)',
+        );
+        expect2(await $prxy.doRequest('dumm', {}).catch(GETERR)).toEqual(
+            '@handler[dumm] not registered - doRequest(dumm)',
         );
 
         const req: CallbackRequest = {
@@ -120,10 +119,7 @@ describe('BackendProxy', () => {
             id: 'echo',
             // cmd: 'cmd',
         };
-        expect2(await $prxy.doRequest({}, { isSimul: true }).catch(GETERR)).toEqual(
-            '@request.service (string) is required - doRequest(-/-)',
-        );
-        expect2(await $prxy.doRequest({ ...req }, { parent: model, isSimul: true }).catch(GETERR)).toEqual({
+        const expected1 = {
             ..._ts('1000001:1', 'callback'),
             stereo: '',
             name: 'parent',
@@ -131,8 +127,23 @@ describe('BackendProxy', () => {
             parentId: '1000001',
             parent$: { id: '1000001', name: 'parent', stereo: '' },
             target: '//lemon-hello-api/hello/echo',
-            request$: { ...req },
-            error: '! in simulate mode - doRequest(lemon-hello-api/echo)',
+            error: '! in simulate mode(req) - doRequest(echo)',
+            $request: { ...req },
+            handler: 'echo',
+        };
+        expect2(await $prxy.doRequest('echo', {}, { isSimul: true }).catch(GETERR)).toEqual(
+            '@request.service (string) is required - doRequest(echo)',
+        );
+        expect2(await $prxy.doRequest('echo', { ...req }, { parent: model, isSimul: true }).catch(GETERR)).toEqual({
+            ...expected1,
+        });
+
+        const $cb1 = await $prxy.get('1000001:1');
+        expect2(await $prxy.doResponse($cb1, { name: 'world' }, { isSimul: true }).catch(GETERR)).toEqual({
+            ...expected1,
+            error: '! in simulate mode(res) - doResponse(1000001:1)',
+            state: 'responsed',
+            responsedAt: current,
         });
     });
 });

@@ -9,8 +9,8 @@
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _inf, _log, _err, CoreModel } from 'lemon-core';
-import { $FIELD, CallbackModel, ModelType } from './model';
+import { $U, _inf, _log, _err, CoreModel, Body, $slack } from 'lemon-core';
+import { $FIELD, CallbackModel, CallbackRequest, ModelType } from './model';
 import { MyCoreManager, MyCoreService } from '../../cores';
 import { SearchService } from '../search/service';
 import { BackendProxy } from './proxy';
@@ -28,12 +28,59 @@ export interface BackendService<T extends ModelType = any> extends MyCoreService
 }
 
 /**
+ * callback handler.
+ */
+export interface CallbackHandler<Res extends Body = Body, Req = CallbackRequest> {
+    /** process to handle the response via callback */
+    (proxy: BackendProxy, $res: Res, $req: Req, $cb?: CallbackModel): Promise<string>;
+}
+
+/**
  * class: `CallbackModelManager`
  * - manager for callback-model.
  */
 export class CallbackModelManager extends MyCoreManager<CallbackModel, ModelType, BackendService> {
+    /** handler map */
+    public readonly _callback: Map<string, CallbackHandler> = new Map();
+
+    /** default contructor */
     public constructor(parent: BackendService) {
         super('callback', parent, $FIELD.callback);
+
+        /** report into slack */
+        this.registerCallback('echo', async (proxy, $res, $req, model) => {
+            _inf(NS, `! result =`, $U.json($res));
+            const id = model?.id;
+            const param = $req?.param;
+            const body = $req?.body;
+            const $ctx = proxy.context;
+            await $slack(`#callback/\`${id ?? ''}\` echo`, { param, body, $ctx, $res });
+            return 'ok';
+        });
+    }
+
+    /** check if has callback handler */
+    public hasCallback(name: string) {
+        return this._callback.has(name);
+    }
+
+    /** process the calblack */
+    public async doCallback(name: string, proxy: BackendProxy, $res: Body, model?: CallbackModel) {
+        const errScope = `doCallback(${this.type}/${model?.id ?? ''})`;
+        const handler = this._callback.get(name);
+        if (typeof handler !== 'function') throw new Error(`@name[${name}] not registered - ${errScope}`);
+        const $req = model?.$request;
+        const result = await handler(proxy, $res, $req, model);
+        if (result && typeof result !== 'string') throw new Error(`@result[${result}] is invalid - ${errScope}`);
+        return result;
+    }
+
+    /** register callback handler */
+    public registerCallback(name: string, handler: CallbackHandler) {
+        const errScope = `registerHandler(${this.type}/${name ?? ''})`;
+        if (!handler) throw new Error(`@handler(function) is required - ${errScope}`);
+        if (this._callback.has(name)) throw new Error(`@name[${name}] already registered - ${errScope}`);
+        this._callback.set(name, handler);
     }
 
     /**
