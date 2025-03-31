@@ -69,6 +69,24 @@ export class CallbackAPIController extends AbstractCRUDController<
     };
 
     /**
+     *
+     * ```sh
+     * $ http ':8800/callback/1000003/detail'
+     */
+    public doGetDetail: NextHandler = async (id, param, body, $ctx) => {
+        _log(NS, `doGetDetail(${this.type()}/${id})..`);
+        $ctx && _log(NS, `> context =`, $U.json($ctx));
+
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        return this.service.guardProxy($ctx, async proxy => {
+            const model = await proxy.callback.get(id, true);
+            if (!model) throw new Error(`@id[${id}] is invalid - doGetDetail(${this.type()}/${id})`);
+            const $trans = proxy.callback.trans;
+            return $trans?.modelAsView(model);
+        });
+    };
+
+    /**
      * 콜백를 등록하는 API
      *
      * ```sh
@@ -167,7 +185,7 @@ export class CallbackAPIController extends AbstractCRUDController<
         // if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
         return this.service.guardProxy($ctx, async proxy => {
-            const model = await proxy.callback.get(id);
+            const model = await proxy.callback.get(id, true);
             const $final = await proxy.callback.doResponse(model, body);
             return this.modelAsView($final);
         });

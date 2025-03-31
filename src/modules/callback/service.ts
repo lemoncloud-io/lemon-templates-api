@@ -55,7 +55,7 @@ export class CallbackModelManager extends MyCoreManager<CallbackModel, ModelType
             const body = $req?.body;
             const $ctx = proxy.context;
             await $slack(`#callback/\`${id ?? ''}\` echo`, { param, body, $ctx, $res });
-            return 'ok';
+            return 'echo/done';
         });
     }
 

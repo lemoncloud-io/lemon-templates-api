@@ -9,7 +9,7 @@
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _inf, _log, _err, $protocol, GETERR } from 'lemon-core';
+import { $U, _inf, _log, _err, $protocol, GETERR, doReportError } from 'lemon-core';
 import { $T, MyCoreProxy, MyManagerProxy, onlyDefined } from '../../cores';
 import { CallbackHead, CallbackModel, CallbackRequest, ModelType } from './model';
 import { BackendService, CallbackModelManager } from './service';
@@ -56,6 +56,8 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
                 _err(NS, `! err =`, e);
                 model.error = GETERR(e);
             }
+        } else if (typeof meta === 'object') {
+            return onlyDefined({ ...model, $request: meta, meta: undefined });
         }
         return model;
     }
@@ -172,7 +174,7 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
         try {
             if (isSimul) throw new Error(`! in simulate mode(req) - ${errScope}`);
             const context = this.proxy.asNextContext(null, { domain: 'localhost' });
-            const callback = `callback/${parent.id}/response`;
+            const callback = `callback/${modelId}/response`;
             const $prot = $protocol(context, target, { isProd: isProd ? true : undefined });
             const qid = await $prot.enqueue(request.param, request.body, 'POST', callback, 5);
             $ups.qid = qid;
@@ -216,7 +218,12 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
             $ups.result = result;
         } catch (e) {
             _err(NS, `! err =`, e);
-            $ups.error = GETERR(e);
+            if (isSimul) {
+                $ups.error = GETERR(e);
+            } else {
+                const $ctx = this.proxy.asNextContext();
+                $ups.error = await doReportError(e, $ctx, null, { model, body }).then(() => GETERR(e));
+            }
         }
 
         // STEP.3 update the model

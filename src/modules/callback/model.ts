@@ -98,6 +98,8 @@ export interface CallbackModel extends Model, CallbackHead {
 
     /** request-info (will be exchanged with `.meta`) */
     readonly $request?: CallbackRequest;
+    /** request meta in json */
+    meta?: string;
 
     /**
      * hidden(숨김) flag
