@@ -6,6 +6,7 @@
  * @date        2022-11-01 optimized w/ `commons`
  * @date        2024-06-24 optimized `parseListParam()`
  * @date        2025-01-03 optimized `parseListParam()` w/ `offset`
+ * @date        2025-02-25 optimized `parsePaginateParam()` w/ `noLimit`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
@@ -55,12 +56,17 @@ export function parsePaginateParam(
         offset: param?.offset !== undefined ? _T.N(param?.offset, 0) : undefined,
     });
     const noLimit = options?.noLimit ?? res.limit == -1;
+    const MAX_LIMIT = $T.N($core.$U.env('MAX_LIMIT', '2000'));
+    if (MAX_LIMIT <= 0) throw new Error(`@env.MAX_LIMIT[${MAX_LIMIT}] (number) is invalid!`);
 
     //WARN! - limit the max result to 2000.
-    if (noLimit) {
+    if (!noLimit) {
         const { limit, page } = res;
-        const maxPage = limit > 0 ? Math.floor(Math.min(limit * page, 2000) / limit) : 2000;
+        const maxPage = limit > 0 ? Math.floor(Math.min(limit * page, MAX_LIMIT) / limit) : MAX_LIMIT;
         res.page = Math.min(page, maxPage);
+    } else {
+        res.limit = MAX_LIMIT;
+        res.page = 0;
     }
 
     //* returns.
@@ -95,7 +101,8 @@ export const $T = {
             ? _T.N(v, def)
             : undefined,
     /** convert to `float` w/ fixed(3) */
-    F: (n: number) => (typeof n === 'string' || typeof n === 'number' ? parseFloat(Number(n).toFixed(3)) : undefined),
+    F: (n: number | string) =>
+        typeof n === 'string' || typeof n === 'number' ? parseFloat(Number(n).toFixed(3)) : undefined,
     /** cleanup if in undefined */
     clear: <T extends object>(N: T): T =>
         Object.entries(N).reduce((N, [k, v]) => {
