@@ -26,12 +26,14 @@ const $cron = $lambda.cron;
 // Loading API Service of NextDecoder
 import hello from './api/hello-api';
 import crons from './api/crons-api';
+import callback from './modules/callback/api-callback';
 import search from './modules/search/api-search';
 import mocks from './modules/mock/api-mocks';
 import tests from './modules/mock/api-tests';
 
 //! register sub handlers, and listeners.
 $web.addController(hello);
+$web.addController(callback);
 $web.addController(search);
 $web.addController(crons);
 $web.addController(tests);

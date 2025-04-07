@@ -8,10 +8,12 @@
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _inf, _log, _err, NextContext } from 'lemon-core';
+import { $U, _inf, _log, _err, NextContext } from 'lemon-core';
+import { $T } from '../cores/commons';
 import { ModelType } from './backend-types';
 import { BackendService } from './backend-service';
 import { MyCoreProxy } from '../cores/abstract-services';
+import { CallbackManagerProxy } from '../modules/callback/proxy';
 import { MockManagerProxy, TestManagerProxy } from '../modules/mock/proxy';
 const NS = $U.NS('backend', 'blue'); // NAMESPACE TO BE PRINTED.
 
@@ -20,6 +22,7 @@ const NS = $U.NS('backend', 'blue'); // NAMESPACE TO BE PRINTED.
  * - manager proxy to handle micro-transaction.
  */
 export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
+    public readonly callback: CallbackManagerProxy;
     public readonly test: TestManagerProxy;
     public readonly mock: MockManagerProxy;
 
@@ -32,6 +35,7 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
         super(context, service);
         _log(NS, `BackendProxy(${service.NS})..`);
 
+        this.callback = new CallbackManagerProxy(this, service.$callback);
         this.test = new TestManagerProxy(this, service.$test);
         this.mock = new MockManagerProxy(this, service.$mock);
     }

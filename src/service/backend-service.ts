@@ -7,13 +7,14 @@
  * @copyright (C) 2021 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $T, $U, _log, _inf, _err } from 'lemon-core';
+import { $U, _log, _inf, _err } from 'lemon-core';
 import { NextContext, NextIdentityAccess, $protocol, getIdentityId } from 'lemon-core';
 import { Model } from './backend-model';
 import { ModelType } from './backend-types';
 import { BackendProxy } from './backend-proxy';
 import { $ES6, MyCoreService } from '../cores/abstract-services';
 import { SearchService, Elastic6Option } from '../modules/search/service';
+import { CallbackModelManager } from '../modules/callback/service';
 import { MockModelManager, TestModelManager } from '../modules/mock/service';
 const NS = $U.NS('BACK', 'magenta'); // NAMESPACE TO BE PRINTED.
 export { ModelType };
@@ -23,6 +24,7 @@ export { ModelType };
  */
 export class BackendService extends MyCoreService<Model, ModelType, BackendProxy> {
     // model managers
+    public readonly $callback: CallbackModelManager;
     public readonly $test: TestModelManager;
     public readonly $mock: MockModelManager;
 
@@ -39,6 +41,7 @@ export class BackendService extends MyCoreService<Model, ModelType, BackendProxy
         _log(NS, `BackendService(${this.tableName || ''}, ${this.NS || ''})...`);
 
         // create model managers
+        this.$callback = new CallbackModelManager(this);
         this.$test = new TestModelManager(this);
         this.$mock = new MockModelManager(this);
 
