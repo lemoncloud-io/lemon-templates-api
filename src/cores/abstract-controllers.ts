@@ -22,6 +22,7 @@
  * @date        2023-09-15 optimized to use `hasCores` in `modelAsView()`
  * @date        2023-09-27 optimized `doList()` to parse param.
  * @date        2023-11-06 optimized `onAfterSave()` for post-processing.
+ * @date        2025-04-10 optimized `errScope` per each handler.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
@@ -257,7 +258,8 @@ export abstract class AbstractCRUDController<
         body,
         $ctx,
     ) => {
-        _log(this.logNS, `doList(${id}) ...`);
+        const errScope = `doList(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
         param && _log(this.logNS, `> param =`, $U.json(param));
         body && _log(this.logNS, `> body =`, $U.json(body));
 
@@ -296,13 +298,14 @@ export abstract class AbstractCRUDController<
         body,
         $ctx,
     ) => {
-        _log(this.logNS, `doGetList(${id}) ...`);
+        const errScope = `doGetList(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
         param && _log(this.logNS, `> param =`, $U.json(param));
         body && _log(this.logNS, `> body =`, $U.json(body));
         id = id === '0' ? '' : $T.S2(id).trim();
 
         // STEP.0 validate paramters.
-        if (!id) throw new Error(`@id (string) is required!`);
+        if (!id) throw new Error(`@id (string) is required - ${errScope}`);
 
         // redirect to list()
         return this.doList(id, param, body, $ctx);
@@ -312,7 +315,8 @@ export abstract class AbstractCRUDController<
      * internal admin command
      */
     public doGetAdmin: NextHandler = async (id, param, body, $ctx) => {
-        _log(this.logNS, `doGetAdmin(${id})..`);
+        const errScope = `doGetAdmin(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
         $ctx && _log(this.logNS, `> context =`, $U.json($ctx));
 
         const save = $T.B(param?.save, param?.save === '' ? 1 : 0);
@@ -320,7 +324,7 @@ export abstract class AbstractCRUDController<
 
         const isLocal = $ctx?.domain === 'localhost';
         const hello = this.hello();
-        if (!isLocal && id) throw new Error(`403 NOT ALLOWED - only from local!`);
+        if (!isLocal && id) throw new Error(`403 NOT ALLOWED - only from local - ${errScope}`);
 
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         return this.service.guardProxy($ctx, async proxy => {
@@ -353,13 +357,14 @@ export abstract class AbstractCRUDController<
      * $ http ':8888/<typeName>/1'
      */
     public doGet: NextHandler<any, MyView> = async (id, param, body, $ctx) => {
-        _log(this.logNS, `doGet(${id}) ...`);
+        const errScope = `doGet(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
         param && _log(this.logNS, `> param =`, $U.json(param));
-        body && _log(this.logNS, `> body =`, $U.json(body));
+        // body && _log(this.logNS, `> body =`, $U.json(body));
         id = id === '0' ? '' : $T.S2(id).trim();
 
         // STEP.0 validate paramters.
-        if (!id) throw new Error(`@id (string) is required!`);
+        if (!id) throw new Error(`@id (string) is required - ${errScope}`);
 
         // STEP.1 (TODO) validate user, and transform to model.
 
@@ -380,19 +385,20 @@ export abstract class AbstractCRUDController<
      * $ http POST ':8888/<typeName>/0' "key"="modelValue"
      */
     public async doPost(id: string, param: any, body: MyBody, $ctx?: NextContext): Promise<MyView> {
-        _log(this.logNS, `doPost(${id}) ...`);
+        const errScope = `doPost(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
         param && _log(this.logNS, `> param =`, $U.json(param));
         body && _log(this.logNS, `> body =`, $U.json(body));
         id = id === '0' ? '' : $T.S2(id).trim();
         const isLocal = $ctx?.domain === 'localhost';
 
         // STEP.0 validate paramters.
-        if (id && !isLocal) throw new Error(`@id (string) is invalid!`);
+        if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
         if (body && Array.isArray(body)) return this.doPostBulk(id, param, body, $ctx) as any; //! route to `/bulk`
 
         // STEP.1 (TODO) validate user, and transform to model.
         const toCreate = this.bodyToModel(body, true);
-        if (!toCreate) throw new Error(`@body is required - doPost(${id})`);
+        if (!toCreate) throw new Error(`@body is required - ${errScope}`);
         if (id) toCreate.id = id;
 
         // STEP.2 run main
@@ -415,16 +421,16 @@ export abstract class AbstractCRUDController<
      * $ http POST ':8888/<typeName>/0/bulk' "key"="modelValue"
      */
     public doPostBulk: NextHandler<any, MyView[], BulkBody<MyBody> | MyBody[]> = async (id, param, body, $ctx) => {
-        _log(this.logNS, `doPost(${id}) ...`);
+        const errScope = `doPostBulk(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
         param && _log(this.logNS, `> param =`, $U.json(param));
         body && _log(this.logNS, `> body =`, $U.json(body));
         id = id === '0' ? '' : $T.S2(id);
 
         // STEP.0 validate paramters.
-        if (id) throw new Error(`@id (string) is invalid!`);
+        if (id) throw new Error(`@id (string) is invalid - ${errScope}`);
         const list = Array.isArray(body) ? body : body?.list;
-        if (!list || !Array.isArray(list))
-            throw new Error(`@body (array) is required - doPostBulk(${this.manager.type}:${id})`);
+        if (!list || !Array.isArray(list)) throw new Error(`@body (array) is required - ${errScope}`);
 
         // STEP.1 transform to models.
         const models = list.map(N => ({
@@ -454,17 +460,18 @@ export abstract class AbstractCRUDController<
      * $ http PUT ':8888/<typeName>/1000002' name="test-update"
      */
     public doPut: NextHandler<any, MyView, MyBody> = async (id, param, body, $ctx) => {
-        _log(this.logNS, `doPut(${id}) ...`);
+        const errScope = `doPut(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
         param && _log(this.logNS, `> param =`, $U.json(param));
         body && _log(this.logNS, `> body =`, $U.json(body));
         id = id === '0' ? '' : $T.S2(id).trim();
 
         // STEP.0 validate paramters.
-        if (!id) throw new Error(`@id (string) is required!`);
+        if (!id) throw new Error(`@id (string) is required - ${errScope}`);
 
         // STEP.1 (TODO) validate user, and transform to model.
         const toUpdate = this.bodyToModel({ ...body, id });
-        if (!toUpdate) throw new Error(`@body is required - doPut(${id})`);
+        if (!toUpdate) throw new Error(`@body is required - ${errScope}`);
 
         // STEP.2 run main
         return this.service.guardProxy($ctx, async proxy => {
@@ -485,7 +492,8 @@ export abstract class AbstractCRUDController<
      * $ http DELETE ':8888/<typeName>/1000003'
      */
     public doDelete: NextHandler<any, MyView> = async (id, param, body, $ctx) => {
-        _log(this.logNS, `doDelete(${id}) ...`);
+        const errScope = `doDelete(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
         param && _log(this.logNS, `> param =`, $U.json(param));
         body && _log(this.logNS, `> body =`, $U.json(body));
         id = id === '0' ? '' : $T.S2(id).trim();
@@ -493,7 +501,7 @@ export abstract class AbstractCRUDController<
         const destroy = !!$T.B(param?.destroy, param?.destroy === '' ? 1 : 0);
 
         // STEP.0 validate paramters.
-        if (!id) throw new Error(`@id (string) is required!`);
+        if (!id) throw new Error(`@id (string) is required - ${errScope}`);
 
         // STEP.1 (TODO) validate user, and transform to model.
 
@@ -520,14 +528,14 @@ export abstract class AbstractCRUDController<
         body,
         $ctx,
     ) => {
-        _log(this.logNS, `doPutBulk(${id}) ...`);
+        const errScope = `doPutBulk(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
         body && _log(this.logNS, `> body =`, $U.json(body));
         id = id === '0' ? '' : $T.S2(id);
 
         const parrallel = $T.N(param?.parrallel, 10);
         const list = Array.isArray(body) ? body : body?.list;
-        if (!list || !Array.isArray(list))
-            throw new Error(`@body.list (array) is required - doPutBulk(${this.TYPE}/${id}})`);
+        if (!list || !Array.isArray(list)) throw new Error(`@body.list (array) is required - ${errScope}`);
         // transform to models
         const models = list.map(N => ({
             ...this.bodyToModel(N),
@@ -536,12 +544,12 @@ export abstract class AbstractCRUDController<
         // runs in guarded proxy.
         const $res = await this.service.guardProxy($ctx, async proxy => {
             const $prxy = proxy.getManagerProxy(this.modelType);
-            if (!$prxy) throw new Error(`.model-type[${this.modelType}] is required!`);
+            if (!$prxy) throw new Error(`.model-type[${this.modelType}] is required - ${errScope}`);
             //* validate and update.
             const $res = await my_parrallel(
                 models,
                 async (model: MyModel, i) => {
-                    if (!model?.id) throw new Error(`.id is required - doPutBulk(${this.type}:${i})`);
+                    if (!model?.id) throw new Error(`.id (string) is required - ${errScope}`);
                     const $org = await $prxy.get(model.id);
                     const validated = await $prxy.validateModel(model, model.id);
                     const filtered = await $prxy.onBeforeSave(validated, $org);

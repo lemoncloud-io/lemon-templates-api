@@ -126,7 +126,7 @@ export const $T = {
         const name = $opts?.name ?? 'name';
         const throwable = $opts?.throwable ?? true;
         const _def = $opts?.default ?? null;
-        const errScope = $opts?.errScope ?? '';
+        const errScope = $opts?.errScope ?? `asLut(${name ?? ''})`;
         //* check of empty.
         if (key === undefined) return undefined as keyof T;
         if (key === null) return _def as keyof T;
