@@ -6,6 +6,7 @@
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2022-02-18 optimized search w/ ES6.8
  * @date        2024-12-20 optimized with `lemon-core#3.2.11`
+ * @date        2025-05-22 optimized with `/search/echo/query` for dev test.
  *
  * @origin      lemon-templates-api
  * @copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
