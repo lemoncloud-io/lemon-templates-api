@@ -207,6 +207,9 @@ export class SearchAPIController extends GeneralWEBController {
         // if (id) throw new Error(`@id[${id}] is invalid - ${errScope}`);
         if (!id) throw new Error(`@id[${id}] is required - ${errScope}`);
 
+        //* INFO - for testing purpose.
+        if (id === 'echo') return { param, body, context: { domain: $ctx?.domain, userAgent: $ctx?.userAgent } };
+
         const verbose = !!$T.B(param?.v, param?.v === '' ? 1 : 0);
         const size = $T.N(param?.size || body?.size, 1);
         const { query } = await this.findQueryModel(id);
@@ -362,6 +365,8 @@ export class SearchAPIController extends GeneralWEBController {
      * ```sh
      * $ http POST :8800/search/events-in-valid
      * $ http POST :8800/search/accounts-in-valid
+     *
+     * $ echo '{"body":{"size":1,"query":{}}}' | http POST :8800/search/echo
      */
     public postSearch: NextHandler = async (id, param, body, ctx) => {
         _log(NS, `postSearch(${id})..`);
