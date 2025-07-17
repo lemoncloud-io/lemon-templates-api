@@ -8,6 +8,7 @@
  * @date        2019-11-06 add `credentials()` for loading profile.
  * @date        2019-11-26 optimized with `lemon-core#2.0.0`
  * @date        2019-12-08 added `/echo` router for testing.
+ * @date        2025-07-16 optimized with `lemon-core#4.0.5`
  *
  * @copyright (C) lemoncloud.io 2019 - All Rights Reserved.
  */
@@ -36,7 +37,7 @@ export const credentials = async (name?: string) => {
     _log(NS, `credentials(${name})..`);
     const NAME = name || ($engine.environ('NAME', '') as string);
     const profile = $engine.environ('PROFILE', NAME) as string;
-    return $core.tools.credentials(profile);
+    return $core.tools.asyncCredentials(profile);
 };
 
 //! customize createServer().

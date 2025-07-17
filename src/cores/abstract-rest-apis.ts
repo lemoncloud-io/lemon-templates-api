@@ -6,6 +6,7 @@
  * @author      Steve <steve@lemoncloud.io>
  * @date        2022-09-21 optimized w/ `abstract-rest-apis`
  * @date        2023-09-18 optimized `asProtocol()` w/ public.
+ * @date        2025-02-26 optimized `$createApi` w/ reversor.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
@@ -178,17 +179,34 @@ export class DummyRestAPI<View = any, Body = View, Model = View> extends RestAPI
 
 /**
  * factory to create `rest-api` instance for both real and dummy.
+ *
+ * - see the example below:
+ *
+ * ```ts
+ *  import * as $boards from '@lemoncloud/lemon-boards-api'; //INFO! import the type information.
+ *  ...
+ *  const boardId = '100001'; //NOTE! sample board-id.
+ *  const $ctx = this.proxy.asNextContext(null, { domain: 'localhost' }); //WARN! asumme as internal call.
+ *  const opts = { isProd: true }; //WARN! use the production data.
+ *  const $api = {
+ *      boards: $createApi<$boards.BoardView, $boards.BoardBody>($ctx, '//lemon-boards-api/boards', opts),
+ *      posts: $createApi<$boards.PostView, $boards.PostBody>($ctx, '//lemon-boards-api/posts', opts),
+ *  };
+ *  const $board = await $api.boards.get(boardId);
+ *  const $res = await $api.posts.list({ boardId });
+ * ```
  */
 export const $createApi = <View extends object = object, Body = View, Model = View>(
     $context: NextContext,
     endpoint: string,
-    reversor?: Reversable<Model, View, Body>,
     options?: {
+        reversor?: Reversable<Model, View, Body>;
         isProd?: boolean;
         isDummy?: boolean;
         initialNo?: number;
     },
 ): RestAPI<View, Body, Model> => {
+    const reversor = options?.reversor;
     if (options?.isDummy) return new DummyRestAPI<View, Body, Model>($context, endpoint, reversor, options?.initialNo);
     return new RestAPI<View, Body, Model>($context, endpoint, reversor, { isProd: options?.isProd });
 };

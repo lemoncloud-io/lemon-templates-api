@@ -57,7 +57,7 @@
   "author": "Steve Jung (steve@lemoncloud.io)",
   "license": "MIT",
   "dependencies": {
-    "lemon-core": "^3.2.13"
+    "lemon-core": "^4.0.5"
   },
   "devDependencies": {
     "@cruglobal/serverless-merge-config": "^1.1.0",
@@ -74,6 +74,7 @@
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-prettier": "^4.0.0",
     "jest": "^27.5.1",
+    "lemon-devkit": "^0.0.3",
     "lint-staged": "^13.1.0",
     "nodemon": "^2.0.18",
     "prettier": "^2.6.2",
@@ -95,7 +96,7 @@
   },
   "private": true,
   "engines": {
-    "node": ">=18.19.1"
+    "node": ">=22.0.0"
   },
   "keywords": [
     "lemoncloud",

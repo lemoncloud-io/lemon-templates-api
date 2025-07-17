@@ -32,7 +32,7 @@ export const instance = (type: 'authed' | 'public' = 'authed', isDummy = true) =
     const context: NextContext = {};
     const SITES_API = '//self/sites';
     //* transformer with remote view/body.
-    const trans = new (class implements Reversable<SiteModel, SiteView, SiteBody> {
+    const reversor = new (class implements Reversable<SiteModel, SiteView, SiteBody> {
         public asModel(view: SiteView): SiteModel {
             if (!view) return null as any;
             const { id, code, name, deletedAt } = view;
@@ -44,14 +44,11 @@ export const instance = (type: 'authed' | 'public' = 'authed', isDummy = true) =
         }
     })();
     //* it must be the standard rest-api.
-    return $createApi<SiteView, SiteBody, SiteModel>(context, SITES_API, trans, { isDummy });
+    return $createApi<SiteView, SiteBody, SiteModel>(context, SITES_API, { reversor, isDummy });
 };
 
 //* main test body.
 describe('abstract-rest-apis', () => {
-    const PROFILE = loadProfile(process); // override process.env.
-    PROFILE && console.info('! PROFILE=', PROFILE);
-
     // //* test function
     // it('should pass basic function', async () => {
     //     const { trans } = instance();
@@ -59,6 +56,9 @@ describe('abstract-rest-apis', () => {
 
     //* test dummy-rest-api
     it('should pass dummy-rest-api(authed)', async () => {
+        const PROFILE = await loadProfile(process); // override process.env.
+        PROFILE && console.info('! PROFILE=', PROFILE);
+
         const $api = instance('authed', true);
 
         expect2(() => $api?.hello()).toEqual(`dummy-rest-api://self/sites`);
