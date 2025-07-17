@@ -1,11 +1,11 @@
 {
   "name": "@lemoncloud/lemon-templates-api",
-  "version": "0.25.104",
+  "version": "0.25.717",
   "description": "lemon-templates management api",
   "types": "dist/view/types.d.ts",
   "scripts": {},
   "dependencies": {
-    "lemon-model": "^1.0.3"
+    "lemon-model": "^1.0.5"
   },
   "browser": {
     "fs": false

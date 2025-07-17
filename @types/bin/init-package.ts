@@ -7,24 +7,14 @@
  * @author      Steve <steve@lemoncloud.io>
  * @date        2022-06-21 optimized w/ `abstract-services`
  * @date        2023-01-19 optimized package.dependencies
+ * @date        2025-07-01 optimized w/ `lemon-core#4.0.4`
  *
  * @copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
 //! override environment.
-const $env = ((env: any) =>
-    Object.assign(env, {
-        LS: env.LS ?? '1', // line-silent in log
-        LC: env.LC ?? '1', // line-colors in log
-        TS: env.TS ?? '1', // timestamp in log
-        NS: env.NS ?? 'SS', // name-space of models.
-        STAGE: env.STAGE ?? 'prod',
-        profile: env.profile ?? 'lemon',
-        region: env.region ?? 'ap-northeast-2',
-    }))(process.env);
-const MODEL_VERSION = '1.0.3';
+const MODEL_VERSION = '1.0.5';
 
 //! import statements
-import AWS from 'aws-sdk';
 import path from 'path';
 import fs from 'fs';
 import $engine, { $U, ConfigService, SimpleSet, _inf, _log } from 'lemon-core';
@@ -65,23 +55,10 @@ const makePackage = () => {
     _log(NS, `> tar.name =`, $tar.name);
 
     //* grap the dependencies to include in types
-    const dependencies = Object.entries($src.dependencies).reduce<SimpleSet>((M, [k, _]) => {
-        const v = `${_ ?? ''}`;
-        const _n = (s: string) =>
-            s
-                .split('.')
-                .map(s => (s.length < 2 ? `00${s}` : s.length < 3 ? `0${s}` : s))
-                .join('.');
-        if (k == 'lemon-core') {
-            const s = v.startsWith('^') ? v.substring(1) : v;
-            const ss = _n(s);
-            if (ss < '003.002.011') {
-                M['lemon-model'] = `^1.0.2`;
-            } else {
-                M['lemon-model'] = `^${MODEL_VERSION}`;
-            }
-        } else if (k == 'lemon-model') M['lemon-model'] = v;
-        else if (k.startsWith('@lemoncloud/')) M[k] = v;
+    const dependencies = Object.entries($src.dependencies).reduce<SimpleSet>((M, [k, v]) => {
+        if (k == 'lemon-core') M['lemon-model'] = `^${MODEL_VERSION}`;
+        else if (k == 'lemon-model') M['lemon-model'] = `${v}`;
+        else if (k.startsWith('@lemoncloud/')) M[k] = `${v}`;
         return M;
     }, {});
 
@@ -117,11 +94,6 @@ const main = async () => {
  * ENTRY FUNCTION
  *  *******************************************************************************************************************/
 async function bootstrap(main: MainFunc) {
-    // initialize AWS Config.
-    const credentials = new AWS.SharedIniFileCredentials({ profile: $env.profile });
-    AWS.config.credentials = credentials;
-    AWS.config.region = $env.region;
-
     // initialize Lemon-Core config
     const config = $engine.cores.config.config;
     await config.init();

@@ -226,3 +226,12 @@ export interface BulkBody<T> {
 export interface BodyList<T extends { id: string } = { id: string }> {
     list: T[];
 }
+
+/**
+ * type `BulkItemsResult`
+ */
+export interface BulkItemsResult {
+    success: number;
+    failed: number;
+    failedItems: any[];
+}

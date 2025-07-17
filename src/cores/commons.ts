@@ -6,7 +6,7 @@
  * @date        2022-11-01 optimized w/ `commons`
  * @date        2024-06-24 optimized `parseListParam()`
  * @date        2025-01-03 optimized `parseListParam()` w/ `offset`
- * @date        2025-02-25 optimized `parsePaginateParam()` w/ `noLimit`
+ * @date        2025-05-25 optimized `$T.N()` + `parsePaginateParam()` w/ `noLimit` option
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
@@ -93,16 +93,9 @@ export const $T = {
     BN: <T extends number = number>(v: any, def?: 0 | 1): T => (v === undefined ? (def as T) : (_T.B(v, def) as T)),
     /** convert to `number` */
     N: (v: boolean | number | string, def?: number): number =>
-        typeof v === 'boolean'
-            ? v
-                ? 1
-                : 0
-            : typeof v === 'number' || typeof v === 'string'
-            ? _T.N(v, def)
-            : undefined,
+        typeof v === 'boolean' ? (v ? 1 : 0) : typeof v === 'number' || typeof v === 'string' ? _T.N(v, def) : def,
     /** convert to `float` w/ fixed(3) */
-    F: (n: number | string) =>
-        typeof n === 'string' || typeof n === 'number' ? parseFloat(Number(n).toFixed(3)) : undefined,
+    F: (n: number, def?: number) => _T.F3(n, def),
     /** cleanup if in undefined */
     clear: <T extends object>(N: T): T =>
         Object.entries(N).reduce((N, [k, v]) => {

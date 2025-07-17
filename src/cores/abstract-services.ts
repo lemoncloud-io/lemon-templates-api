@@ -25,12 +25,13 @@
  * @date        2024-11-28 optimized `assertContext()` and `isAdminRole()` w/ `lemon-core@3.2.11`.
  * @date        2025-01-03 optimized `buildQuery()` w/ sort + offset.
  * @date        2025-03-24 optimized `OS2Instance` with `lemon-core@3.2.13`
+ * @date        2025-07-17 optimized `onAfterSave` with `lemon-core@4.0.4`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import $cores, { $U, $T, _log, _inf, _err, NUL404, GETERR } from 'lemon-core';
+import $cores, { $U, $T, _log, _inf, _err, NUL404, GETERR, asyncCredentials } from 'lemon-core';
 import { my_parrallel, SearchType, _ES6, createSigV4Proxy, my_sequence } from 'lemon-core';
 import { Elastic6Service, Elastic6Option, Elastic6QueryService, Elastic6Synchronizer } from 'lemon-core';
 import { $ERROR, Incrementable, GETERR$, CoreManager, CoreModel, CoreService } from 'lemon-core';
@@ -38,10 +39,9 @@ import { SearchBody, SearchQuery, SearchResult, ManagerProxy, AbstractProxy, loa
 import { NextContext, NextIdentity, NextIdentityCognito, getIdentityId, waited, SortTerm, SimpleSet } from 'lemon-core';
 import { DynamoScanService, DynamoScanFilter, DynamoScanResult, GeneralItem, Elastic6Instance } from 'lemon-core';
 import { ApiHttpProxy, APIHeaders, elasticsearch, SearchResponse, DynamoOption, Elastic6Item } from 'lemon-core';
-import { IdentityToken, ListResult, PaginateParam } from './types';
+import { BulkItemsResult, IdentityToken, ListResult, PaginateParam } from './types';
 import { keys } from 'ts-transformer-keys';
 import { onlyDefined, parsePaginateParam } from './commons';
-import AWS from 'aws-sdk';
 const NAME = $U.env('NAME', 'lemon');
 const NS = $U.NS('HDBS', 'green');
 /**
@@ -1191,7 +1191,7 @@ export class MyManagerProxy<
      * @param model the last model to save.
      * @param $org (optional) original model (null if creating)
      */
-    public async onBeforeSave(model: MyModel, $org?: MyModel): Promise<MyModel> {
+    public async onBeforeSave<T extends MyModel>(model: T, $org?: T): Promise<T> {
         return model;
     }
 
@@ -1202,7 +1202,7 @@ export class MyManagerProxy<
      * @param model the saved model (null if deleted)
      * @param $org (optional) original model (null if new created)
      */
-    public async onAfterSave(model: MyModel, $org?: MyModel): Promise<MyModel> {
+    public async onAfterSave<T extends MyModel>(model: T, $org?: T): Promise<T> {
         return model;
     }
 
@@ -1221,7 +1221,7 @@ export class MyManagerProxy<
      * @param model creation model
      * @param validate (optional) flag to validate (default is true)
      */
-    public async makeModel(model: MyModel, validate?: boolean): Promise<MyModel> {
+    public async makeModel<T extends MyModel>(model: T, validate?: boolean): Promise<T> {
         const errScope = `makeModel(${this.$mgr.type}/${model?.id ?? ''})`;
         if (!model) throw new Error(`@model (${this.$mgr.type}-model) is required - ${errScope}`);
         validate = validate ?? true;
@@ -1238,7 +1238,8 @@ export class MyManagerProxy<
         // overwrite (or update) the model.
         const $org = await this.get(modelId, { ...$def3 });
         if ($org?.id !== modelId) throw new Error(`.id[${model?.id}] is invalid (mismatched ${modelId}) - ${errScope}`);
-        return hasId ? this.override($org, $def3) : $org;
+        const $res = hasId ? this.override($org, $def3) : $org;
+        return $res as T; //! return the model with id.
     }
 }
 
@@ -1454,6 +1455,80 @@ export class OS2Service<T extends Elastic6Item = any> extends Elastic6Service<an
         const res2: T = { ...body, _id, _version };
 
         return res2;
+    }
+
+    /**
+     * bulk save multiple items using elasticsearch client
+     *
+     * @param items - array of items to save
+     */
+    public async bulkItems(items: T[], options?: { idName?: string }): Promise<BulkItemsResult> {
+        const errScope = `bulkItems(${this.options.indexName})`;
+        const { indexName } = this.options;
+        const client = this.client;
+        const idName = options?.idName ?? '_id';
+
+        if (!Array.isArray(items) || items.length === 0)
+            throw new Error(`@items (array) is required - length=${items?.length ?? 'null'} - ${errScope}`);
+
+        const { failedItems, bulkBody } = items.reduce(
+            (acc, item) => {
+                const id = (item as any)[idName];
+                if (!id) {
+                    acc.failedItems.push({
+                        reason: `@${idName} is invalid - ${errScope}`,
+                        item,
+                    });
+                    return acc;
+                }
+
+                const body: any = { ...item, [idName]: id };
+                const body2 = this.popullateAutocompleteFields(body);
+
+                if (idName === '_id') delete body2['_id']; // Remove reserved _id field
+
+                acc.bulkBody.push({ index: { _index: indexName, _id: id } });
+                acc.bulkBody.push(body2);
+
+                return acc;
+            },
+            {
+                failedItems: [] as { reason: string; item: any }[],
+                bulkBody: [] as any[],
+            },
+        );
+
+        if (bulkBody.length === 0) return { success: 0, failed: failedItems.length, failedItems };
+
+        const res = await this.$fgac.doFgacBulk({ index: indexName, body: bulkBody }).catch(
+            $ERROR.handler('bulk', e => {
+                _err(NS, `> bulkItems[${indexName}].err =`, e);
+                throw e;
+            }),
+        );
+        // const res = await client.bulk({ body: bulkBody }).catch(
+        //     $ERROR.handler('bulk', e => {
+        //         _err(NS, `> bulkItems[${indexName}].err =`, e);
+        //         throw e;
+        //     }),
+        // );
+
+        const itemsRes = res?.items ?? [];
+        const failedFromBulk = itemsRes
+            .filter((r: { index: { error?: any } }) => r.index?.error)
+            .map((r: { index: { error?: any } }) => ({
+                reason: r.index.error?.reason || 'unknown error',
+                item: r.index,
+            }));
+
+        failedItems.push(...failedFromBulk);
+
+        const failed = failedItems.length;
+        const success = itemsRes.length - failed;
+
+        _log(NS, `> bulkItems done: success=${success}, failed=${failed},`);
+
+        return { success, failed, failedItems };
     }
 
     /**
@@ -1687,7 +1762,7 @@ class OS2FGACManager {
     }
 
     /** FGAC 기반 검색 */
-    public async doFgacSearch(params: ElasticSearchParams): Promise<any> {
+    public async doFgacSearch<R = any>(params: ElasticSearchParams): Promise<R> {
         const index = params?.index ?? '';
         const body = onlyDefined(params?.body ?? undefined);
         const queryParams = params?.searchType ? { search_type: params?.searchType } : undefined;
@@ -1695,7 +1770,7 @@ class OS2FGACManager {
     }
 
     /** FGAC 기반 읽기: client.get() 대응 */
-    public async doFgacRead(params: ElasticParams): Promise<any> {
+    public async doFgacRead<R = any>(params: ElasticParams): Promise<R> {
         const index = params?.index ?? '';
         const id = encodeURIComponent(params?.id ?? '');
         const body = onlyDefined(params?.body ?? undefined);
@@ -1703,7 +1778,7 @@ class OS2FGACManager {
     }
 
     /** FGAC 기반 저장: client.index() 대응 */
-    public async doFgacSave(params: ElasticParams): Promise<any> {
+    public async doFgacSave<R = any>(params: ElasticParams): Promise<R> {
         const index = params?.index ?? '';
         const id = encodeURIComponent(params?.id ?? '');
         const body = onlyDefined(params?.body ?? undefined);
@@ -1711,31 +1786,21 @@ class OS2FGACManager {
     }
 
     /** FGAC 기반 저장: client.index() 대응 */
-    public async doFgacBulk<T extends { _id: string }, R = any>(params: ElasticParams<T[]>): Promise<R[]> {
-        const errScope = `doFgacBulk(${params?.index ?? ''})`;
-        const index = params?.index ?? '';
-        if (!Array.isArray(params?.body)) throw new Error(`@body(array) is required - ${errScope}`);
-        if (params.body.length === 0) return [] as R[];
-        const content = params.body
-            .reduce<object[]>((L, N, i) => {
-                if (typeof N?._id !== 'string') throw new Error(`@body[${i}]._id is required - ${errScope}`);
-                L.push({ index: { _index: index, _id: N._id } });
-                L.push(onlyDefined({ ...N, _id: undefined }));
-                return L;
-            }, [])
-            .map(N => $U.json(N))
-            .join('\n');
-        const result = await this.proxy.doProxy('POST', index, `_bulk`, undefined, `${content}\n`);
-        const $bulk = typeof result === 'string' ? JSON.parse(result) : result;
-        if (typeof $bulk?.items !== 'object' || !Array.isArray($bulk?.items)) {
-            _log(NS, `> bulk[${index}] =`, typeof result, $U.json(result));
-            throw new Error(`400 INVALID BULK RESULT - ${$U.json($bulk)}`);
-        }
-        return $bulk?.items as R[];
+    public async doFgacBulk(bulk: ElasticParams<any[]>): Promise<any[]> {
+        const index = bulk?.index ?? '';
+        const body = bulk?.body ?? [];
+        const errScope = `doFgacBulk(${index})`;
+
+        if (!Array.isArray(body)) throw new Error(`@body(array) is required - ${errScope}`);
+        if (body.length === 0) return [];
+
+        // 사전 포맷된 bulkBody를 JSONL 문자열로 변환
+        const content = body.map(line => $U.json(line)).join('\n') + '\n';
+        return this.proxy.doProxy('POST', index, `_bulk`, undefined, content);
     }
 
     /** FGAC 기반 업데이트: client.update() 대응 */
-    public async doFgacUpdate(params: ElasticParams): Promise<any> {
+    public async doFgacUpdate<R = any>(params: ElasticParams): Promise<R> {
         const index = params?.index ?? '';
         const id = encodeURIComponent(params?.id ?? '');
         const body = onlyDefined(params?.body ?? undefined);
@@ -1743,18 +1808,23 @@ class OS2FGACManager {
     }
 
     /** FGAC 기반 삭제: client.delete() 대응 */
-    public async doFgacDelete(params: ElasticParams): Promise<any> {
+    public async doFgacDelete<R = any>(params: ElasticParams): Promise<R> {
         const index = params?.index ?? '';
         const id = encodeURIComponent(params?.id ?? '');
         return this.proxy.doProxy('DELETE', index, `_doc/${id}`);
     }
 
     /** FGAC 기반 Create (Strict - 존재하면 실패): client.create() 대응 */
-    public async doFgacCreate(params: ElasticParams): Promise<any> {
+    public async doFgacCreate<R = any>(params: ElasticParams): Promise<R> {
         const index = params?.index ?? '';
         const id = encodeURIComponent(params?.id ?? '');
         const body = onlyDefined(params?.body ?? undefined);
         return this.proxy.doProxy('PUT', index, `_doc/${id}`, { op_type: 'create' }, body);
+    }
+
+    /** FGAC 기반 인덱스 삭제: client.indices.delete() 대응 */
+    public async doFgacDeleteIndex<R = any>(index: string): Promise<R> {
+        return this.proxy.doProxy('DELETE', index, '');
     }
 }
 
@@ -1937,6 +2007,7 @@ export class OS2Instance extends Elastic6Instance {
                     return null;
                 })
                 .filter(N => !!N);
+            // not supported autocomplete options
             const items = await this.fgac.doFgacBulk({ index: indexName, body });
             return items?.map((N: any) => N?.index ?? N?.create);
         };
@@ -1944,19 +2015,54 @@ export class OS2Instance extends Elastic6Instance {
         // STEP 3. migrate items using doFgacSave
         let last: Model = null;
         const results: Model[] = [];
+
+        const _preprocessItems = <T extends Record<string, any>>(items: T[]): Record<string, any>[] => {
+            return items.filter(item => {
+                const stereo = $T.S2(item?.stereo);
+                return !(stereo && stereo.startsWith('#'));
+            });
+        };
+
         while (true) {
             if (last) _inf(NS, `> last =`, $U.json(last));
             const $res = await $scan.scan(limit, last, filter);
-            // const items = await _parrallel($res?.list, $res);
-            const items = await _bulks($res?.list, $res);
-            _log(NS, `>> len =`, items?.length ?? '-');
-            if (items) results.push(...items);
+            const list = _preprocessItems($res?.list) ?? [];
+
+            // const items = await _parrallel(list, $res);
+            const res = await this.bulkItems(list, { idName: '_id' });
+            const failedItems = res?.failedItems ?? [];
+            _log(NS, `>> len =`, failedItems?.length ?? '-');
+
+            // 실패 ID + 메시지를 Map으로 생성
+            const failedMap = failedItems.reduce((map, f) => {
+                const id = f.item?._id || f.item?.id;
+                const reason = f.reason || f.item?.error?.reason || 'Unknown error';
+                if (id) {
+                    map.set(id, reason);
+                }
+                return map;
+            }, new Map<string, string>());
+
+            // error 정보가 있는 경우 item에 추가
+            const itemsWithError = list.map(item => {
+                const id = item._id ?? item.id;
+                const error = id && failedMap.has(id) ? failedMap.get(id) : undefined;
+                return error ? { ...item, error } : item;
+            });
+
+            results.push(...itemsWithError);
+
             if (!$res?.last?._id) break;
             last = $res?.last;
         }
         const total = results.length;
         const failed = results.filter(N => !!N.error);
-        return { index: indexName, total, failed, list: results?.slice(results?.length - limit) };
+        return { index: indexName, total, failed };
+    }
+
+    /** bulk items with auto-complete options */
+    public async bulkItems(items: any[], options?: { idName?: string }): Promise<BulkItemsResult> {
+        return this.elastic.bulkItems(items, options);
     }
 }
 
@@ -2004,7 +2110,7 @@ const $X2 = {
         };
     },
     /** load local credentials (for dev) */
-    loadCredentials: (profile?: string): AWS.Credentials => {
+    loadCredentials: async (profile?: string) => {
         const errScope = `loadCredentials(${profile ?? ''})`;
         const _profile = (name: string) => {
             if (typeof name === 'string') return name ? name : null;
@@ -2012,7 +2118,7 @@ const $X2 = {
             return NAME && NAME !== 'none' ? NAME : null;
         };
         profile = _profile(profile);
-        const credentials = new AWS.SharedIniFileCredentials({ profile });
+        const credentials = await asyncCredentials(profile);
         if (!credentials?.accessKeyId) throw new Error(`@profile[${profile ?? ''}] is invalid - ${errScope}`);
         return credentials;
     },

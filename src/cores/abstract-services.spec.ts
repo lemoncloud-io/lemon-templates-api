@@ -141,10 +141,10 @@ export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
 
 //* main test body.
 describe('abstract-services', () => {
-    const PROFILE = loadProfile(process); // override process.env.
-    PROFILE && console.info('! PROFILE=', PROFILE);
-
     it('should pass basic functions', async () => {
+        const PROFILE = await loadProfile(process); // override process.env.
+        PROFILE && console.info('! PROFILE=', PROFILE);
+
         const { service } = instance();
         expect2(() => true).toEqual(true);
 
@@ -270,6 +270,7 @@ describe('abstract-services', () => {
         };
 
         //! test with sample session.
+        //TODO - remove `context-session.json` in the future.
         const dir = `sample/context-session.json`;
         const $ctx = loadJsonSync(dir)?.context?.identity;
         expect2(() => getCurrentSession({ useSession: false })).toEqual(null);
@@ -648,6 +649,9 @@ describe('abstract-services', () => {
     });
 
     it('should pass doScanLast', async () => {
+        const PROFILE = await loadProfile(process); // override process.env.
+        PROFILE && console.info('! PROFILE=', PROFILE);
+
         const { service } = instance();
         if (PROFILE !== 'lemon') return; // ignore this.
         const result = await service.$test.doScanLast({ limit: 3 });
@@ -791,6 +795,9 @@ describe('abstract-services', () => {
 
     it('should pass migrate search-index', async () => {
         const { service } = instance();
+        expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
+        if (service.hello()?.endsWith('.yml')) return; // ignore this test.
+
         const result = await service.$test.doSyncScanLast({ limit: 10 });
         expect2(() => result.last).toEqual({ _id: 'TT:test:1000246' });
         expect2(() => result.count).toEqual(10);

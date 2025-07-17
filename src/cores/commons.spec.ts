@@ -39,8 +39,13 @@ describe('commons', () => {
 
     it('should pass parsePaginateParam', async () => {
         expect2(() => parsePaginateParam()).toEqual({ limit: 10, page: 0 });
-        expect2(() => parsePaginateParam({ limit: -1 })).toEqual({ limit: -1, page: 0 });
-        expect2(() => parsePaginateParam({ limit: -1 }, { noLimit: true })).toEqual({ limit: -1, page: 0 });
+        expect2(() => parsePaginateParam({ limit: 0 })).toEqual({ limit: 0, page: 0 });
+        expect2(() => parsePaginateParam({ limit: -1 })).toEqual({ limit: 2000, page: 0 });
+        expect2(() => parsePaginateParam({ limit: -1 }, { noLimit: true })).toEqual({ limit: 2000, page: 0 });
+        expect2(() => parsePaginateParam({ limit: 1 }, { noLimit: true })).toEqual({ limit: 2000, page: 0 });
+        expect2(() => parsePaginateParam({ limit: -1 }, { noLimit: false })).toEqual({ limit: -1, page: 0 });
+        expect2(() => parsePaginateParam({ limit: 1 }, { noLimit: false })).toEqual({ limit: 1, page: 0 });
+
         expect2(() => parsePaginateParam({ page: -1 })).toEqual({ limit: 10, page: -1 });
         expect2(() => parsePaginateParam({ page: 1, sort: 'a' })).toEqual({ limit: 10, page: 1, sort: 'a' });
         expect2(() => parsePaginateParam({ offset: '2' } as any)).toEqual({ limit: 10, page: 0, offset: 2 });
