@@ -1,7 +1,7 @@
 {
-  "name": "@lemoncloud/lemon-templates-api",
+  "name": "@lemoncloud/eureka-sockets-api",
   "version": "0.25.717",
-  "description": "lemon-templates management api",
+  "description": "eureka-sockets management api",
   "types": "dist/view/types.d.ts",
   "scripts": {},
   "dependencies": {

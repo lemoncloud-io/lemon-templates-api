@@ -1,4 +1,4 @@
-# lemon-templates-api
+# eureka-sockets-api
 
 - api microservice
 

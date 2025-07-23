@@ -1,7 +1,7 @@
 #------------------------------------------------
 # Serverless Configuration.
 #------------------------------------------------
-service: lemon-templates-api
+service: eureka-sockets-api
 
 # You can pin your service to only deploy with a specific Serverless version
 # Check out our docs for more details
@@ -39,23 +39,23 @@ custom:
   # SNS Registration: ${self:custom.topicName.${self:custom.CORE.stage}}
   #------------------------------------------------
   topicName:
-    local: lemon-templates-sns-dev
-    dev: lemon-templates-sns-dev
-    prod: lemon-templates-sns
+    local: eureka-sockets-sns-dev
+    dev: eureka-sockets-sns-dev
+    prod: eureka-sockets-sns
   #------------------------------------------------
   # Dynamo:
   #------------------------------------------------
   tableName:
-    local: lemon-templates-table-dev
-    dev: lemon-templates-table-dev
-    prod: lemon-templates-table
+    local: eureka-sockets-table-dev
+    dev: eureka-sockets-table-dev
+    prod: eureka-sockets-table
   #------------------------------------------------
   # SQS Registration:
   #------------------------------------------------
   queueName:
-    local: lemon-templates-sqs-dev
-    dev: lemon-templates-sqs-dev
-    prod: lemon-templates-sqs
+    local: eureka-sockets-sqs-dev
+    dev: eureka-sockets-sqs-dev
+    prod: eureka-sockets-sqs
   #------------------------------------------------
   # pruning old versions
   #------------------------------------------------
@@ -215,7 +215,7 @@ functions:
       # -------------------------------------------------------
       # Schedule: cron
       - schedule:
-          name: lemon-templates-${self:custom.CORE.stage}-1min
+          name: eureka-sockets-${self:custom.CORE.stage}-1min
           description: 'run every minute to keep alive'
           rate: 'cron(0/1 * * * ? *)'
           enabled: false

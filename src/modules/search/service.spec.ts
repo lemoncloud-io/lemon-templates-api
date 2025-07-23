@@ -123,7 +123,9 @@ describe('SearchService', () => {
 
         const inputs = [{ count: 1 }, { id: '2' }];
         // eslint-disable-next-line prettier/prettier
-        expect2(await search.runBatchHandler('none-1', inputs).catch(GETERR)).toEqual('@name[none-1] (batch-handler) is invalid!');
+        expect2(await search.runBatchHandler('none-1', inputs).catch(GETERR)).toEqual(
+            '@name[none-1] (batch-handler) is invalid!',
+        );
         expect2(await search.runBatchHandler('plus-1', inputs).catch(GETERR)).toEqual([{ count: 2 }, { count: 1 }]);
         expect2(await search.runBatchHandler('err-1', inputs).catch(GETERR)).toEqual('@list[2] has error!');
         expect2(await search.runBatchHandler('err-2', inputs).catch(GETERR)).toEqual('@list[2] has error!');
@@ -258,7 +260,7 @@ describe('SearchService', () => {
         const endpoint = 'https://search-eureka-os2-uxoajmyfedwmpd3zzue7cwdfrm.ap-northeast-2.es.amazonaws.com';
 
         //! WARN - must config the test section in `env/lemon.yml`
-        if (PROFILE !== 'lemon') return; //* ignore if not in lemon profile.
+        if ((await PROFILE) !== 'lemon') return; //* ignore if not in lemon profile.
         expect2(() => $U.env('OS2_INDEX', '')).toEqual(indexName);
         expect2(() => $U.env('OS2_ENDPOINT', '')).toEqual(endpoint);
         expect2(() => $ES6.options).toEqual(null);

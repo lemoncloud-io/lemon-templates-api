@@ -1,10 +1,10 @@
 {
-  "name": "lemon-templates-api",
+  "name": "eureka-sockets-api",
   "version": "0.25.717",
-  "description": "lemon-templates management api",
+  "description": "lemon sockets management api",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
-  "port": 8800,
+  "port": 8832,
   "scripts": {
     "!build": "------ build /src to /dist ----",
     "build": "npm run build-ts",
@@ -104,6 +104,6 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git@github.com:lemoncloud-io/lemon-templates-api.git"
+    "url": "git@github.com:lemoncloud-io/eureka-sockets-api.git"
   }
 }
