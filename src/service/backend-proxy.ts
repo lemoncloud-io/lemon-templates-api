@@ -15,6 +15,7 @@ import { BackendService } from './backend-service';
 import { MyCoreProxy } from '../cores/abstract-services';
 import { CallbackManagerProxy } from '../modules/callback/proxy';
 import { MockManagerProxy, TestManagerProxy } from '../modules/mock/proxy';
+import { SocketManagerProxy } from '../modules/sockets/proxy';
 const NS = $U.NS('backend', 'blue'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -22,6 +23,7 @@ const NS = $U.NS('backend', 'blue'); // NAMESPACE TO BE PRINTED.
  * - manager proxy to handle micro-transaction.
  */
 export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
+    public readonly socket: SocketManagerProxy;
     public readonly callback: CallbackManagerProxy;
     public readonly test: TestManagerProxy;
     public readonly mock: MockManagerProxy;
@@ -35,6 +37,7 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
         super(context, service);
         _log(NS, `BackendProxy(${service.NS})..`);
 
+        this.socket = new SocketManagerProxy(this, service.$socket);
         this.callback = new CallbackManagerProxy(this, service.$callback);
         this.test = new TestManagerProxy(this, service.$test);
         this.mock = new MockManagerProxy(this, service.$mock);
