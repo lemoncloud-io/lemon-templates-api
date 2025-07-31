@@ -486,37 +486,6 @@ export abstract class AbstractCRUDController<
     };
 
     /**
-     * delete a `MyModel`
-     *
-     * ```sh
-     * $ http DELETE ':8888/<typeName>/1000003'
-     */
-    public doDelete: NextHandler<any, MyView> = async (id, param, body, $ctx) => {
-        const errScope = `doDelete(${this.type()}/${id ?? ''})`;
-        _log(this.logNS, `${errScope}...`);
-        param && _log(this.logNS, `> param =`, $U.json(param));
-        body && _log(this.logNS, `> body =`, $U.json(body));
-        id = id === '0' ? '' : $T.S2(id).trim();
-        const isLocal = $ctx?.domain === 'localhost';
-        const destroy = !!$T.B(param?.destroy, param?.destroy === '' ? 1 : 0);
-
-        // STEP.0 validate paramters.
-        if (!id) throw new Error(`@id (string) is required - ${errScope}`);
-
-        // STEP.1 (TODO) validate user, and transform to model.
-
-        // STEP.2 run main
-        return this.service.guardProxy($ctx, async proxy => {
-            const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
-            const $org = await $prxy.get(id, true);
-            if (!destroy && $org?.deletedAt > 0) throw new Error(`404 NOT FOUND - ${this.manager.type}:${id}`);
-            const deleted = await $prxy.$mgr.delete(id, isLocal && destroy);
-            const final = await $prxy.onAfterSave(null, deleted);
-            return this.modelAsView(final || deleted);
-        });
-    };
-
-    /**
      * bulk update a `TypeModel`
      *
      * ```sh
@@ -567,6 +536,37 @@ export abstract class AbstractCRUDController<
         const length = views.length;
         // FINAL. convert to view
         return { total: length, limit: length, list: views };
+    };
+
+    /**
+     * delete a `MyModel`
+     *
+     * ```sh
+     * $ http DELETE ':8888/<typeName>/1000003'
+     */
+    public doDelete: NextHandler<any, MyView> = async (id, param, body, $ctx) => {
+        const errScope = `doDelete(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
+        param && _log(this.logNS, `> param =`, $U.json(param));
+        body && _log(this.logNS, `> body =`, $U.json(body));
+        id = id === '0' ? '' : $T.S2(id).trim();
+        const isLocal = $ctx?.domain === 'localhost';
+        const destroy = !!$T.B(param?.destroy, param?.destroy === '' ? 1 : 0);
+
+        // STEP.0 validate paramters.
+        if (!id) throw new Error(`@id (string) is required - ${errScope}`);
+
+        // STEP.1 (TODO) validate user, and transform to model.
+
+        // STEP.2 run main
+        return this.service.guardProxy($ctx, async proxy => {
+            const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
+            const $org = await $prxy.get(id, true);
+            if (!destroy && $org?.deletedAt > 0) throw new Error(`404 NOT FOUND - ${this.manager.type}:${id}`);
+            const deleted = await $prxy.$mgr.delete(id, isLocal && destroy);
+            const final = await $prxy.onAfterSave(null, deleted);
+            return this.modelAsView(final || deleted);
+        });
     };
 }
 

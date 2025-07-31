@@ -576,7 +576,7 @@ describe('AbstractCRUDController', () => {
         };
 
         // get not exist
-        expect2(await api.doGet('').catch(GETERR)).toEqual('@id (string) is required!');
+        expect2(await api.doGet('').catch(GETERR)).toEqual('@id (string) is required - doGet(tests/)');
         expect2(await api.doGet('1').catch(GETERR)).toEqual('404 NOT FOUND - proxy/test/id:1');
         expect2(await api.doGet(' 1').catch(GETERR)).toEqual('404 NOT FOUND - proxy/test/id:1');
         expect2(await api.doGet(' 1 ').catch(GETERR)).toEqual('404 NOT FOUND - proxy/test/id:1');
@@ -587,7 +587,7 @@ describe('AbstractCRUDController', () => {
             '.test (number) is required (greater than 0)',
         );
         expect2(await api.doPost('1', null, { name: 'test', test: -1 }, undefined).catch(GETERR)).toEqual(
-            '@id (string) is invalid!',
+            '@id (string) is invalid - doPost(tests/1)',
         );
         const newPost: any = await api.doPost('', null, { name: 'test', test: 1 }, undefined).catch(GETERR);
         expect2(() => newPost, 'id').toEqual({ id: '1000001' });
@@ -606,7 +606,9 @@ describe('AbstractCRUDController', () => {
 
         // == update ======================================================
         // put newPost
-        expect2(await api.doPut('0', null, { name: 'test2' }).catch(GETERR)).toEqual('@id (string) is required!');
+        expect2(await api.doPut('0', null, { name: 'test2' }).catch(GETERR)).toEqual(
+            '@id (string) is required - doPut(tests/0)',
+        );
         expect2(await api.doPut(newPost.id, null, { name: 'test2' }).catch(GETERR)).toEqual({
             id: newPost.id,
             ko: '',
@@ -625,7 +627,7 @@ describe('AbstractCRUDController', () => {
         // delete not exists
         expect2(await api.doDelete('not_exists').catch(GETERR)).toEqual('404 NOT FOUND - proxy/test/id:not_exists');
         // delete newPost
-        expect2(await api.doDelete('0').catch(GETERR)).toEqual('@id (string) is required!');
+        expect2(await api.doDelete('0').catch(GETERR)).toEqual('@id (string) is required - doDelete(tests/0)');
         expect2(await api.doDelete(newPost.id).catch(GETERR)).toEqual({
             id: newPost.id,
             ko: '',

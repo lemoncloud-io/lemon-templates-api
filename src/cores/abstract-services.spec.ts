@@ -13,7 +13,7 @@
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { $U, expect2, GETERR, NextContext, NextIdentity, SearchBody, SearchResult } from 'lemon-core';
+import { $T, $U, expect2, GETERR, NextContext, NextIdentity, SearchBody, SearchResult } from 'lemon-core';
 import { SimpleSet, CoreModel, filterFields, loadJsonSync } from 'lemon-core';
 import { MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
 import { keys } from 'ts-transformer-keys';
@@ -175,8 +175,8 @@ describe('abstract-services', () => {
     });
 
     it('should pass ManagerProxy', async () => {
-        const { service, current } = instance();
-        const proxy = service.createProxy(null as any);
+        const { service, current, context } = instance('session');
+        const proxy = service.createProxy(context);
 
         expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
         expect2(() => proxy.hello()).toEqual('manager-proxy:TT/dummy-data.yml');
@@ -250,13 +250,18 @@ describe('abstract-services', () => {
             error: "ENOENT: no such file or directory, open './src/cores/context-session.json'",
         });
 
-        const context = loadSample('session')?.context;
         expect2(() => context?.identity, 'sid,uid').toEqual({ sid: '1000008', uid: '1000007' });
         const identity = context?.identity;
 
-        expect2(() => proxy.getCurrentSession({ throwable: true })).toEqual(
+        const $noCtx = service.createProxy(null as any);
+        expect2(() => $noCtx.getCurrentSession({ throwable: true })).toEqual(
             '403 IDENTITY-TOKEN - .identity (IdentityToken) is required - context:',
         );
+        expect2(() => proxy.getCurrentSession({ throwable: true }), 'sid,uid').toEqual({
+            sid: '1000008',
+            uid: '1000007',
+        });
+
         const getCurrentSession = (options: {
             /** (default false for test) */
             throwable?: boolean;
@@ -266,31 +271,32 @@ describe('abstract-services', () => {
             USE_SESSION?: string;
         }) => {
             options.throwable = options.throwable === undefined ? false : options.throwable;
-            return proxy.getCurrentSession(options);
+            return $noCtx.getCurrentSession(options);
         };
 
         //! test with sample session.
         //TODO - remove `context-session.json` in the future.
         const dir = `sample/context-session.json`;
-        const $ctx = loadJsonSync(dir)?.context?.identity;
+        const $ctx = loadSample('session')?.context?.identity;
+        // const $ctx = loadJsonSync(dir)?.context?.identity;
         expect2(() => getCurrentSession({ useSession: false })).toEqual(null);
         expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
             sid: expect.any(String),
             uid: expect.any(String),
         });
         expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
-            sid: $ctx.sid,
-            uid: $ctx.uid,
+            sid: $ctx?.sid,
+            uid: $ctx?.uid,
         });
         expect2(() => getCurrentSession({ useSession: true })).toEqual(null);
         expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: dir }), 'sid,uid').toEqual({
-            sid: $ctx.sid,
-            uid: $ctx.uid,
+            sid: $ctx?.sid,
+            uid: $ctx?.uid,
         });
         expect2(() => getCurrentSession({ useSession: '1' })).toEqual(null);
         expect2(() => getCurrentSession({ useSession: dir }), 'sid,uid').toEqual({
-            sid: $ctx.sid,
-            uid: $ctx.uid,
+            sid: $ctx?.sid,
+            uid: $ctx?.uid,
         });
 
         expect2(() => getCurrentSession({ useSession: 'wrongPath' })).toEqual(
@@ -322,6 +328,61 @@ describe('abstract-services', () => {
             sid: '0000008',
             uid: '0000007',
         });
+
+        //* test of canDo() w/o session.
+        const _ctx = (N: NextIdentity, domain?: string): NextContext<NextIdentity> => {
+            const $ctx = proxy.context as NextContext<NextIdentity>;
+            domain = domain ?? $ctx?.domain;
+            return { ...$ctx, identity: { ...$ctx?.identity, ...N }, domain };
+        };
+        const _can = (action?: any, M?: Model, opts?: any) => proxy.tests.canDo(action, M, opts);
+        const $user0 = _ctx({ roles: ['user'] });
+        const $user1 = _ctx({ roles: ['user'], uid: '2002' });
+        const $user2 = _ctx({ roles: ['user'], uid: '2002', sid: '999' });
+        const $admin = _ctx({ roles: ['admin'] });
+        const $other = _ctx({ roles: ['other'] });
+
+        if (1) {
+            expect2(() => _can()).toEqual('400 INVALID - action is required @canDo(:test/-)');
+            expect2(() => _can(null, null, { errScope: 'xxx' })).toEqual('400 INVALID - action is required @xxx');
+            expect2(() => _can('', null, { errScope: 'xxx' })).toEqual('400 INVALID - action is required @xxx');
+            expect2(() => _can(1, null, { errScope: 'xxx' })).toEqual('400 INVALID - action is required @xxx');
+
+            expect2(() => $user0, 'domain').toEqual({ domain: 'api.lemoncloud.io' });
+            expect2(() => $user0?.identity, 'sid,uid,roles').toEqual({
+                sid: '1000008',
+                uid: '1000007',
+                roles: ['user'],
+            });
+            expect2(() => $admin?.identity, 'sid,uid,roles').toEqual({
+                sid: '1000008',
+                uid: '1000007',
+                roles: ['admin'],
+            });
+            expect2(() => $other?.identity, 'sid,uid,roles').toEqual({
+                sid: '1000008',
+                uid: '1000007',
+                roles: ['other'],
+            });
+
+            const $opts = { context: $user0, throwable: false };
+            expect2(() => proxy.assertContext({ isLocal: true }, $opts)).toEqual(false);
+            expect2(() => proxy.assertContext({ isSigned: true, isAuthed: false }, $opts)).toEqual(false);
+            expect2(() => proxy.assertContext({ isAuthed: true, hasRole: 'admin' }, $opts)).toEqual(false);
+
+            expect2(() => $T.S2(undefined, 'admin')).toEqual('admin');
+            expect2(() => $T.S2(null, 'admin')).toEqual('admin');
+            expect2(() => $T.S2('', 'admin')).toEqual('');
+
+            expect2(() => proxy.hasAdminRole(null, { context: $user0 })).toEqual(false);
+            expect2(() => proxy.hasAdminRole('user', { context: $user0 })).toEqual(true);
+            expect2(() => proxy.hasAdminRole(null, { context: $admin })).toEqual(true);
+            expect2(() => proxy.hasAdminRole(null, { context: $other })).toEqual(false);
+        }
+
+        //* test of canDo() w/ session(user0/1/2).
+        //* test of canDo() w/ session(admin).
+        //* test of canDo() w/ session(other).
     });
 
     it('should pass packSearchParam(session)', async () => {

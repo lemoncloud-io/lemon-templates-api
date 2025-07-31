@@ -52,6 +52,26 @@ const CORE_FIELDS: string[] = keys<CoreModel>();
 export type SearchParam<T> = T & { [key: string]: string | number };
 
 /**
+ * lookup table for common types.
+ */
+const $LUT = {
+    /**
+     * type: `CanDoAction`
+     */
+    CanDoAction: {
+        list: 'list',
+        read: 'read',
+        update: 'update',
+        delete: 'delete',
+    },
+};
+
+/**
+ * type: `CanDoActionType`
+ */
+export type CanDoActionType = keyof typeof $LUT.CanDoAction;
+
+/**
  * type: `ScanLastParams`
  */
 export interface ScanLastParams<T = any> {
@@ -849,6 +869,8 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         LOCAL_ACCOUNT?: string;
         /** (optional) env.USE_SESSION */
         USE_SESSION?: string;
+        /** (optional) next context to override */
+        context?: NextContext;
     }): IdentityToken {
         // const useSession = !$U.env('LOCAL_ACCOUNT') ? $U.env('USE_SESSION') : null;
         const throwable = options?.throwable ?? true;
@@ -859,7 +881,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         LOCAL_ACCOUNT && _inf(this.service.NS, `> LOCAL_ACCOUNT =`, LOCAL_ACCOUNT);
         USE_SESSION && _inf(this.service.NS, `> use-session =`, useSession, USE_SESSION);
 
-        const context: NextContext<IdentityToken> = this.context as any;
+        const context = (options?.context ?? this.context) as unknown as NextContext<IdentityToken>;
         //* WARN - in case of local, no need to throw error.
         const isLocal = context?.domain === 'localhost';
 
@@ -943,9 +965,16 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
             hasRole?: string;
         },
         /** (optional) */
-        options?: { throwable?: boolean; errScope?: string },
+        options?: {
+            /** (optional) throwable to throw error if error */
+            throwable?: boolean;
+            /** (optional) errScope to override in error */
+            errScope?: string;
+            /** (optional) next context to override */
+            context?: NextContext;
+        },
     ) {
-        const context = this.context;
+        const context = options?.context ?? this.context;
         const throwable = options?.throwable ?? true;
         const errScope = options?.errScope ?? `assertContext()`;
         const $idt = context?.identity as NextIdentityCognito;
@@ -953,12 +982,12 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         //* call in local
         const isLocal = context?.domain === 'localhost';
         //* signed call with access-key
-        const isSigned = isS(($idt as any)?.accessKey);
+        const isSigned = isS($idt?.accessKey);
         //* authed by cognito provider.
         const isAuthed = isS($idt?.identityProvider) && isS($idt?.identityId) && isS($idt?.identityPoolId);
         //* check if has role
         const _hasRole = (role: string): boolean => {
-            const $sess = this.getCurrentSession({ throwable: false });
+            const $sess = this.getCurrentSession({ throwable: false, context });
             return $sess?.roles?.includes(role);
         };
 
@@ -993,7 +1022,8 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
      * @param options optionals
      * @returns boolean
      */
-    public hasAdminRole(role = 'admin', options?: { errScope?: string }) {
+    public hasAdminRole(role?: string, options?: { errScope?: string; context?: NextContext }) {
+        role = $T.S2(role, 'admin');
         const $option = { ...options, throwable: false };
         if (this.assertContext({ isLocal: true }, $option)) return true;
         if (this.assertContext({ isSigned: true, isAuthed: false }, $option)) return true;
@@ -1003,6 +1033,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
 
     /**
      * prepare `next-context` w/ the customized { domain, userAgent }
+     *
      * @param identityId the target identity-id
      * @param options additional options.
      */
@@ -1036,6 +1067,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
 
     /**
      * from `identity-token`, make base of model { sid, uid }
+     *
      * @param proxy the current proxy.
      * @returns base model
      */
@@ -1240,6 +1272,39 @@ export class MyManagerProxy<
         if ($org?.id !== modelId) throw new Error(`.id[${model?.id}] is invalid (mismatched ${modelId}) - ${errScope}`);
         const $res = hasId ? this.override($org, $def3) : $org;
         return $res as T; //! return the model with id.
+    }
+
+    /**
+     * Check if the current user can perform the specified action on the given model.
+     *
+     * @param action The action to check.
+     * @param model The model to check against.
+     * @param options Additional options for the check.
+     * @returns True if the action is allowed, false otherwise.
+     */
+    public canDo(
+        action: CanDoActionType,
+        model?: MyModel,
+        options?: { errScope?: string; throwable?: boolean; useSession?: boolean; context?: NextContext },
+    ): boolean {
+        const errScope = options?.errScope ?? `canDo(${action ?? ''}:${this.$mgr.type}/${model?.id ?? '-'})`;
+        const useSession = options?.useSession ?? this.proxy.service.isUseSssion();
+        const throwable = options?.throwable ?? true;
+        const context = options?.context;
+
+        // STEP.0 validate parameters.
+        if (!action || typeof action !== 'string') throw new Error(`400 INVALID - action is required @${errScope}`);
+        const $sess = this.proxy.getCurrentSession({ throwable, useSession });
+        if (!$sess && useSession) return false;
+
+        // no session, no access.
+        const isAdmin = this.proxy.hasAdminRole(null, { errScope, context });
+
+        // admin can do anything.
+        if (isAdmin) return true;
+
+        // check if the model is valid.
+        return true;
     }
 }
 
