@@ -29,7 +29,7 @@ custom:
   # serverless-offline
   #------------------------------------------------
   serverless-offline:
-    httpPort: 8888
+    httpPort: 8832
   #------------------------------------------------
   # Documentation
   #   - https://github.com/9cookies/serverless-aws-documentation
@@ -95,7 +95,7 @@ provider:
   # Lambda Runtime Environment
   memorySize: 512
   timeout: 180
-  runtime: ${self:custom.CONF.${self:custom.CORE.profile}.runtime, 'nodejs12.x'}
+  runtime: ${self:custom.CONF.${self:custom.CORE.profile}.runtime, 'nodejs22.x'}
   region: ${self:custom.CONF.${self:custom.CORE.profile}.region, self:custom.CORE.region}      # profile의 region를 먼저 사용하고, 없으면 실행 옵션값.
 
 
@@ -163,6 +163,16 @@ provider:
         - dynamodb:DescribeStream
         - dynamodb:ListStreams
       Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.tableName.${self:custom.CORE.stage}}"
+    # [WSS] send message vis web-socket.
+    - Effect: Allow
+      Action:
+        - "execute-api:Invoke"
+        - "execute-api:ManageConnections"
+      Resource:
+        - "arn:aws:execute-api:*:*:**/@connections/*"
+
+  # [WSS] custom routes are selected by the value of the action property in the body
+  websocketApiRouteSelectionExpression: $request.body.action
 
   # -------------------------------------------------------
   # Environment variables
@@ -208,6 +218,21 @@ functions:
               - Arn
           # the maximum number of SQS messages of AWS to send on a single trigger. (default: 10)
           batchSize: 1
+  #INFO - dedicated lambda-function for web-socket.
+  socket:
+    handler: handler.lambda     # use core `lambda-handler`.
+    timeout: 300                # max timeout. (= 5 min)
+    events:
+      # -------------------------------------------------------
+      # WSS: WEB-SOCKET
+      - websocket:
+          route: $connect
+      - websocket:
+          route: $disconnect
+      - websocket:
+          route: $default
+      - websocket:
+          route: echo             # sample route by routeKey. echo request.
   #WARN - must be `lambda` to support `lemon-protocol`.
   lambda:
     handler: handler.lambda     # use core `lambda-handler`.
