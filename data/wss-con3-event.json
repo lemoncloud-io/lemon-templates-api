@@ -1,0 +1,47 @@
+{
+    "!": "wscat -c wss://qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com/dev --auth none:lemon --header x-auth:1234",
+    "event":{
+        "headers": {
+            "Authorization": "Basic bm9uZTpsZW1vbg==",
+            "Host": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits",
+            "Sec-WebSocket-Key": "QigYu1PySTCY/ptOxDDDCQ==",
+            "Sec-WebSocket-Version": "13",
+            "X-Amzn-Trace-Id": "Root=1-688c3ee2-25d7b5dc748c11b32e9e444d",
+            "x-auth": "1234",
+            "X-Forwarded-For": "117.111.17.8",
+            "X-Forwarded-Port": "443",
+            "X-Forwarded-Proto": "https"
+        },
+        "multiValueHeaders": {
+            "Authorization": ["Basic bm9uZTpsZW1vbg=="],
+            "Host": ["qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com"],
+            "Sec-WebSocket-Extensions": ["permessage-deflate; client_max_window_bits"],
+            "Sec-WebSocket-Key": ["QigYu1PySTCY/ptOxDDDCQ=="],
+            "Sec-WebSocket-Version": ["13"],
+            "X-Amzn-Trace-Id": ["Root=1-688c3ee2-25d7b5dc748c11b32e9e444d"],
+            "x-auth": ["1234"],
+            "X-Forwarded-For": ["117.111.17.8"],
+            "X-Forwarded-Port": ["443"],
+            "X-Forwarded-Proto": ["https"]
+        },
+        "requestContext": {
+            "routeKey": "$connect",
+            "eventType": "CONNECT",
+            "extendedRequestId": "Om7DYFg0oE0ETQQ=",
+            "requestTime": "01/Aug/2025:04:13:22 +0000",
+            "messageDirection": "IN",
+            "stage": "dev",
+            "connectedAt": 1754021602046,
+            "requestTimeEpoch": 1754021602046,
+            "identity": {
+                "sourceIp": "117.111.17.8"
+            },
+            "requestId": "Om7DYFg0oE0ETQQ=",
+            "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "Om7DYdlmIE0CIWQ=",
+            "apiId": "qksfa5jxm1"
+        },
+        "isBase64Encoded": false
+    }
+}
