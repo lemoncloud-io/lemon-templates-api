@@ -8,7 +8,6 @@
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
-import { loadProfile } from 'lemon-core/dist/environ';
 import { expect2, _it, GETERR, $info, $U } from 'lemon-core';
 import { CallbackModel, CallbackRequest } from './model';
 
@@ -30,9 +29,6 @@ export const instance = (type: $service.AuthType = 'authed', params?: $service.S
 
 //! main test body.
 describe('BackendProxy', () => {
-    const PROFILE = loadProfile(process); // override process.env.
-    PROFILE && console.info('! PROFILE =', PROFILE);
-
     //* basic function
     it('should pass basic function', async () => {
         const { service } = instance();
