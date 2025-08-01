@@ -1,0 +1,38 @@
+{
+    "!": "Normal WebSocket disconnect event",
+    "context": {},
+    "event": {
+        "headers": {
+            "Host": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "x-api-key": "",
+            "X-Forwarded-For": "",
+            "x-restapi": ""
+        },
+        "multiValueHeaders": {
+            "Host": ["qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com"],
+            "x-api-key": [""],
+            "X-Forwarded-For": [""],
+            "x-restapi": [""]
+        },
+        "requestContext": {
+            "routeKey": "$disconnect",
+            "eventType": "DISCONNECT",
+            "disconnectStatusCode": 1005,
+            "extendedRequestId": "OmwsjE-soE0EEpQ=",
+            "requestTime": "01/Aug/2025:03:02:39 +0000",
+            "messageDirection": "IN",
+            "disconnectReason": "Client-side close frame status not set",
+            "stage": "dev",
+            "connectedAt": 1754017343442,
+            "requestTimeEpoch": 1754017359932,
+            "identity": { 
+                "sourceIp": "221.149.250.13"
+            },
+            "requestId": "OmwsjE-soE0EEpQ=",
+            "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "Omwp-eeCIE0CFUQ=",
+            "apiId": "qksfa5jxm1"
+        },
+        "isBase64Encoded": false
+    }
+}

@@ -1,0 +1,39 @@
+{
+    "!": "Idle Connection Timeout (클라이언트와 연결 후 10분간 메시지 수신이 없을 경우 연결 종료)",
+    "context": {},
+    "event":{
+        "headers": {
+            "Host": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "x-api-key": "",
+            "X-Forwarded-For": "",
+            "x-restapi": ""
+        },
+        "multiValueHeaders": {
+            "Host": ["qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com"],
+            "x-api-key": [""],
+            "X-Forwarded-For": [""],
+            "x-restapi": [""]
+        },
+        "requestContext": {
+          "routeKey": "$disconnect",
+          "messageId": null,
+          "eventType": "DISCONNECT",
+          "disconnectReason": "IDLE_TIMEOUT",
+          "disconnectStatusCode": 1005,
+          "extendedRequestId": "abc123def456",
+          "requestTime": "31/Jul/2025:10:30:00 +0000",
+          "messageDirection": "IN",
+          "stage": "dev",
+          "connectedAt": 1754017343442,
+          "requestTimeEpoch": 1640995849721,
+          "identity": {
+            "sourceIp": "117.111.17.8"
+        },
+          "requestId": "abc123-def456-ghi789",
+          "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+          "connectionId": "OjP0pckvoE0CFeQ=",
+          "apiId": "qksfa5jxm1"
+        },
+        "isBase64Encoded": false
+      }
+}
