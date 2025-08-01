@@ -1333,6 +1333,7 @@ export class MyManagerProxy<
 
         // admin can do anything.
         const isAdmin = this.proxy.hasAdminRole(null, { errScope, context });
+        const hasRole = $sess?.roles?.length > 0 ? true : false; // guest if empty.
         if (isAdmin) return true;
 
         // session & model information.
@@ -1346,6 +1347,7 @@ export class MyManagerProxy<
             case 'create':
             case 'update':
             case 'delete':
+                if (!hasRole) break;
                 // (default) action is allowed if sid matches or no sid.
                 if (S.sid === M.sid || !M.sid) return true;
                 break;
