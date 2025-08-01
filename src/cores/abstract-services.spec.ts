@@ -15,7 +15,7 @@
 import { loadProfile } from 'lemon-core/dist/environ';
 import { $T, $U, expect2, GETERR, NextContext, NextIdentity, SearchBody, SearchResult } from 'lemon-core';
 import { SimpleSet, CoreModel, filterFields, loadJsonSync } from 'lemon-core';
-import { MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
+import { CanDoActionType, MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
 import { keys } from 'ts-transformer-keys';
 import { PaginateParam } from './types';
 import { loadSample } from './contexts.spec';
@@ -336,17 +336,30 @@ describe('abstract-services', () => {
             return { ...$ctx, identity: { ...$ctx?.identity, ...N }, domain };
         };
         const _can = (action?: any, M?: Model, opts?: any) => proxy.tests.canDo(action, M, opts);
-        const $user0 = _ctx({ roles: ['user'] });
-        const $user1 = _ctx({ roles: ['user'], uid: '2002' });
-        const $user2 = _ctx({ roles: ['user'], uid: '2002', sid: '999' });
-        const $admin = _ctx({ roles: ['admin'] });
+        const $user0 = _ctx({ roles: ['user'] }); // normal user.
+        const $user1 = _ctx({ roles: ['user'], uid: '2002' }); // diff uid.
+        const $user2 = _ctx({ roles: ['user'], uid: '2002', sid: '999' }); // idff uid & sid.
+        const $admin = _ctx({ roles: ['admin'] }); // admin for all.
         const $other = _ctx({ roles: ['other'] });
 
+        // test of basic canDo in core-proxy.
         if (1) {
-            expect2(() => _can()).toEqual('400 INVALID - action is required @canDo(:test/-)');
-            expect2(() => _can(null, null, { errScope: 'xxx' })).toEqual('400 INVALID - action is required @xxx');
-            expect2(() => _can('', null, { errScope: 'xxx' })).toEqual('400 INVALID - action is required @xxx');
-            expect2(() => _can(1, null, { errScope: 'xxx' })).toEqual('400 INVALID - action is required @xxx');
+            expect2(() => proxy.canDo(null, null)).toEqual('400 INVALID - @model.type (string) is required!');
+            expect2(() => proxy.canDo(null, {})).toEqual('400 INVALID - @model.type (string) is required!');
+            expect2(() => proxy.canDo(null, { type: '' as any })).toEqual(false);
+            expect2(() => proxy.canDo(null, { type: 'test' })).toEqual(
+                '400 INVALID - action[] is invalid @canDo(:test/-)',
+            );
+        }
+
+        // test of basic canDo in manager-proxy.
+        if (1) {
+            expect2(() => _can()).toEqual('400 INVALID - action[] is invalid @canDo(:test/-)');
+            expect2(() => _can(null, null, { errScope: 'xxx' })).toEqual('400 INVALID - action[] is invalid @xxx');
+            expect2(() => _can('', null, { errScope: 'xxx' })).toEqual('400 INVALID - action[] is invalid @xxx');
+            expect2(() => _can(1, null, { errScope: 'xxx' })).toEqual('400 INVALID - action[1] is invalid @xxx');
+            expect2(() => _can('s', null, { errScope: 'xxx' })).toEqual('400 INVALID - action[s] is invalid @xxx');
+            expect2(() => _can('s', null)).toEqual('400 INVALID - action[s] is invalid @canDo(s:test/-)');
 
             expect2(() => $user0, 'domain').toEqual({ domain: 'api.lemoncloud.io' });
             expect2(() => $user0?.identity, 'sid,uid,roles').toEqual({
@@ -380,9 +393,76 @@ describe('abstract-services', () => {
             expect2(() => proxy.hasAdminRole(null, { context: $other })).toEqual(false);
         }
 
-        //* test of canDo() w/ session(user0/1/2).
+        //* test of canDo() w/ session(user0).
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string, M = model1) =>
+                _can(action, M, { context: $user0, throwable: false });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(true);
+            expect2(() => _can2('read')).toEqual(true);
+            expect2(() => _can2('create')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(true);
+            expect2(() => _can2('delete')).toEqual(true);
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+
+            //* test with other sid.
+            const _sid = (sid?: string) => ({ ...model1, sid });
+            expect2(() => _can2('read', _sid())).toEqual(true);
+            expect2(() => _can2('read', _sid(''))).toEqual(true);
+            expect2(() => _can2('read', _sid('1'))).toEqual(false);
+        }
+        //* test of canDo() w/ session(user1).
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string) =>
+                _can(action, model1, { context: $user1, throwable: false });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(true);
+            expect2(() => _can2('read')).toEqual(true);
+            expect2(() => _can2('create')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(true);
+            expect2(() => _can2('delete')).toEqual(true);
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+        }
+        //* test of canDo() w/ session(user2).
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string, throwable: boolean = false) =>
+                _can(action, model1, { context: $user2, throwable });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(false);
+            expect2(() => _can2('read')).toEqual(false);
+            expect2(() => _can2('create')).toEqual(false);
+            expect2(() => _can2('update')).toEqual(false);
+            expect2(() => _can2('delete')).toEqual(false);
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+
+            expect2(() => _can2('delete', true)).toEqual(
+                '403 NOT ALLOWED - action[delete] is invalid @canDo(delete:test/1000001)',
+            );
+        }
         //* test of canDo() w/ session(admin).
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string) =>
+                _can(action, model1, { context: $admin, throwable: false });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(true);
+            expect2(() => _can2('read')).toEqual(true);
+            expect2(() => _can2('create')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(true);
+            expect2(() => _can2('delete')).toEqual(true);
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+        }
         //* test of canDo() w/ session(other).
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string) =>
+                _can(action, model1, { context: $other, throwable: false });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(true);
+            expect2(() => _can2('read')).toEqual(true);
+            expect2(() => _can2('create')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(true);
+            expect2(() => _can2('delete')).toEqual(true);
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+        }
     });
 
     it('should pass packSearchParam(session)', async () => {
