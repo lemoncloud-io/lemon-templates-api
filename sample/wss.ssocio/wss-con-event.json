@@ -1,0 +1,127 @@
+{
+    "!": "wscat -c 'wss://0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com/dev?param=1' --auth none:lemon --header x-lemon-identity:1234",
+    "context": {
+        "callbackWaitsForEmptyEventLoop": false,
+        "functionVersion": "$LATEST",
+        "functionName": "eureka-sockets-api-dev-socket",
+        "memoryLimitInMB": "512",
+        "logGroupName": "/aws/lambda/eureka-sockets-api-dev-socket",
+        "logStreamName": "2025/08/04/[$LATEST]9ceb10b25fa348908cc75b66b5c1b1ab",
+        "invokedFunctionArn": "arn:aws:lambda:ap-northeast-2:540298831859:function:eureka-sockets-api-dev-socket",
+        "awsRequestId": "1dd5f82a-258d-4292-a624-ef1f28675c28"
+    },
+    "$connect": {
+        "headers": {
+            "Authorization": "Basic bm9uZTpsZW1vbg==",
+            "Host": "0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com",
+            "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits",
+            "Sec-WebSocket-Key": "EseKUauZOr+KuUmSd4i4cg==",
+            "Sec-WebSocket-Version": "13",
+            "X-Amzn-Trace-Id": "Root=1-6890be1e-1283bf615ff3d18a7ae5114c",
+            "X-Forwarded-For": "210.90.185.190",
+            "X-Forwarded-Port": "443",
+            "X-Forwarded-Proto": "https",
+            "x-lemon": "1234"
+        },
+        "multiValueHeaders": {
+            "Authorization": [
+                "Basic bm9uZTpsZW1vbg=="
+            ],
+            "Host": [
+                "0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com"
+            ],
+            "Sec-WebSocket-Extensions": [
+                "permessage-deflate; client_max_window_bits"
+            ],
+            "Sec-WebSocket-Key": [
+                "EseKUauZOr+KuUmSd4i4cg=="
+            ],
+            "Sec-WebSocket-Version": [
+                "13"
+            ],
+            "X-Amzn-Trace-Id": [
+                "Root=1-6890be1e-1283bf615ff3d18a7ae5114c"
+            ],
+            "X-Forwarded-For": [
+                "210.90.185.190"
+            ],
+            "X-Forwarded-Port": [
+                "443"
+            ],
+            "X-Forwarded-Proto": [
+                "https"
+            ],
+            "x-lemon": [
+                "1234"
+            ]
+        },
+        "queryStringParameters": {
+            "param": "1"
+        },
+        "multiValueQueryStringParameters": {
+            "param": [
+                "1"
+            ]
+        },
+        "requestContext": {
+            "routeKey": "$connect",
+            "eventType": "CONNECT",
+            "extendedRequestId": "OyKk1FYVIE0ENgA=",
+            "requestTime": "04/Aug/2025:14:05:18 +0000",
+            "messageDirection": "IN",
+            "stage": "dev",
+            "connectedAt": 1754316318522,
+            "requestTimeEpoch": 1754316318538,
+            "identity": {
+                "sourceIp": "210.90.185.190"
+            },
+            "requestId": "OyKk1FYVIE0ENgA=",
+            "domainName": "0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "OyKk1cLPoE0CEYg=",
+            "apiId": "0z5quzjfdc"
+        },
+        "isBase64Encoded": false
+    },
+    "$disconnect": {
+        "headers": {
+            "Host": "0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com",
+            "x-api-key": "",
+            "X-Forwarded-For": "",
+            "x-restapi": ""
+        },
+        "multiValueHeaders": {
+            "Host": [
+                "0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com"
+            ],
+            "x-api-key": [
+                ""
+            ],
+            "X-Forwarded-For": [
+                ""
+            ],
+            "x-restapi": [
+                ""
+            ]
+        },
+        "requestContext": {
+            "routeKey": "$disconnect",
+            "disconnectStatusCode": 1005,
+            "eventType": "DISCONNECT",
+            "extendedRequestId": "OyKmQHtQIE0ELxA=",
+            "requestTime": "04/Aug/2025:14:05:27 +0000",
+            "messageDirection": "IN",
+            "disconnectReason": "Client-side close frame status not set",
+            "stage": "dev",
+            "connectedAt": 1754316318522,
+            "requestTimeEpoch": 1754316327632,
+            "identity": {
+                "sourceIp": "210.90.185.190"
+            },
+            "requestId": "OyKmQHtQIE0ELxA=",
+            "domainName": "0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "OyKk1cLPoE0CEYg=",
+            "apiId": "0z5quzjfdc"
+        },
+        "isBase64Encoded": false
+    }
+}

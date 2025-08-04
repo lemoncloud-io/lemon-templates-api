@@ -1,0 +1,55 @@
+#-----------------------------------
+# Lemon Basic Environment Variables.
+# - for `ssocio` Profile
+#
+# @date 2022.05.25 use ES6 configuration.
+#-----------------------------------
+# default
+default_env: &default_env
+  LS: 0                   # log silence.
+  LC: 1                   # line-coloring
+  TS: 1                   # time-stamp in line
+  NAME: 'ssocio'
+  BACKBONE_API: ''        # use VPC + NAT @191219.
+  REPORT_ERROR: 1         # for lemon-core#2. report error in lambda-handler.
+  USE_SESSION: 1          # use session.
+
+  #NOTE - Use ES7.2 Compartible (AWS Open-Search v1.2) @220425.
+  ES6_VERSION: '7.2'
+  ES6_INDEX: 'eureka-sockets-v1'
+  ES6_ENDPOINT: 'https://vpc-ssocio2-es7x-cqggq2l3vdnpjoatnjsvaupazi.ap-northeast-2.es.amazonaws.com'
+
+#-----------------------------------
+# local development configuration.
+local:
+  <<: *default_env
+  # REPORT_ERROR_ARN: arn:aws:sns:ap-northeast-2:085403634746:lemon-hello-sns
+
+  STAGE: '!develop'
+  NS: TT
+  MY_DYNAMO_TABLE: ssocio-chatbots-table-dev
+  USE_SESSION: sample/context/context-session.json             # Load sample for session use in local env
+  # ES6_ENDPOINT: https://6w9hrac9dg.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy    # use search-proxy after deployment.
+  ES6_ENDPOINT: 'https://localhost:8683'                       # use ssh tunnelling to manage indices setting.
+
+  # #WARN - for prod debugging.
+  # STAGE: '!production'
+  # NS: SS
+  # MY_DYNAMO_TABLE: ssocio-chatbots-table
+  # USE_SESSION: sample/context/context-session.json             # Load sample for session use in local env
+  # # ES6_ENDPOINT: https://qcpzq0ytbk.execute-api.ap-northeast-2.amazonaws.com/prod/search/0/proxy    # use search-proxy after deployment.
+  # ES6_ENDPOINT: 'https://localhost:8683'
+
+#-----------------------------------
+# development server
+dev:
+  <<: *default_env
+  STAGE: 'develop'
+
+#-----------------------------------
+# production with AWS deploy
+prod:
+  <<: *default_env
+  STAGE: 'production'
+  NS: SS
+  TS: 0

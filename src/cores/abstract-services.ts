@@ -2169,5 +2169,5 @@ export const _OS2 = (options?: OS2Option): OS2Instance => {
 
 /** dynamically load the OS2 instance if `OS2_ENDPOINT` is set */
 const hasOS2 = $U.env('OS2_ENDPOINT', '').startsWith('https://');
-export const $OS2 = _OS2();
+export const $OS2 = hasOS2 ? _OS2() : null;
 export const $ES6 = hasOS2 ? _OS2() : _ES6();

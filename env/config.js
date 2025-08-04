@@ -25,9 +25,16 @@
             runtime: 'nodejs22.x',                              // Powered by the V8 JavaScript Engine (used in Chromium)
             region: 'ap-northeast-2',
             env: 'lemon.yml',                                   // environment file
+            kmsKey: '*',                                        // KMS key-id to encrypt/decrypt or verify token.
+        },
+        ssocio: {
+            name: 'ssocio-app',
+            runtime: 'nodejs22.x',                              // Powered by the V8 JavaScript Engine (used in Chromium)
+            region: 'ap-northeast-2',
+            env: 'ssocio.yml',                                  // environment file
             //WARN! lambda를 VPC에서 이용할경우 NAT와 VPCE 등 네트워크 설정 구성 필요함!!! (refer to `lemon-hello-api`)
-            securityGroupIds: ['sg-08770106971509def'],         // securityGroup : `lemon-services-api`
-            subnetIds: ['subnet-0a53bcd7f3d256ce4','subnet-0ee4d1ca5eb964fc5'],   // subnetIds in VPC
+            securityGroupIds: ['sg-0b0fb4d4bd885c7cd'],         // securityGroupIds `lemon-micro-private`
+            subnetIds: ['subnet-0fcfaad965a2dc997', 'subnet-03a5987eac7caa520'], // subnetIds `subnet-private-2a/2c`
             kmsKey: '*',                                        // KMS key-id to encrypt/decrypt or verify token.
         },
         none: {
