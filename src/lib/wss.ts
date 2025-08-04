@@ -11,11 +11,11 @@
  * @origin      `@lemoncloud/lemon-cluster-api/cluster`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { GETERR, LambdaHandlerService, WSSHandler } from 'lemon-core';
+import { $slack, GETERR, LambdaHandlerService, WSSHandler } from 'lemon-core';
 import { NextContext } from 'lemon-model';
 import { SocketEvent } from './wss-types';
 import { BackendService } from '../service/backend-service';
-import { convertWSSEvent } from './tools';
+import { convertWSSEvent, parseBase64 } from './tools';
 import { $U, WSSEvent, _log } from 'lemon-core';
 import { failure, notfound, success } from 'lemon-core/dist/cores/lambda/lambda-wss-handler';
 const NS = $U.NS(`wss`, 'green'); // NAMESPACE TO BE PRINTED.
@@ -36,11 +36,12 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
      */
     public handle: WSSHandler = async (event, context) => {
         _log(NS, `handle()...`);
-        const $req = event && event.requestContext;
-        const EVENT_TYPE = ($req && $req.eventType) || '';
-        const ROUTE_KEY = ($req && $req.routeKey) || '';
-        _log(NS, '> context =', $U.json(context));
+        const $req = event?.requestContext;
+        const EVENT_TYPE = $req?.eventType ?? '';
+        const ROUTE_KEY = $req?.routeKey ?? '';
+        _log(NS, `> context(${ROUTE_KEY}/${EVENT_TYPE}) =`, $U.json(context));
         _log(NS, `> event(${ROUTE_KEY}/${EVENT_TYPE}) =`, $U.json(event));
+        await $slack(`#socket/${ROUTE_KEY}/${EVENT_TYPE}`, { context, event }, null, { context });
         return $sockets(this.service, event, context)
             .$run()
             .then(r => success(r || ''))
@@ -65,17 +66,11 @@ export const $sockets = (service: BackendService, event?: WSSEvent, context?: Ne
  * - support class for WebSocket events.
  */
 export class WSSAgent {
-    protected service: BackendService;
-    protected event: SocketEvent;
-    protected context: NextContext;
-
     /**
      * default constructor
      */
-    public constructor(service: BackendService, event: SocketEvent, context: NextContext) {
-        this.service = service;
-        this.event = event;
-        this.context = context;
+    public constructor(readonly service: BackendService, readonly event: SocketEvent, readonly context: NextContext) {
+        _log(NS, `WSSAgent(${event?.type || ''}/${event?.connectionId || ''})...`);
     }
 
     /** say hello */
@@ -85,16 +80,18 @@ export class WSSAgent {
      * run and return response.
      */
     public $run = async (): Promise<any> => {
-        const errScope = `$run()`;
         const event = this.event;
+        const errScope = `$run(${event?.direction ?? '-'}/${event?.id ?? ''})`;
         if (!event || !event.id) throw new Error(`@event is required - ${errScope}`);
-        const { type } = event;
+        const type = event?.type;
         if (!type) {
             throw new Error(`@type (string) is required - ${errScope}`);
         } else if (type == 'CONNECT') {
             return this.doConnect(event);
         } else if (type == 'DISCONNECT') {
             return this.doDisconnect(event);
+        } else if (type == 'MESSAGE') {
+            return this.onMessage(event);
         } else {
             throw new Error(`@type[${type}] is invalid! - ${errScope}`);
         }
@@ -105,7 +102,7 @@ export class WSSAgent {
      */
     public async doConnect(event?: SocketEvent): Promise<any> {
         const errScope = `doConnect(${event?.id ?? ''})`;
-        event = event || this.event;
+        event = event ?? this.event;
         return { hello: this.hello(), event };
     }
 
@@ -114,7 +111,17 @@ export class WSSAgent {
      */
     public async doDisconnect(event?: SocketEvent): Promise<any> {
         const errScope = `doConnect(${event?.id ?? ''})`;
-        event = event || this.event;
+        event = event ?? this.event;
+        return { hello: this.hello(), event };
+    }
+
+    /**
+     * handle for disconnection event.
+     */
+    public async onMessage(event?: SocketEvent): Promise<any> {
+        const errScope = `onMessage(${event?.direction}/${event?.id ?? ''})`;
+        event = event ?? this.event;
+        const connId = parseBase64(event?.connectionId);
         return { hello: this.hello(), event };
     }
 }
