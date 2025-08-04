@@ -123,5 +123,49 @@
             "apiId": "0z5quzjfdc"
         },
         "isBase64Encoded": false
+    },
+    "$message": {
+        "requestContext": {
+            "routeKey": "$default",
+            "messageId": "OyXvNdrMoE0CFtA=",
+            "eventType": "MESSAGE",
+            "extendedRequestId": "OyXvNFdGIE0EC3A=",
+            "requestTime": "04/Aug/2025:15:35:09 +0000",
+            "messageDirection": "IN",
+            "stage": "dev",
+            "connectedAt": 1754321686317,
+            "requestTimeEpoch": 1754321709796,
+            "identity": {
+                "sourceIp": "210.90.185.190"
+            },
+            "requestId": "OyXvNFdGIE0EC3A=",
+            "domainName": "0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "OyXrjdqOoE0CFtA=",
+            "apiId": "0z5quzjfdc"
+        },
+        "body": "{\"action\":\"hello\",\"data\":\"world\"}",
+        "isBase64Encoded": false
+    },
+    "$message/echo": {
+        "requestContext": {
+            "routeKey": "echo",
+            "messageId": "OyZE1eEhoE0CEwg=",
+            "eventType": "MESSAGE",
+            "extendedRequestId": "OyZE1HquoE0EIhQ=",
+            "requestTime": "04/Aug/2025:15:44:17 +0000",
+            "messageDirection": "IN",
+            "stage": "dev",
+            "connectedAt": 1754322240630,
+            "requestTimeEpoch": 1754322257779,
+            "identity": {
+                "sourceIp": "210.90.185.190"
+            },
+            "requestId": "OyZE1HquoE0EIhQ=",
+            "domainName": "0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "OyZCKeDuoE0CEwg=",
+            "apiId": "0z5quzjfdc"
+        },
+        "body": "{\"action\":\"echo\",\"data\":\"hello\"}",
+        "isBase64Encoded": false
     }
 }

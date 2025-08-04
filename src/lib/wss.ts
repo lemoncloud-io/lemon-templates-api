@@ -33,15 +33,19 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
 
     /**
      * Default WSS Handler.
+     *
+     * 1. send message like { action: 'echo', data: 'world'}
+     * - `routeKey` will be `echo`. (see serverless.yml)
+     * 2. send message like { action: 'hello', data: 'world'}
+     * - `routeKey` will be `$default`. (see serverless.yml)
      */
     public handle: WSSHandler = async (event, context) => {
         _log(NS, `handle()...`);
         const $req = event?.requestContext;
-        const EVENT_TYPE = $req?.eventType ?? '';
-        const ROUTE_KEY = $req?.routeKey ?? '';
-        _log(NS, `> context(${ROUTE_KEY}/${EVENT_TYPE}) =`, $U.json(context));
-        _log(NS, `> event(${ROUTE_KEY}/${EVENT_TYPE}) =`, $U.json(event));
-        await $slack(`#socket/${ROUTE_KEY}/${EVENT_TYPE}`, { context, event }, null, { context });
+        const ROUTE = [$req?.eventType ?? '', $req?.routeKey ?? ''].join('/');
+        _log(NS, `> context(${ROUTE}) =`, $U.json(context));
+        _log(NS, `> event(${ROUTE}) =`, $U.json(event));
+        await $slack(`#socket/${ROUTE}`, { context, event }, null, { context });
         return $sockets(this.service, event, context)
             .$run()
             .then(r => success(r || ''))
