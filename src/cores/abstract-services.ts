@@ -26,6 +26,7 @@
  * @date        2025-01-03 optimized `buildQuery()` w/ sort + offset.
  * @date        2025-03-24 optimized `OS2Instance` with `lemon-core@3.2.13`
  * @date        2025-07-17 optimized `onAfterSave` with `lemon-core@4.0.4`
+ * @date        2025-07-23 optimized `buildQuery()` with `hidden` + `aggregation` option.
  * @date        2025-08-01 optimized `canDo()` for better security w/ session.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
@@ -346,14 +347,14 @@ export abstract class MyCoreManager<
     public buildQuery<T extends Model>(
         param: PaginateParam,
         model?: SearchParam<T>,
-        options?: { errScope?: string },
+        options?: { errScope?: string; hidden?: boolean | number; aggregation?: string },
     ): SearchBody {
-        const errScope = options?.errScope ?? `- buildQuery()`;
-        if (typeof param?.limit !== 'number') throw new Error(`.limit(number) is required ${errScope}`.trim());
-        if (param?.page && typeof param?.page !== 'number')
-            throw new Error(`.page(number) is required ${errScope}`.trim());
+        const errScope = options?.errScope ?? `buildQuery(${this.type})`;
+        if (typeof param?.limit !== 'number') throw new Error(`.limit(number) is required - ${errScope}`);
+        if (param?.page && typeof param?.page !== 'number') throw new Error(`.page(number) is required - ${errScope}`);
         if (param?.offset && typeof param?.offset !== 'number')
-            throw new Error(`.offset(number) is required ${errScope}`.trim());
+            throw new Error(`.offset(number) is required - ${errScope}`);
+        const aggregation = options?.aggregation ?? 'stereo'; // default aggregation
 
         // STEP.0 validate parameters.
         const { limit } = param;
@@ -373,58 +374,55 @@ export abstract class MyCoreManager<
                     ],
                 },
             },
-            aggs: {
-                stereo: {
-                    terms: {
-                        field: 'stereo.keyword',
-                        missing: 'N/A',
-                        order: { _key: 'asc' },
-                        size: 10,
-                    },
-                },
-            },
         };
 
-        //* helper function.
-        const _add_filter = (query: SearchQuery | SearchQuery[]) => {
-            const filter = [...((body.query.bool.filter as any[]) || []), ...(Array.isArray(query) ? query : [query])];
-            body.query.bool.filter = filter;
-        };
-        const _add_must = (query: SearchQuery | SearchQuery[]) => {
-            const must = [...((body.query.bool.must as any[]) || []), ...(Array.isArray(query) ? query : [query])];
-            body.query.bool.must = must;
-        };
-        const _add_must_not = (query: SearchQuery | SearchQuery[]) => {
-            const must_not = [
-                ...((body.query.bool.must_not as any[]) || []),
-                ...(Array.isArray(query) ? query : [query]),
-            ];
-            body.query.bool.must_not = must_not;
-        };
+        //* apply aggregation if needed.
+        if (aggregation && typeof aggregation === 'string' && aggregation.length > 0) {
+            body.aggs = {
+                [aggregation]: {
+                    terms: {
+                        field: `${aggregation}.keyword`,
+                        missing: 'N/A',
+                        order: { _key: 'asc' },
+                        size: 12,
+                    },
+                },
+            };
+        }
 
         // 1-0. default filter.
         if (model?.stereo === null) {
-            _add_must_not({ term: { [`stereo.keyword`]: '#' } });
+            // _add_must_not({ term: { [`stereo.keyword`]: '#' } });
+            this.addQueryTerm(body, 'must_not', { term: { [`stereo.keyword`]: '#' } });
+        }
+        // 1-1. support `hidden` flag.
+        if (options?.hidden !== undefined) {
+            const hidden = Boolean(options?.hidden);
+            if (hidden) {
+                this.addQueryTerm(body, 'must', { term: { hidden: 1 } });
+            } else {
+                this.addQueryTerm(body, 'must_not', { term: { hidden: 1 } });
+            }
         }
 
-        // 1-1. filter by attributes.
+        // 1-2. filter by attributes.
         if (model && Object.keys(model).length > 0) {
             _inf(this.logNS, `> filters =`, $U.json(model));
             Object.entries(model).forEach(([key, val]) => {
                 if (typeof val === 'string') {
                     if (val === '') {
-                        _add_must_not({ exists: { field: `${key}` } });
+                        this.addQueryTerm(body, 'must_not', { exists: { field: `${key}` } });
                     } else if (val === '!') {
-                        _add_must({ exists: { field: `${key}` } });
+                        this.addQueryTerm(body, 'must', { exists: { field: `${key}` } });
                     } else {
-                        _add_filter({ term: { [`${key}.keyword`]: val } });
+                        this.addQueryTerm(body, 'filter', { term: { [`${key}.keyword`]: val } });
                     }
                 } else if (val === null) {
                     // ignore
                 } else if (typeof val === 'number') {
-                    _add_filter({ term: { [`${key}`]: val } });
+                    this.addQueryTerm(body, 'filter', { term: { [`${key}`]: val } });
                 } else if (typeof val === 'object' && Array.isArray(val)) {
-                    _add_must({
+                    this.addQueryTerm(body, 'must', {
                         bool: {
                             should: (val as any[]).map(n => ({
                                 term: {
@@ -443,6 +441,44 @@ export abstract class MyCoreManager<
     }
 
     /**
+     * Query 기준 추가하기.
+     */
+    public addQueryTerm(body: SearchBody, term: 'filter' | 'must' | 'must_not', query: SearchQuery | SearchQuery[]) {
+        if (!body) throw new Error(`@body (SearchBody) is required!`);
+        if (!body.query || !body.query.bool) {
+            body.query = { bool: { filter: [], must: [], must_not: [] } };
+        }
+
+        //* helper function.
+        const _add_filter = (query: SearchQuery | SearchQuery[]) => {
+            const filter = [...((body.query.bool.filter as any[]) || []), ...(Array.isArray(query) ? query : [query])];
+            body.query.bool.filter = filter;
+        };
+        const _add_must = (query: SearchQuery | SearchQuery[]) => {
+            const must = [...((body.query.bool.must as any[]) || []), ...(Array.isArray(query) ? query : [query])];
+            body.query.bool.must = must;
+        };
+        const _add_must_not = (query: SearchQuery | SearchQuery[]) => {
+            const must_not = [
+                ...((body.query.bool.must_not as any[]) || []),
+                ...(Array.isArray(query) ? query : [query]),
+            ];
+            body.query.bool.must_not = must_not;
+        };
+
+        if (term === 'filter') {
+            _add_filter(query);
+        } else if (term === 'must') {
+            _add_must(query);
+        } else if (term === 'must_not') {
+            _add_must_not(query);
+        } else {
+            throw new Error(`@term(${term}) is not supported!`);
+        }
+        return body;
+    }
+
+    /**
      * sort 기준 추가하기.
      */
     public addSortTerm(body: SearchBody, param?: PaginateParam) {
@@ -456,6 +492,7 @@ export abstract class MyCoreManager<
             else if (sort === 'name') body.sort = { 'name.keyword': { order, missing: '_last' } };
             else if (sort === 'brand') body.sort = { 'brand.keyword': { order, missing: '_last' } };
             else if (sort === 'color') body.sort = { 'color.keyword': { order, missing: '_last' } };
+            else if (sort === 'order') body.sort = { order: { order, missing } };
             else if (sort === 'createdAt') body.sort = { createdAt: { order, missing } };
             else if (sort === 'updatedAt') body.sort = { updatedAt: { order, missing } };
             else if (sort) body.sort = { [`${sort}.keyword`]: { order, missing } };
