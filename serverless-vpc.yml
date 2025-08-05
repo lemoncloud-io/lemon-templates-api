@@ -8,7 +8,8 @@ service: lemon-templates-api
 frameworkVersion: "3"
 
 plugins:
-  - serverless-offline
+  #WARN - failure in nodejs 22.x due to `serverless-offline` plugin @250627
+  # - serverless-offline
   - serverless-aws-documentation
   - serverless-prune-plugin
   - serverless-plugin-log-retention
