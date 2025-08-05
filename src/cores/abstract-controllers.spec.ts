@@ -16,7 +16,7 @@
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { $rand, $T, expect2, GETERR } from 'lemon-core';
+import { $rand, $T, $U, expect2, GETERR, GETERR$, NextContext } from 'lemon-core';
 import { $ES6 } from './abstract-services';
 import { AbstractCRUDController, AbstractTransformer } from './abstract-controllers';
 import { View, Body } from './types';
@@ -564,78 +564,142 @@ describe('AbstractCRUDController', () => {
 
     //* test `/hello` route
     it('should normal CRUD: tests/1', async () => {
-        const { api, current } = instance({ session: false });
+        // const { api, current } = instance({ session: false });
+        const { api, current, context } = instance({ auth: 'session', session: true });
         expect2(() => api.hello()).toEqual(
             'api:tests/typed-storage-service:test/proxy-storage-service:dummy-storage-service:dummy-data/_id',
         );
+        expect2(() => context?.identity, 'sid,uid').toEqual({ sid: '1000008', uid: '1000007' });
+        const $guests: NextContext = { ...context, identity: { ...context?.identity, roles: [] } };
+        const $others: NextContext = { ...context, identity: { ...context?.identity, sid: 'some' } };
 
+        // timestamp
         const $ts = {
             createdAt: current,
             updatedAt: current,
             deletedAt: 0,
         };
+        // session core.
+        const $ = {
+            sid: '1000008',
+            uid: '1000007',
+        };
 
         // get not exist
-        expect2(await api.doGet('').catch(GETERR)).toEqual('@id (string) is required!');
-        expect2(await api.doGet('1').catch(GETERR)).toEqual('404 NOT FOUND - proxy/test/id:1');
-        expect2(await api.doGet(' 1').catch(GETERR)).toEqual('404 NOT FOUND - proxy/test/id:1');
-        expect2(await api.doGet(' 1 ').catch(GETERR)).toEqual('404 NOT FOUND - proxy/test/id:1');
-        expect2(await api.doGet(' 1 1 ').catch(GETERR)).toEqual('404 NOT FOUND - proxy/test/id:11');
+        expect2(await api.doGet('').catch(GETERR)).toEqual('@id (string) is required - doGet(tests/)');
+        expect2(await api.doGet('1').catch(GETERR)).toEqual('404 NOT FOUND - not found @doGet(tests/1)');
+        expect2(await api.doGet(' 1').catch(GETERR)).toEqual('404 NOT FOUND - not found @doGet(tests/ 1)');
+        expect2(await api.doGet(' 1 ').catch(GETERR)).toEqual('404 NOT FOUND - not found @doGet(tests/ 1 )');
+        expect2(await api.doGet(' 1 1 ').catch(GETERR)).toEqual('404 NOT FOUND - not found @doGet(tests/ 1 1 )');
 
-        // // == post ======================================================
-        expect2(await api.doPost('', null, { name: 'test', test: -1 }, undefined).catch(GETERR)).toEqual(
+        // == post ======================================================
+        expect2(await api.doPost('', null, { name: 'test', test: -1 }, context).catch(GETERR)).toEqual(
             '.test (number) is required (greater than 0)',
         );
-        expect2(await api.doPost('1', null, { name: 'test', test: -1 }, undefined).catch(GETERR)).toEqual(
-            '@id (string) is invalid!',
+        expect2(await api.doPost('1', null, { name: 'test', test: -1 }, context).catch(GETERR)).toEqual(
+            '@id (string) is invalid - doPost(tests/1)',
         );
-        const newPost: any = await api.doPost('', null, { name: 'test', test: 1 }, undefined).catch(GETERR);
+        const newPost = await api.doPost('', null, { name: 'test', test: 1 }, context).catch<TestModel>(GETERR$);
         expect2(() => newPost, 'id').toEqual({ id: '1000001' });
-
         //WARN - double checking of `validateModel` for `makeModel`.
-        expect2(() => newPost).toEqual({ id: '1000001', ko: '', name: 'test', ...$ts });
+        expect2(() => newPost).toEqual({ id: '1000001', ko: '', name: 'test', ...$ts, $ });
+
+        const newPost2 = await api.doPostBulk('', null, [{ name: 'bulk1' }, { name: 'bulk2' }], context);
+        expect2(() => newPost2, 'id').toEqual([{ id: '1000002' }, { id: '1000003' }]);
 
         // == get ======================================================
         // get newPost
-        expect2(await api.doGet(newPost.id).catch(GETERR)).toEqual({
+        expect2(await api.doGet(newPost.id).catch(GETERR)).toEqual(
+            '403 IDENTITY-TOKEN - .identity (IdentityToken) is required - context:',
+        );
+        expect2(await api.doGet(newPost.id, null, null, context).catch(GETERR)).toEqual({
             id: newPost.id,
             ko: '',
             name: 'test',
             ...$ts,
+            $,
         });
+        expect2(await api.doGet(newPost.id, null, null, $others).catch(GETERR)).toEqual(
+            '403 NOT ALLOWED - action[read] is invalid @doGet(tests/1000001)',
+        );
+        expect2(await api.doGet(newPost.id, null, null, $guests).catch(GETERR)).toEqual(
+            '403 NOT ALLOWED - action[read] is invalid @doGet(tests/1000001)',
+        );
 
         // == update ======================================================
         // put newPost
-        expect2(await api.doPut('0', null, { name: 'test2' }).catch(GETERR)).toEqual('@id (string) is required!');
-        expect2(await api.doPut(newPost.id, null, { name: 'test2' }).catch(GETERR)).toEqual({
+        expect2(await api.doPut('0', null, { name: 'test2' }, context).catch(GETERR)).toEqual(
+            '@id (string) is required - doPut(tests/0)',
+        );
+        expect2(await api.doPut(newPost.id, null, { name: 'test2' }, context).catch(GETERR)).toEqual({
             id: newPost.id,
             ko: '',
             name: 'test2',
             ...$ts,
+            $,
         });
+
+        //- check doPutBulk()
+        expect2(await api.doPutBulk('', null, null, context).catch(GETERR)).toEqual(
+            '@body.list (array) is required - doPutBulk(tests/)',
+        );
+        expect2(await api.doPutBulk('', null, {} as any, context).catch(GETERR)).toEqual(
+            '@body.list (array) is required - doPutBulk(tests/)',
+        );
+        expect2(
+            await api
+                .doPutBulk(
+                    '',
+                    null,
+                    newPost2.map(N => ({ id: N.id, name: N.name + '2' })),
+                    context,
+                )
+                .then(R => R.list)
+                .catch(GETERR),
+            'id,error',
+        ).toEqual([{ id: '1000002' }, { id: '1000003' }]);
+
         // check updated newPost
-        expect2(await api.doGet(newPost.id).catch(GETERR)).toEqual({
+        expect2(await api.doGet(newPost.id, null, null, context).catch(GETERR)).toEqual({
             id: newPost.id,
             ko: '',
             name: 'test2',
             ...$ts,
+            $,
         });
 
         // == delete======================================================
         // delete not exists
-        expect2(await api.doDelete('not_exists').catch(GETERR)).toEqual('404 NOT FOUND - proxy/test/id:not_exists');
+        expect2(await api.doDelete('not_exists', null, null, context).catch(GETERR)).toEqual(
+            '404 NOT FOUND - not found @doDelete(tests/not_exists)',
+        );
         // delete newPost
-        expect2(await api.doDelete('0').catch(GETERR)).toEqual('@id (string) is required!');
-        expect2(await api.doDelete(newPost.id).catch(GETERR)).toEqual({
+        expect2(await api.doDelete('0', null, null, context).catch(GETERR)).toEqual(
+            '@id (string) is required - doDelete(tests/0)',
+        );
+        expect2(await api.doDelete(newPost.id, null, null, context).catch(GETERR)).toEqual({
             id: newPost.id,
             ko: '',
             name: 'test2',
             ...$ts,
+            $,
             deletedAt: current,
         });
         // check deleted newPost (soft delete)
-        expect2(await api.doGet(newPost.id).catch(GETERR)).toEqual('404 NOT FOUND - test:1000001');
-        expect2(await api.doDelete(newPost.id).catch(GETERR)).toEqual('404 NOT FOUND - test:1000001');
+        expect2(await api.doGet(newPost.id, null, null, context).catch(GETERR)).toEqual(
+            `404 NOT FOUND - deleted at ${$U.ts(current)} @doGet(tests/1000001)`,
+        );
+        expect2(await api.doDelete(newPost.id, null, null, context).catch(GETERR)).toEqual(
+            '404 NOT FOUND - deleted @doDelete(tests/1000001)',
+        );
+        expect2(await api.doDelete(newPost.id, { destroy: '' }, null, context).catch(GETERR)).toEqual({
+            id: newPost.id,
+            ko: '',
+            name: 'test2',
+            ...$ts,
+            $,
+            deletedAt: current,
+        });
     });
 
     //* test `findLookup$()` in manager

@@ -23,6 +23,7 @@
  * @date        2023-09-27 optimized `doList()` to parse param.
  * @date        2023-11-06 optimized `onAfterSave()` for post-processing.
  * @date        2025-04-10 optimized `errScope` per each handler.
+ * @date        2025-08-01 optimized `canDo()` for better security.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
@@ -276,6 +277,7 @@ export abstract class AbstractCRUDController<
 
             //* search from manager.
             const $res = await this.manager.list($page, $param);
+
             //* for internal test, list can be `SearchBody`
             const list = Array.isArray($res.list) ? $res.list.map(model => this.modelAsView(model)) : $res.list;
             const total = $res?.total ?? list.length;
@@ -305,7 +307,7 @@ export abstract class AbstractCRUDController<
         id = id === '0' ? '' : $T.S2(id).trim();
 
         // STEP.0 validate paramters.
-        if (!id) throw new Error(`@id (string) is required - ${errScope}`);
+        if (id) throw new Error(`@id[${id ?? ''}](string) is invalid - ${errScope}`);
 
         // redirect to list()
         return this.doList(id, param, body, $ctx);
@@ -322,12 +324,12 @@ export abstract class AbstractCRUDController<
         const save = $T.B(param?.save, param?.save === '' ? 1 : 0);
         const clear = $T.B(param?.clear, param?.clear === '' ? 1 : 0);
 
-        const isLocal = $ctx?.domain === 'localhost';
-        const hello = this.hello();
-        if (!isLocal && id) throw new Error(`403 NOT ALLOWED - only from local - ${errScope}`);
-
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         return this.service.guardProxy($ctx, async proxy => {
+            const hasAdmin = proxy.hasAdminRole();
+            if (!hasAdmin && id) throw new Error(`403 NOT ALLOWED - only for admin @${errScope}`);
+            const hello = this.hello();
+
             //* initialize models w/ running environment.
             if (id === 'initialize') {
                 //$ http ':8888/<type>/initialize/admin?clear'
@@ -343,8 +345,9 @@ export abstract class AbstractCRUDController<
             } else if (id) {
                 const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
                 const model = await $prxy.get(id);
-                return model;
+                return this.modelAsView(model);
             }
+
             // returns default.
             return { id, hello, param, body, context: { clientIp: $ctx.clientIp } };
         });
@@ -366,13 +369,16 @@ export abstract class AbstractCRUDController<
         // STEP.0 validate paramters.
         if (!id) throw new Error(`@id (string) is required - ${errScope}`);
 
-        // STEP.1 (TODO) validate user, and transform to model.
-
-        // STEP.2 run main
+        //* runs in guarded prxy.
         return this.service.guardProxy($ctx, async proxy => {
+            // STEP.1 read model.
             const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
-            const model = await $prxy.get(id);
-            if (model.deletedAt > 0) throw new Error(`404 NOT FOUND - ${this.modelType}:${id}`);
+            const model = await $prxy.get(id, false);
+            if (!model?.id) throw new Error(`404 NOT FOUND - not found @${errScope}`);
+            if (!proxy.canDo('read', model, { errScope })) return null; // no permission to read.
+            // STEP.2 returns as view.
+            if (model?.deletedAt > 0)
+                throw new Error(`404 NOT FOUND - deleted at ${$U.ts(model.deletedAt)} @${errScope}`);
             return this.modelAsView(model);
         });
     };
@@ -403,13 +409,15 @@ export abstract class AbstractCRUDController<
 
         // STEP.2 run main
         return this.service.guardProxy($ctx, async proxy => {
-            const base = await this.makeModelBase(proxy);
+            const $base = await this.makeModelBase(proxy);
+            $base.type = this.modelType; // set type explicitly.
             const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
-            const validated = await $prxy.validateModel(toCreate, null);
-            const filtered = await $prxy.onBeforeSave(validated, null);
-            const created = await $prxy.makeModel({ ...filtered, ...base }, false); //WARN! - already validated.
-            const final = await $prxy.onAfterSave(created, null);
-            return this.modelAsView(final);
+            const $valid = await $prxy.validateModel(toCreate, null);
+            if (!proxy.canDo('create', { ...$valid, ...$base }, { errScope })) return null; // no permission to create.
+            const $saves = await $prxy.onBeforeSave($valid, null);
+            const $saved = await $prxy.makeModel({ ...$saves, ...$base }, false); //WARN! - already validated.
+            const $final = await $prxy.onAfterSave($saved, null);
+            return this.modelAsView($final);
         });
     }
 
@@ -441,10 +449,14 @@ export abstract class AbstractCRUDController<
         // STEP.2 run main...
         return this.service.guardProxy($ctx, async proxy => {
             const $base = await this.makeModelBase(proxy);
+            $base.type = this.modelType; // set type explicitly.
             const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
-            const validated = await Promise.all(models.map(N => $prxy.validateModel(N, null)));
+            const _can = (model: MyModel) => proxy.canDo('create', { ...model, ...$base }, { errScope });
+            const $valid = await Promise.all(
+                models.map(N => $prxy.validateModel(N, null).then(N => (_can(N) ? N : null))),
+            );
             //* only for all validated models.
-            const filtered = await my_sequence(validated, async validated => {
+            const filtered = await my_sequence($valid, async validated => {
                 const filtered = await $prxy.onBeforeSave(validated, null);
                 const created = await $prxy.makeModel({ ...filtered, ...$base }, false); //WARN! - already validated.
                 return $prxy.onAfterSave(created, null);
@@ -476,43 +488,17 @@ export abstract class AbstractCRUDController<
         // STEP.2 run main
         return this.service.guardProxy($ctx, async proxy => {
             const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
-            const $org = await $prxy.get(id);
-            const validated = await $prxy.validateModel(toUpdate, id);
-            const filtered = await $prxy.onBeforeSave(validated, $org);
-            const updated = await $prxy.set(id, filtered);
-            const final = await $prxy.onAfterSave(updated, $org);
-            return this.modelAsView(final);
-        });
-    };
+            const $org = await $prxy.get(id, false);
+            if (!$org?.id) throw new Error(`404 NOT FOUND - not found @${errScope}`);
+            if ($org?.deletedAt) throw new Error(`404 NOT FOUND - deleted @${errScope}`);
+            if (!proxy.canDo('update', $org, { errScope })) return null; // no permission to update.
 
-    /**
-     * delete a `MyModel`
-     *
-     * ```sh
-     * $ http DELETE ':8888/<typeName>/1000003'
-     */
-    public doDelete: NextHandler<any, MyView> = async (id, param, body, $ctx) => {
-        const errScope = `doDelete(${this.type()}/${id ?? ''})`;
-        _log(this.logNS, `${errScope}...`);
-        param && _log(this.logNS, `> param =`, $U.json(param));
-        body && _log(this.logNS, `> body =`, $U.json(body));
-        id = id === '0' ? '' : $T.S2(id).trim();
-        const isLocal = $ctx?.domain === 'localhost';
-        const destroy = !!$T.B(param?.destroy, param?.destroy === '' ? 1 : 0);
-
-        // STEP.0 validate paramters.
-        if (!id) throw new Error(`@id (string) is required - ${errScope}`);
-
-        // STEP.1 (TODO) validate user, and transform to model.
-
-        // STEP.2 run main
-        return this.service.guardProxy($ctx, async proxy => {
-            const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
-            const $org = await $prxy.get(id, true);
-            if (!destroy && $org?.deletedAt > 0) throw new Error(`404 NOT FOUND - ${this.manager.type}:${id}`);
-            const deleted = await $prxy.$mgr.delete(id, isLocal && destroy);
-            const final = await $prxy.onAfterSave(null, deleted);
-            return this.modelAsView(final || deleted);
+            // STEP.3 validate and update.
+            const $valid = await $prxy.validateModel(toUpdate, id);
+            const $saves = await $prxy.onBeforeSave($valid, $org);
+            const $saved = await $prxy.set(id, $saves);
+            const $final = await $prxy.onAfterSave($saved, $org);
+            return this.modelAsView($final);
         });
     };
 
@@ -536,25 +522,38 @@ export abstract class AbstractCRUDController<
         const parrallel = $T.N(param?.parrallel, 10);
         const list = Array.isArray(body) ? body : body?.list;
         if (!list || !Array.isArray(list)) throw new Error(`@body.list (array) is required - ${errScope}`);
+
         // transform to models
-        const models = list.map(N => ({
+        const models = list.map<MyModel>(N => ({
             ...this.bodyToModel(N),
             id: _id(N?.id),
         }));
+
         // runs in guarded proxy.
         const $res = await this.service.guardProxy($ctx, async proxy => {
-            const $prxy = proxy.getManagerProxy(this.modelType);
+            const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
             if (!$prxy) throw new Error(`.model-type[${this.modelType}] is required - ${errScope}`);
+
+            const _can = async (N: MyModel, i?: number) => {
+                const errScope = `doPutBulk(${this.type()}:${i}/${N?.id ?? ''})`;
+                const model = N?.id ? await $prxy.get(N?.id, false) : null;
+                if (!model?.id) throw new Error(`404 NOT FOUND - not found @${errScope}`);
+                if (model?.deletedAt) throw new Error(`404 NOT FOUND - deleted @${errScope}`);
+                if (!proxy.canDo('update', model, { errScope })) return null; // no permission to update.
+                return model;
+            };
+            const list = await Promise.all(models.map(N => _can(N)));
+
             //* validate and update.
             const $res = await my_parrallel(
-                models,
+                list,
                 async (model: MyModel, i) => {
-                    if (!model?.id) throw new Error(`.id (string) is required - ${errScope}`);
+                    if (!model?.id) throw new Error(`.id (string) is required at idx[${i}] - ${errScope}`);
                     const $org = await $prxy.get(model.id);
-                    const validated = await $prxy.validateModel(model, model.id);
-                    const filtered = await $prxy.onBeforeSave(validated, $org);
-                    const updated = await $prxy.set(model.id, filtered);
-                    return $prxy.onAfterSave(updated, $org);
+                    const $valid = await $prxy.validateModel(model, model.id);
+                    const $saves = await $prxy.onBeforeSave($valid, $org);
+                    const $saved = await $prxy.set(model.id, $saves);
+                    return $prxy.onAfterSave($saved, $org);
                 },
                 parrallel,
             );
@@ -565,8 +564,41 @@ export abstract class AbstractCRUDController<
         // prepare the response.
         const views = $res.map((N: MyModel) => this.modelAsView(N));
         const length = views.length;
+
         // FINAL. convert to view
         return { total: length, limit: length, list: views };
+    };
+
+    /**
+     * delete a `MyModel`
+     *
+     * ```sh
+     * $ http DELETE ':8888/<typeName>/1000003'
+     */
+    public doDelete: NextHandler<any, MyView> = async (id, param, body, $ctx) => {
+        const errScope = `doDelete(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
+        param && _log(this.logNS, `> param =`, $U.json(param));
+        body && _log(this.logNS, `> body =`, $U.json(body));
+        id = id === '0' ? '' : $T.S2(id).trim();
+        const isLocal = $ctx?.domain === 'localhost';
+        const destroy = !!$T.B(param?.destroy, param?.destroy === '' ? 1 : 0);
+
+        // STEP.0 validate paramters.
+        if (!id) throw new Error(`@id (string) is required - ${errScope}`);
+
+        // STEP.2 run main
+        return this.service.guardProxy($ctx, async proxy => {
+            const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
+            const model = await $prxy.get(id, false);
+            if (!model?.id) throw new Error(`404 NOT FOUND - not found @${errScope}`);
+            if (!destroy && model?.deletedAt) throw new Error(`404 NOT FOUND - deleted @${errScope}`);
+            if (!proxy.canDo('delete', model, { errScope })) return null; // no permission to update.
+
+            const deleted = await $prxy.$mgr.delete(id, isLocal && destroy);
+            const $final = await $prxy.onAfterSave(null, deleted);
+            return this.modelAsView($final || deleted);
+        });
     };
 }
 

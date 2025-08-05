@@ -8,7 +8,6 @@
  *
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
-import { loadProfile } from 'lemon-core/dist/environ';
 import { expect2, NextIdentityAccess, _it } from 'lemon-core';
 import { BackendProxy } from './backend-proxy';
 import { AuthType, ServiceParams } from './backend-service.spec';
@@ -35,9 +34,6 @@ export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
 
 //! main test body.
 describe('BackendProxy', () => {
-    const PROFILE = loadProfile(process); // override process.env.
-    PROFILE && console.info('! PROFILE =', PROFILE);
-
     //! basic function
     it('should pass basic function', async () => {
         const { service, proxy, current } = instance();

@@ -26,12 +26,13 @@
  * @date        2025-01-03 optimized `buildQuery()` w/ sort + offset.
  * @date        2025-03-24 optimized `OS2Instance` with `lemon-core@3.2.13`
  * @date        2025-07-17 optimized `onAfterSave` with `lemon-core@4.0.4`
+ * @date        2025-08-01 optimized `canDo()` for better security w/ session.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/codes-backend-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import $cores, { $U, $T, _log, _inf, _err, NUL404, GETERR, asyncCredentials } from 'lemon-core';
+import $cores, { $U, _log, _inf, _err, NUL404, GETERR, asyncCredentials } from 'lemon-core';
 import { my_parrallel, SearchType, _ES6, createSigV4Proxy, my_sequence } from 'lemon-core';
 import { Elastic6Service, Elastic6Option, Elastic6QueryService, Elastic6Synchronizer } from 'lemon-core';
 import { $ERROR, Incrementable, GETERR$, CoreManager, CoreModel, CoreService } from 'lemon-core';
@@ -40,8 +41,8 @@ import { NextContext, NextIdentity, NextIdentityCognito, getIdentityId, waited, 
 import { DynamoScanService, DynamoScanFilter, DynamoScanResult, GeneralItem, Elastic6Instance } from 'lemon-core';
 import { ApiHttpProxy, APIHeaders, elasticsearch, SearchResponse, DynamoOption, Elastic6Item } from 'lemon-core';
 import { BulkItemsResult, IdentityToken, ListResult, PaginateParam } from './types';
+import { $T, onlyDefined, parsePaginateParam } from './commons';
 import { keys } from 'ts-transformer-keys';
-import { onlyDefined, parsePaginateParam } from './commons';
 const NAME = $U.env('NAME', 'lemon');
 const NS = $U.NS('HDBS', 'green');
 /**
@@ -50,6 +51,41 @@ const NS = $U.NS('HDBS', 'green');
 const CORE_FIELDS: string[] = keys<CoreModel>();
 
 export type SearchParam<T> = T & { [key: string]: string | number };
+
+/**
+ * lookup table for common types.
+ */
+const $LUT = {
+    /**
+     * type: `CanDoAction`
+     */
+    CanDoAction: {
+        list: 'list',
+        read: 'read',
+        create: 'create',
+        update: 'update',
+        delete: 'delete',
+    },
+};
+
+/**
+ * type: `CanDoActionType`
+ */
+export type CanDoActionType = keyof typeof $LUT.CanDoAction;
+
+/**
+ * Optional parameters for `canDo()`
+ */
+export interface CanDoOptions {
+    /** error scope to print */
+    errScope?: string;
+    /** flag to throw error if not allowed (default false) */
+    throwable?: boolean;
+    /** flag to use session (default true) */
+    useSession?: boolean;
+    /** current context to override */
+    context?: NextContext;
+}
 
 /**
  * type: `ScanLastParams`
@@ -849,6 +885,8 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         LOCAL_ACCOUNT?: string;
         /** (optional) env.USE_SESSION */
         USE_SESSION?: string;
+        /** (optional) next context to override */
+        context?: NextContext;
     }): IdentityToken {
         // const useSession = !$U.env('LOCAL_ACCOUNT') ? $U.env('USE_SESSION') : null;
         const throwable = options?.throwable ?? true;
@@ -859,7 +897,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         LOCAL_ACCOUNT && _inf(this.service.NS, `> LOCAL_ACCOUNT =`, LOCAL_ACCOUNT);
         USE_SESSION && _inf(this.service.NS, `> use-session =`, useSession, USE_SESSION);
 
-        const context: NextContext<IdentityToken> = this.context as any;
+        const context = (options?.context ?? this.context) as unknown as NextContext<IdentityToken>;
         //* WARN - in case of local, no need to throw error.
         const isLocal = context?.domain === 'localhost';
 
@@ -943,9 +981,16 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
             hasRole?: string;
         },
         /** (optional) */
-        options?: { throwable?: boolean; errScope?: string },
+        options?: {
+            /** (optional) throwable to throw error if error */
+            throwable?: boolean;
+            /** (optional) errScope to override in error */
+            errScope?: string;
+            /** (optional) next context to override */
+            context?: NextContext;
+        },
     ) {
-        const context = this.context;
+        const context = options?.context ?? this.context;
         const throwable = options?.throwable ?? true;
         const errScope = options?.errScope ?? `assertContext()`;
         const $idt = context?.identity as NextIdentityCognito;
@@ -953,12 +998,12 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         //* call in local
         const isLocal = context?.domain === 'localhost';
         //* signed call with access-key
-        const isSigned = isS(($idt as any)?.accessKey);
+        const isSigned = isS($idt?.accessKey);
         //* authed by cognito provider.
         const isAuthed = isS($idt?.identityProvider) && isS($idt?.identityId) && isS($idt?.identityPoolId);
         //* check if has role
         const _hasRole = (role: string): boolean => {
-            const $sess = this.getCurrentSession({ throwable: false });
+            const $sess = this.getCurrentSession({ throwable: false, context });
             return $sess?.roles?.includes(role);
         };
 
@@ -993,7 +1038,8 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
      * @param options optionals
      * @returns boolean
      */
-    public hasAdminRole(role = 'admin', options?: { errScope?: string }) {
+    public hasAdminRole(role?: string, options?: { errScope?: string; context?: NextContext }) {
+        role = $T.S2(role, 'admin');
         const $option = { ...options, throwable: false };
         if (this.assertContext({ isLocal: true }, $option)) return true;
         if (this.assertContext({ isSigned: true, isAuthed: false }, $option)) return true;
@@ -1003,6 +1049,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
 
     /**
      * prepare `next-context` w/ the customized { domain, userAgent }
+     *
      * @param identityId the target identity-id
      * @param options additional options.
      */
@@ -1036,6 +1083,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
 
     /**
      * from `identity-token`, make base of model { sid, uid }
+     *
      * @param proxy the current proxy.
      * @returns base model
      */
@@ -1066,6 +1114,23 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
             base['uid'] = base['uid'] ?? parent?.uid;
         }
         return base;
+    }
+
+    /**
+     * Check if the user can perform a specific action on a model.
+     * - override this method to implement custom logic.
+     *
+     * @param action The action to check.
+     * @param model The model to check against. (.type is used to find the manager-proxy)
+     * @param options Optional parameters for the check.
+     * @returns True if the action is allowed, false otherwise.
+     */
+    public canDo<M extends CoreModel<U>>(action: CanDoActionType, model?: M, options?: CanDoOptions): boolean {
+        const type = model?.type;
+        if (typeof type !== 'string') throw new Error(`400 INVALID - @model.type (string) is required!`);
+        const $prx = this.getManagerProxy<M, MyCoreManager<M, U, MyService>>(type);
+        if (!$prx) return false;
+        return $prx.canDo(action, model, options);
     }
 }
 
@@ -1240,6 +1305,65 @@ export class MyManagerProxy<
         if ($org?.id !== modelId) throw new Error(`.id[${model?.id}] is invalid (mismatched ${modelId}) - ${errScope}`);
         const $res = hasId ? this.override($org, $def3) : $org;
         return $res as T; //! return the model with id.
+    }
+
+    /**
+     * Check if the current user can perform the specified action on the given model.
+     * - override this method to implement custom logic.
+     *
+     * @param action The action to check.
+     * @param model The model to check against.
+     * @param options Additional options for the check.
+     * @returns True if the action is allowed, false otherwise.
+     */
+    public canDo<T extends MyModel>(action: CanDoActionType, model?: T, options?: CanDoOptions): boolean {
+        const errScope = options?.errScope ?? `canDo(${action ?? ''}:${this.$mgr.type}/${model?.id ?? '-'})`;
+        const useSession = options?.useSession ?? this.proxy.service.isUseSssion();
+        const throwable = options?.throwable ?? true;
+        const context = options?.context;
+
+        // STEP.0 validate parameters.
+        const _act = $T.asLut(action, $LUT.CanDoAction, { throwable: false, default: null });
+        if (!_act || typeof _act !== 'string')
+            throw new Error(`400 INVALID - action[${action ?? ''}] is invalid @${errScope}`);
+
+        // no session but required.
+        const $sess = this.proxy.getCurrentSession({ throwable, useSession, context });
+        if (useSession && !$sess) return false;
+
+        // admin can do anything.
+        const isAdmin = this.proxy.hasAdminRole(null, { errScope, context });
+        const hasRole = $sess?.roles?.length > 0 ? true : false; // guest if empty.
+        if (isAdmin) return true;
+
+        // session & model information.
+        const S = { sid: $T.S2($sess?.sid), uid: $T.S2($sess?.uid) };
+        const M = { sid: $T.S2(model?.sid), uid: $T.S2(model?.uid) };
+
+        // check action.
+        if (hasRole) {
+            switch (_act) {
+                case 'list':
+                case 'read':
+                case 'create':
+                    // (default) action is allowed if sid matches or no sid.
+                    if (!M.sid) return true;
+                    if (S.sid === M.sid) return true;
+                    break;
+                case 'update':
+                case 'delete':
+                    // (default) action is allowed if sid&uid matches or no sid.
+                    if (!M.sid) return true;
+                    if (S.sid === M.sid && S.uid === M.uid) return true;
+                    break;
+                default:
+                    throw new Error(`400 INVALID - action[${_act}] is invalid @${errScope}`);
+            }
+        }
+
+        // not allowed.
+        if (throwable) throw new Error(`403 NOT ALLOWED - action[${_act}] is invalid @${errScope}`);
+        return false;
     }
 }
 
