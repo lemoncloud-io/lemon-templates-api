@@ -11,13 +11,12 @@
  * @origin      `@lemoncloud/lemon-cluster-api/cluster`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $slack, GETERR, LambdaHandlerService, WSSHandler } from 'lemon-core';
-import { NextContext } from 'lemon-model';
-import { SocketEvent } from './wss-types';
-import { BackendService } from '../service/backend-service';
-import { convertWSSEvent, parseBase64 } from './tools';
-import { $U, WSSEvent, _log } from 'lemon-core';
+import { $U, _log, _inf, _err, GETERR, NextContext, $slack } from 'lemon-core';
+import { WSSEvent, LambdaHandlerService, WSSHandler } from 'lemon-core';
 import { failure, notfound, success } from 'lemon-core/dist/cores/lambda/lambda-wss-handler';
+import { SocketEvent } from './wss-types';
+import { convertWSSEvent, parseBase64 } from './tools';
+import { BackendService } from '../service/backend-service';
 const NS = $U.NS(`wss`, 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -46,6 +45,8 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
         _log(NS, `> context(${ROUTE}) =`, $U.json(context));
         _log(NS, `> event(${ROUTE}) =`, $U.json(event));
         await $slack(`#socket/${ROUTE}`, { context, event }, null, { context });
+
+        //TODO - define the exact type of result(WSResult).
         return $sockets(this.service, event, context)
             .$run()
             .then(r => success(r || ''))
