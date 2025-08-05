@@ -1341,18 +1341,24 @@ export class MyManagerProxy<
         const M = { sid: $T.S2(model?.sid), uid: $T.S2(model?.uid) };
 
         // check action.
-        switch (_act) {
-            case 'list':
-            case 'read':
-            case 'create':
-            case 'update':
-            case 'delete':
-                if (!hasRole) break;
-                // (default) action is allowed if sid matches or no sid.
-                if (S.sid === M.sid || !M.sid) return true;
-                break;
-            default:
-                throw new Error(`400 INVALID - action[${_act}] is invalid @${errScope}`);
+        if (hasRole) {
+            switch (_act) {
+                case 'list':
+                case 'read':
+                case 'create':
+                    // (default) action is allowed if sid matches or no sid.
+                    if (!M.sid) return true;
+                    if (S.sid === M.sid) return true;
+                    break;
+                case 'update':
+                case 'delete':
+                    // (default) action is allowed if sid&uid matches or no sid.
+                    if (!M.sid) return true;
+                    if (S.sid === M.sid && S.uid === M.uid) return true;
+                    break;
+                default:
+                    throw new Error(`400 INVALID - action[${_act}] is invalid @${errScope}`);
+            }
         }
 
         // not allowed.

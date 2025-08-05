@@ -419,10 +419,27 @@ describe('abstract-services', () => {
             expect2(() => _can2('list')).toEqual(true);
             expect2(() => _can2('read')).toEqual(true);
             expect2(() => _can2('create')).toEqual(true);
-            expect2(() => _can2('update')).toEqual(true);
-            expect2(() => _can2('delete')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(false);
+            expect2(() => _can2('delete')).toEqual(false);
             expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
         }
+        //* test of canDo() w/ session(user1) + throwable.
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string) =>
+                _can(action, model1, { context: $user1, throwable: true });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(true);
+            expect2(() => _can2('read')).toEqual(true);
+            expect2(() => _can2('create')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(
+                '403 NOT ALLOWED - action[update] is invalid @canDo(update:test/1000001)',
+            );
+            expect2(() => _can2('delete')).toEqual(
+                '403 NOT ALLOWED - action[delete] is invalid @canDo(delete:test/1000001)',
+            );
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+        }
+
         //* test of canDo() w/ session(user2).
         if (1) {
             const _can2 = (action?: CanDoActionType | string, throwable: boolean = false) =>
