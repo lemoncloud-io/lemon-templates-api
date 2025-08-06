@@ -535,10 +535,10 @@ export abstract class MyCoreManager<
      * @param filter
      * @returns
      */
-    public async doScan(
+    public async doScan<R = { key: string; count: number }>(
         $page: PaginateParam,
         filter?: DynamoScanFilter,
-    ): Promise<ListResult<Model, { key: string; count: number }>> {
+    ): Promise<ListResult<Model, R>> {
         const options = this.parent.dynamoOptions;
         const idName = options.idName || '_id';
         //* check if dummy table
@@ -573,7 +573,8 @@ export abstract class MyCoreManager<
         const list = _page(list0, page, limit);
 
         //* returns.
-        return { list, total, limit, aggr: [{ key: '#scan', count: total }] };
+        const aggr = [{ key: '#scan', count: total } as unknown as R];
+        return { list, total, limit, aggr };
     }
 
     /**
@@ -616,11 +617,13 @@ export abstract class MyCoreManager<
      * @param filters model filters
      * @param param (optional) addtion params
      */
-    public async list(
+    public async list<R = { key: string; count: number }>(
         $page: PaginateParam,
         $param?: SearchParam<Model>,
-    ): Promise<ListResult<Model, { key: string; count: number }>> {
+        options?: { hidden?: boolean | number; aggregation?: string },
+    ): Promise<ListResult<Model, R>> {
         _log(this.logNS, `list(${$page?.limit ?? ''}, ${$page?.page ?? ''})..`);
+        const aggregation = options?.aggregation ?? 'stereo'; // default aggregation
 
         //* use dynamo-scan if no search configuration.
         if (!this.parent.hasSearchEngine()) {
@@ -629,26 +632,27 @@ export abstract class MyCoreManager<
         }
 
         // 1. build search request body
-        const body = this.buildQuery($page, $param);
+        const body = this.buildQuery($page, $param, options);
 
         // 2. search w/ query
         const result = await this.parent.doSearch<Model>(body);
 
         // 3. extract names only
-        const buckets = result?.aggregations?.names?.buckets || result?.aggregations?.stereo?.buckets;
-        _log(this.logNS, `> buckets =`, $U.json(buckets));
-        const aggr = (buckets as { key: string; doc_count: number }[])?.reduce<{ key: string; count: number }[]>(
-            (R, bucket) => {
+        const _aggr = (): R[] => {
+            if (!aggregation) return [];
+            const buckets = result?.aggregations?.[aggregation]?.buckets;
+            buckets && _log(this.logNS, `> buckets =`, $U.json(buckets));
+            if (!buckets || !Array.isArray(buckets)) return [];
+            return (buckets as { key: string; doc_count: number }[])?.reduce<R[]>((L: R[], bucket) => {
                 const key = $T.S(bucket.key);
                 const count = $T.N(bucket.doc_count, 0);
-                R.push({ key, count });
-                return R;
-            },
-            [],
-        );
+                L.push({ key, count } as unknown as R);
+                return L;
+            }, []);
+        };
 
         // returns.
-        return { total: result.total, list: result.list, aggr };
+        return { total: result.total, list: result.list, aggr: _aggr(), limit: $page?.limit, page: $page?.page };
     }
 
     /**
