@@ -10,12 +10,12 @@
  * @origin      `@lemoncloud/lemon-cluster-api/cluster`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { expect2, _it, loadJsonSync } from 'lemon-core';
-import { $base64, convertWSSEvent, parseBase64 } from './tools';
+import { expect2, _it, loadJsonSync, $U } from 'lemon-core';
+import { $base64, convertWSSEvent, parseBase64, parseBody, parseMessage, buildSocketResponse } from './tools';
 
 //! create service instance.
 export const instance = (type?: string) => {
-    const ld = (f: string) => loadJsonSync(`data/${f}${f.endsWith('.json') ? '' : '.json'}`);
+    const ld = (f: string) => loadJsonSync(`sample/wss.lemon/${f}${f.endsWith('.json') ? '' : '.json'}`);
     const event = type ? ld(type).event : null;
     const $evt = convertWSSEvent(event);
     return { $evt, event, ld };
@@ -58,5 +58,88 @@ describe('WebSocketTools', () => {
         expect2(() => conv(ld('wss-con-event.json').event), 'authorization').toEqual ({ authorization: '' });
         expect2(() => conv(ld('wss-con2-event.json').event), 'authorization').toEqual ({ authorization: '' });
         expect2(() => conv(ld('wss-con3-event.json').event), 'authorization').toEqual({ authorization: 'Basic bm9uZTpsZW1vbg==' });
+    });
+
+
+    it('should pass protocol spec', async () => {
+        //! test parseBody()
+        expect2(() => parseBody('')).toEqual({ body: '' });
+        expect2(() => parseBody('!')).toEqual({ body: '!' });
+        expect2(() => parseBody('{}')).toEqual({});
+        expect2(() => parseBody('{.}')).toEqual({ body: '{.}', error: 'Unexpected token . in JSON at position 1' });
+
+        expect2(() => parseBody('', 'data')).toEqual({ data: '' });
+        expect2(() => parseBody('!', 'data')).toEqual({ data: '!' });
+        expect2(() => parseBody('{}', 'data')).toEqual({});
+        expect2(() => parseBody('{.}', 'data')).toEqual({
+            data: '{.}',
+            error: 'Unexpected token . in JSON at position 1',
+        });
+
+        //! test parseMessage()
+        expect2(() => parseMessage('')).toEqual({ action: '' });
+        expect2(() => parseMessage('!')).toEqual('.action[!] is invalid key - asLut(action)');
+        expect2(() => parseMessage('{}')).toEqual({ action: '' });
+        expect2(() => parseMessage('{"action":"hi"}')).toEqual('.action[hi] is invalid key - asLut(action)');
+        expect2(() => parseMessage('{.}')).toEqual({
+            action: '',
+            data: '{.}',
+            error: 'Unexpected token . in JSON at position 1',
+        });
+
+        expect2(() => parseMessage(null)).toEqual({ action: '', data: null });
+        expect2(() => parseMessage(undefined)).toEqual({ action: '', data: undefined });
+        expect2(() => parseMessage(0)).toEqual({ action: '', data: 0 });
+        expect2(() => parseMessage({ x: 2 })).toEqual({ action: '', data: { x: 2 } });
+        expect2(() => parseMessage('{"!":"hi"}')).toEqual({ action: '', '!': 'hi' });
+        expect2(() => parseMessage('{"action":"ping"}')).toEqual({ action: 'ping' });
+        expect2(() => parseMessage($U.json({ id: 1, action: '', data: {}, ts: 0 }))).toEqual({
+            id: 1,
+            action: '',
+            data: {},
+            ts: 0,
+        });
+
+        //! test buildSocketResponse()
+        const now = 1704067200000;
+        expect2(() => buildSocketResponse('ping')).toEqual({ action: 'ping', timestamp: expect.any(Number) });
+        expect2(() => buildSocketResponse('pong', { message: 'hello' })).toEqual({
+            action: 'pong',
+            result: { message: 'hello' },
+            timestamp: expect.any(Number),
+        });
+        expect2(() => buildSocketResponse('echo', 'test data', { current: now })).toEqual({
+            action: 'echo',
+            result: 'test data',
+            timestamp: now,
+        });
+        expect2(() => buildSocketResponse('success', { status: 'ok' })).toEqual({
+            action: 'success',
+            result: { status: 'ok' },
+            timestamp: expect.any(Number),
+        });
+        expect2(() => buildSocketResponse('error', { message: 'failed' })).toEqual({
+            action: 'error',
+            result: { message: 'failed' },
+            timestamp: expect.any(Number),
+        });
+        expect2(() => buildSocketResponse('', null)).toEqual({
+            action: '',
+            result: null,
+            timestamp: expect.any(Number),
+        });
+
+        const complexData = {
+            users: [
+                { id: 1, name: 'John' },
+                { id: 2, name: 'Jane' },
+            ],
+            metadata: { total: 2, page: 1 },
+        };
+        expect2(() => buildSocketResponse('message', complexData)).toEqual({
+            action: 'message',
+            result: complexData,
+            timestamp: expect.any(Number),
+        });
     });
 });

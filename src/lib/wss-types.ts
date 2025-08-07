@@ -30,6 +30,41 @@ export interface ConnectionInfo {
     connectionId?: string;
 }
 /**
+ * interface: `SocketPayload`
+ * - WebSocket message payload structure
+ */
+export interface SocketPayload<T = any> {
+    /**
+     * action type to determine message handling
+     */
+    action: SocketActionType | string;
+    /**
+     * message data
+     */
+    data: T;
+}
+
+/**
+ * interface: `SocketResponse`
+ * - WebSocket response structure
+ * - extends SocketPayload with response-specific features
+ */
+export interface SocketResponse<T = any> {
+    /**
+     * response status type
+     */
+    action: SocketActionType;
+    /**
+     * response data
+     */
+    result?: T;
+    /**
+     * response timestamp
+     */
+    timestamp: number;
+}
+
+/**
  * socket event content
  */
 export interface SocketEvent extends ConnectionInfo {
@@ -63,3 +98,38 @@ export interface SocketEvent extends ConnectionInfo {
      */
     body?: string;
 }
+
+/**
+ * lookup table
+ */
+const $LUT = {
+    /**
+     * ActionType
+     */
+    ActionType: {
+        '': '',
+        /** ping */
+        ping: 'ping',
+        /** pong */
+        pong: 'pong',
+        /** echo */
+        echo: 'echo',
+        /** message */
+        message: 'message',
+        /** auth */
+        auth: 'auth',
+        /** success */
+        success: 'success',
+        /** error */
+        error: 'error',
+        /** unknown */
+        unknown: 'unknown',
+    },
+};
+
+/**
+ * type: `SocketActionType`
+ */
+export type SocketActionType = keyof typeof $LUT.ActionType;
+
+export default $LUT;

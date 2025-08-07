@@ -14,9 +14,11 @@
 import { $U, _log, _inf, _err, GETERR, NextContext, $slack } from 'lemon-core';
 import { WSSEvent, LambdaHandlerService, WSSHandler } from 'lemon-core';
 import { failure, notfound, success } from 'lemon-core/dist/cores/lambda/lambda-wss-handler';
-import { SocketEvent } from './wss-types';
-import { convertWSSEvent, parseBase64 } from './tools';
+import { SocketActionType, SocketEvent } from './wss-types';
+import { convertWSSEvent, buildSocketResponse, parseMessage, parseBase64 } from './tools';
+export { SocketPayload, SocketResponse } from './wss-types';
 import { BackendService } from '../service/backend-service';
+import { onlyDefined } from '../cores';
 const NS = $U.NS(`wss`, 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -121,12 +123,28 @@ export class WSSAgent {
     }
 
     /**
-     * handle for disconnection event.
+     * handle for message event.
      */
     public async onMessage(event?: SocketEvent): Promise<any> {
         const errScope = `onMessage(${event?.direction}/${event?.id ?? ''})`;
         event = event ?? this.event;
-        const connId = parseBase64(event?.connectionId);
-        return { hello: this.hello(), event };
+        const { body, connectionId } = event;
+
+        // STEP.0 validate body, and parse payload
+        const $msg = parseMessage(body);
+        const connId = parseBase64(connectionId);
+        const action = $msg.action as SocketActionType;
+
+        // STEP.1 route to handler
+        switch (action) {
+            case 'echo':
+                const $res = onlyDefined({ param: event?.param, body, connectionId });
+                return buildSocketResponse('echo', $res);
+            case 'ping':
+                return buildSocketResponse('pong', { connectionId });
+            default:
+                const message = `@action[${action}] is not supported - ${errScope}`;
+                return buildSocketResponse('error', { message, action });
+        }
     }
 }

@@ -11,9 +11,9 @@
  * @origin      `@lemoncloud/lemon-cluster-api/cluster`
  */
 
-import { $U, WSSEvent } from 'lemon-core';
-import { SocketEvent } from './wss-types';
-import { onlyDefined } from '../cores';
+import { $U, GETERR, WSSEvent } from 'lemon-core';
+import $LUT, { SocketEvent, SocketPayload, SocketResponse, SocketActionType } from './wss-types';
+import { $T, onlyDefined } from '../cores';
 
 /**
  * base64 encoding/decoding for parsing `connection-id`
@@ -34,6 +34,45 @@ export const $base64 = {
  * @param body string
  */
 export const parseBase64 = (body: string): string => $base64.urlDecode(`${body || ''}`);
+
+/**
+ * parse the encoded json to JSON.
+ * @param body any data
+ */
+export const parseBody = (body: any, key: string = 'body') => {
+    try {
+        return body && typeof body == 'string' && body.startsWith('{') && body.endsWith('}')
+            ? JSON.parse(body)
+            : { [key]: body };
+    } catch (e) {
+        return { [key]: body, error: GETERR(e) };
+    }
+};
+/**
+ * parse the recieved message
+ * @param data string | object
+ */
+export const parseMessage = <T = any>(data: any): SocketPayload<T> => {
+    if (typeof data !== 'string') return { action: '', data: data as T };
+    const $cmd = !data.startsWith('{') ? { action: data } : parseBody(data, 'data'); //! data must be `string`
+    const action = $cmd && $cmd?.action ? $T.asLut($cmd?.action, $LUT.ActionType, 'action') : '';
+    return { ...$cmd, action };
+};
+
+/**
+ * build WebSocket response message
+ * @param action - action type for the response
+ * @param data - response data payload
+ * @returns SocketResponse with action and data
+ */
+export const buildSocketResponse = <T = any>(
+    action: SocketActionType,
+    result?: T,
+    options?: { current?: number },
+): SocketResponse<T> => {
+    const timestamp = options?.current ?? $U.current_time_ms();
+    return { action, timestamp, result };
+};
 
 /**
  * translate the origin event to socket-event
