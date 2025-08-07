@@ -12,13 +12,14 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, _inf, _log, _err, CoreModel } from 'lemon-core';
 import { $T, MyCoreManager, MyCoreService } from '../../cores';
-import { $FIELD, ModelType, SocketModel } from './model';
+import { $FIELD, ConnectionModel, ModelType, SocketModel } from './model';
 import { BackendProxy } from './proxy';
 const NS = $U.NS('socket', 'blue'); // NAMESPACE TO BE PRINTED.
 
 /** the expected `BackendService` */
 export interface BackendService<T extends ModelType = any> extends MyCoreService<CoreModel<T>, T, BackendProxy> {
     readonly $socket: SocketModelManager;
+    readonly $connection: ConnectionModelManager;
 
     /** say hello() */
     hello(): string;
@@ -37,6 +38,25 @@ export class SocketModelManager extends MyCoreManager<SocketModel, ModelType, Ba
      * @override validate
      */
     public async validateModel(model: SocketModel, $org?: SocketModel) {
+        const errScope = `validate(${this.type}/${model?.id ?? ''})`;
+        const isCreate = !$org;
+        return model;
+    }
+}
+
+/**
+ * class: `ConnectionModelManager`
+ * - manager for Connection-model.
+ */
+export class ConnectionModelManager extends MyCoreManager<ConnectionModel, ModelType, BackendService> {
+    public constructor(parent: BackendService) {
+        super('connection', parent, $FIELD.connection);
+    }
+
+    /**
+     * @override validate
+     */
+    public async validateModel(model: ConnectionModel, $org?: ConnectionModel) {
         const errScope = `validate(${this.type}/${model?.id ?? ''})`;
         const isCreate = !$org;
         return model;

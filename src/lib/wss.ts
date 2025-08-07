@@ -110,16 +110,38 @@ export class WSSAgent {
     public async doConnect(event?: SocketEvent): Promise<any> {
         const errScope = `doConnect(${event?.id ?? ''})`;
         event = event ?? this.event;
-        return { hello: this.hello(), event };
+        _log(NS, `${errScope}...`);
+
+        // TODO - run authorization
+        // STEP.1 find or create connection
+        const $prxy = this.service.createProxy(this.context);
+        const $conn = await $prxy.connection.readOrCreate(event);
+
+        //! returns
+        return {
+            id: event?.id,
+            $conn,
+        };
     }
 
     /**
      * handle for disconnection event.
+     * - 연결 해제 시 끊기는 이유와 끊긴 시각을 기록한다.
      */
     public async doDisconnect(event?: SocketEvent): Promise<any> {
-        const errScope = `doConnect(${event?.id ?? ''})`;
+        const errScope = `doDisconnect(${event?.id ?? ''})`;
         event = event ?? this.event;
-        return { hello: this.hello(), event };
+        _log(NS, `${errScope}...`);
+
+        // STEP.
+        const $prxy = this.service.createProxy(this.context);
+        const $disc = await $prxy.connection.updateDisconnection(event);
+
+        //! returns
+        return {
+            id: event?.id,
+            $disc,
+        };
     }
 
     /**
