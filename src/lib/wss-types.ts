@@ -69,14 +69,15 @@ export interface SocketResponse<T = any> {
  */
 export interface SocketEvent extends ConnectionInfo {
     /**
-     * reguest-id
+     * request-id
      */
     id: string;
-    type: 'CONNECT' | 'DISCONNECT' | 'MESSAGE' | '';
-    route: '$connect' | '$disconnect' | '$default' | '';
+    type: SocketEventType;
+    route: SocketRouteKeyType;
     authorization: string;
-    stage: 'dev' | 'prod' | '';
-    direction: 'IN' | 'OUT' | '';
+    stage: SocketStageType;
+    direction: SocketDirectionType;
+    disconnectCode?: DisconnectStatusCode;
     reason: string;
     domain: string;
     origin: string;
@@ -125,11 +126,114 @@ const $LUT = {
         /** unknown */
         unknown: 'unknown',
     },
+    /**
+     * EventType
+     */
+    EventType: {
+        '': '',
+        /** CONNECT */
+        CONNECT: 'CONNECT',
+        /** DISCONNECT  */
+        DISCONNECT: 'DISCONNECT',
+        /** MESSAGE */
+        MESSAGE: 'MESSAGE',
+    },
+    /**
+     * RouteKeyType
+     */
+    RouteKeyType: {
+        /** $connect */
+        $connect: '$connect',
+        /** $disconnect */
+        $disconnect: '$disconnect',
+        /** $default */
+        $default: '$default',
+        /** echo */
+        echo: 'echo',
+    },
+    /**
+     * StageType
+     */
+    StageType: {
+        '': '',
+        /** dev */
+        dev: 'dev',
+        /** prod */
+        prod: 'prod',
+        /** local */
+        local: 'local',
+    },
+    /**
+     * DirectionType
+     */
+    DirectionType: {
+        '': '',
+        /** IN */
+        IN: 'IN',
+        /** OUT */
+        OUT: 'OUT',
+    },
+    /**
+     * DisconnectStatusCode
+     */
+    DisconnectStatusCode: {
+        /** 1000 - 정상 종료 */
+        1000: 'NORMAL_CLOSURE',
+        /** 1001 - 서버 종료/페이지 이동 */
+        1001: 'GOING_AWAY',
+        /** 1002 - 프로토콜 오류 */
+        1002: 'PROTOCOL_ERROR',
+        /** 1003 - 지원하지 않는 데이터 */
+        1003: 'UNSUPPORTED_DATA',
+        /** 1005 - 상태 코드 없음 */
+        1005: 'NO_STATUS_RECEIVED',
+        /** 1006 - 비정상 종료 */
+        1006: 'ABNORMAL_CLOSURE',
+        /** 1007 - 잘못된 프레임 */
+        1007: 'INVALID_FRAME_PAYLOAD',
+        /** 1008 - 정책 위반 */
+        1008: 'POLICY_VIOLATION',
+        /** 1009 - 메시지 크기 초과 */
+        1009: 'MESSAGE_TOO_BIG',
+        /** 1011 - 서버 내부 오류 */
+        1011: 'INTERNAL_ERROR',
+        /** 1012 - 서비스 재시작 */
+        1012: 'SERVICE_RESTART',
+        /** 1013 - 나중에 다시 시도 */
+        1013: 'TRY_AGAIN_LATER',
+        /** 1015 - TLS 핸드셰이크 실패 */
+        1015: 'TLS_HANDSHAKE',
+    },
 };
 
 /**
  * type: `SocketActionType`
  */
 export type SocketActionType = keyof typeof $LUT.ActionType;
+
+/**
+ * type: `SocketEventType`
+ */
+export type SocketEventType = keyof typeof $LUT.EventType;
+
+/**
+ * type: `SocketRouteKey`
+ */
+export type SocketRouteKeyType = keyof typeof $LUT.RouteKeyType;
+
+/**
+ * type: `SocketStage`
+ */
+export type SocketStageType = keyof typeof $LUT.StageType;
+
+/**
+ * type: `SocketDirectionType`
+ */
+export type SocketDirectionType = keyof typeof $LUT.DirectionType;
+
+/**
+ * type: `DisconnectStatusCode`
+ */
+export type DisconnectStatusCode = keyof typeof $LUT.DisconnectStatusCode;
 
 export default $LUT;
