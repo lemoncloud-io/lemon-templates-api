@@ -50,8 +50,8 @@ export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
 
 //! main test body.
 describe('BackendService', () => {
-    const PROFILE = loadProfile(process); // override process.env.
-    PROFILE && console.info('! PROFILE =', PROFILE);
+    // const PROFILE = loadProfile(process); // override process.env.
+    // PROFILE && console.info('! PROFILE =', PROFILE);
 
     //! basic function
     it('should pass basic function', async () => {

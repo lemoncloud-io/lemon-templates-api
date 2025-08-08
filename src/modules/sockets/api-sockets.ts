@@ -41,6 +41,7 @@ export class SocketAPIController extends AbstractCRUDController<
         super('sockets', service, service.$socket, $trans.socket);
         this.$wss = new LambdaWSSHandler(this.service);
 
+        //TODO [Steve] use `decode()` to handle event in this controller from wss @250808.
         //! register into wss handler
         register && $core.cores.lambda.lambda.setHandler('wss', this.$wss);
     }

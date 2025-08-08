@@ -89,11 +89,11 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
     /**
      * get or craete a connection model from socket-event
      */
-    public async readOrCreate(
+    public async findModel(
         event?: SocketEvent,
         options?: { useSession?: boolean; errScope?: string; validate?: boolean },
     ): Promise<ConnectionModel> {
-        const errScope = options?.errScope ?? `readOrCreate(${this.$mgr.type}/${event?.id ?? ''})`;
+        const errScope = options?.errScope ?? `findModel(${this.$mgr.type}/${event?.id ?? ''})`;
         const validate = options?.validate ?? true;
         const useSession = options?.useSession ?? false;
         const $sess = useSession ? this.proxy.getCurrentSession({ useSession }) : null;

@@ -23,6 +23,7 @@ export const $base64 = {
     decode: (encoded: string, out: any = 'utf8') => Buffer.from(encoded || '', 'base64').toString(out),
     urlEncode: (unencoded: string) => $base64.encode(unencoded, 'hex').replace(/\+/g, '-').replace(/\//g, '_'),
     urlDecode: (encoded: string) => {
+        if (!encoded) return '';
         encoded = encoded.replace('-', '+').replace('_', '/');
         while (encoded.length % 4) encoded += '=';
         return $base64.decode(encoded, 'hex');

@@ -19,6 +19,7 @@ import { convertWSSEvent, buildSocketResponse, parseMessage, parseBase64 } from 
 export { SocketPayload, SocketResponse } from './wss-types';
 import { BackendService } from '../service/backend-service';
 import { onlyDefined } from '../cores';
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
 const NS = $U.NS(`wss`, 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -46,7 +47,13 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
         const ROUTE = [$req?.eventType ?? '', $req?.routeKey ?? ''].join('/');
         _log(NS, `> context(${ROUTE}) =`, $U.json(context));
         _log(NS, `> event(${ROUTE}) =`, $U.json(event));
-        await $slack(`#socket/${ROUTE}`, { context, event }, null, { context });
+        const _slack = async () => {
+            const $msg = parseMessage(event.body);
+            const action = $msg?.action as SocketActionType;
+            const title = !action ? `#socket/${ROUTE}` : `#socket/${ROUTE}/${action}`;
+            await $slack(title, { context, event }, null, { context });
+        };
+        await _slack().catch(e => _err(NS, `! error@slack =`, GETERR(e), e));
 
         //TODO - define the exact type of result(WSResult).
         return $sockets(this.service, event, context)
@@ -115,7 +122,7 @@ export class WSSAgent {
         // TODO - run authorization
         // STEP.1 find or create connection
         const $prxy = this.service.createProxy(this.context);
-        const $conn = await $prxy.connection.readOrCreate(event);
+        const $conn = await $prxy.connection.findModel(event);
 
         //! returns
         return {
@@ -156,6 +163,7 @@ export class WSSAgent {
         const $msg = parseMessage(body);
         const connId = parseBase64(connectionId);
         const action = $msg.action as SocketActionType;
+        _inf(NS, `> action @${errScope} =`, action);
 
         // STEP.1 route to handler
         switch (action) {
@@ -163,10 +171,49 @@ export class WSSAgent {
                 const $res = onlyDefined({ param: event?.param, body, connectionId });
                 return buildSocketResponse('echo', $res);
             case 'ping':
-                return buildSocketResponse('pong', { connectionId });
+                //TODO [Steve] 응답주는게 별 의미가 없음 (status must be 200) but 확인필요! @250808
+                // return buildSocketResponse('pong', { connectionId });
+                await this.doSend(buildSocketResponse('pong', $msg?.data), { event });
+                return;
             default:
                 const message = `@action[${action}] is not supported - ${errScope}`;
                 return buildSocketResponse('error', { message, action });
         }
+    }
+
+    /**
+     * send message to client.
+     */
+    public async doSend(data?: any, options?: { event?: SocketEvent }) {
+        const event = options?.event ?? this.event;
+        const errScope = `doSend(${event?.direction}/${event?.id ?? ''})`;
+
+        const { stage, domain, connectionId } = event;
+        const connId = parseBase64(connectionId);
+        const endpoint = `https://${domain}/${stage}`;
+        const config = { region: 'ap-northeast-2', endpoint };
+        _inf(NS, `> config =`, $U.json(config));
+        const $client = new ApiGatewayManagementApiClient(config);
+        const command = new PostToConnectionCommand({
+            ConnectionId: 0 ? connId : connectionId,
+            Data: data && typeof data === 'object' ? JSON.stringify(data) : `${data ?? ''}`,
+        });
+        _inf(NS, `> command =`, $U.json(command));
+
+        // ignore internal error
+        try {
+            const $res = await $client.send(command);
+            //TODO [Steve] `Forbidden` occured in ssocio/VPC configuration @250808
+            //NOTE - 다만 lemon에서는 잘 작동하는듯함. (VPC 구성 없음!)
+            _log(NS, `> $res@${errScope} =`, $U.json($res));
+            // $res := {"$metadata":{"httpStatusCode":200,"requestId":"b86aec0a-85aa-4ab3-bbf4-30c52c808970","attempts":1,"totalRetryDelay":0}}
+            const statusCode = $res?.$metadata?.httpStatusCode;
+        } catch (error) {
+            //TODO [Steve] need to report error @250808
+            _log(NS, `> error@${errScope} =`, GETERR(error), error);
+        }
+
+        // returns -> any purpose ??
+        return { connectionId };
     }
 }

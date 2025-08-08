@@ -35,8 +35,8 @@ export const instance = (type: $service.AuthType = 'authed', params?: $service.S
 
 //! main test body.
 describe('BackendProxy', () => {
-    const PROFILE = loadProfile(process); // override process.env.
-    PROFILE && console.info('! PROFILE =', PROFILE);
+    // const PROFILE = loadProfile(process); // override process.env.
+    // PROFILE && console.info('! PROFILE =', PROFILE);
 
     //! basic function
     it('should pass basic function', async () => {

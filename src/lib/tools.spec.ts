@@ -26,6 +26,8 @@ describe('WebSocketTools', () => {
     //! check `$base64`.
     it('should pass $base64', async () => {
         expect2(() => 'WklOAfLioE0CJPw='.length).toEqual(16);
+        expect2(() => $base64.urlDecode(null)).toEqual('');
+        expect2(() => $base64.urlDecode('')).toEqual('');
         expect2(() => $base64.urlDecode('WklOAfLioE0CJPw=')).toEqual('5a494e01f2e2a04d0224fc');
         expect2(() => $base64.urlEncode('5a494e01f2e2a04d0224fc')).toEqual('WklOAfLioE0CJPw=');
 
@@ -61,7 +63,7 @@ describe('WebSocketTools', () => {
     });
 
 
-    it('should pass protocol spec', async () => {
+    it('should pass tools spec', async () => {
         //! test parseBody()
         expect2(() => parseBody('')).toEqual({ body: '' });
         expect2(() => parseBody('!')).toEqual({ body: '!' });
@@ -99,7 +101,9 @@ describe('WebSocketTools', () => {
             data: {},
             ts: 0,
         });
+    });
 
+    it('should pass tools spec', async () => {
         //! test buildSocketResponse()
         const now = 1704067200000;
         expect2(() => buildSocketResponse('ping')).toEqual({ action: 'ping', timestamp: expect.any(Number) });

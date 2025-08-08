@@ -37,8 +37,8 @@ export const instance = (type: $service.AuthType = 'authed', params?: $service.S
 
 //! main test body.
 describe('BackendProxy', () => {
-    const PROFILE = loadProfile(process); // override process.env.
-    PROFILE && console.info('! PROFILE =', PROFILE);
+    // const PROFILE = loadProfile(process); // override process.env.
+    // PROFILE && console.info('! PROFILE =', PROFILE);
 
     //! basic function
     it('should pass basic function', async () => {
@@ -68,7 +68,7 @@ describe('BackendProxy', () => {
             return $event;
         };
 
-        //* validate a readOrCreate()
+        //* validate a findModel()
         const $eventA = _loadEvent('wss-con-event');
         expect2(() => $eventA, 'stage,domain,connectionId').toEqual({
             stage: 'dev',
@@ -77,7 +77,7 @@ describe('BackendProxy', () => {
         });
 
         // CASE 1: 새로운 연결 생성
-        const $connA = await $conn.readOrCreate($eventA);
+        const $connA = await $conn.findModel($eventA);
         const expected: ConnectionModel = {
             connectionId: $eventA.connectionId,
             connectedAt: $eventA.connectedAt,
@@ -95,7 +95,7 @@ describe('BackendProxy', () => {
         });
 
         // CASE 1.1: 동일한 연결 ID로 다시 호출 시 기존 연결 반환
-        expect2(await $conn.readOrCreate($eventA)).toEqual({
+        expect2(await $conn.findModel($eventA)).toEqual({
             ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
             ...expected,
         });
@@ -103,7 +103,7 @@ describe('BackendProxy', () => {
         // CASE 2: 새로운 연결 생성
         const $eventB = _loadEvent(`wss-con2-event`);
         // CASE 3: 다른 connectionId로 새로운 연결 생성
-        const $connB = await $conn.readOrCreate($eventB);
+        const $connB = await $conn.findModel($eventB);
         expect2(() => $connB).toEqual({
             ..._ts('3a6f64e9f6dfa04d02261c', 'connection'),
             ...expected,
@@ -119,7 +119,7 @@ describe('BackendProxy', () => {
             const { proxy, _ts } = instance('session');
             const $eventC = _loadEvent('wss-con3-event');
             // CASE 3: 다른 connectionId로 새로운 연결 생성
-            const $connC = await proxy.connection.readOrCreate($eventC, { useSession: true });
+            const $connC = await proxy.connection.findModel($eventC, { useSession: true });
             expect2(() => $connC).toEqual({
                 ..._ts('3a6ec361d966204d022164', 'connection'),
                 ...expected,
@@ -132,17 +132,17 @@ describe('BackendProxy', () => {
         }
 
         //! error cases
-        expect2(await $conn.readOrCreate(null).catch(GETERR)).toEqual(
-            '@event (socket-event) is required - readOrCreate(connection/)',
+        expect2(await $conn.findModel(null).catch(GETERR)).toEqual(
+            '@event (socket-event) is required - findModel(connection/)',
         );
-        expect2(await $conn.readOrCreate({ ...$eventA, connectionId: null }).catch(GETERR)).toEqual(
-            '.connectionId (string) is required - readOrCreate(connection/OjXY6FCWoE0Ee_Q=)',
+        expect2(await $conn.findModel({ ...$eventA, connectionId: null }).catch(GETERR)).toEqual(
+            '.connectionId (string) is required - findModel(connection/OjXY6FCWoE0Ee_Q=)',
         );
-        expect2(await $conn.readOrCreate({ ...$eventA, stage: null }).catch(GETERR)).toEqual(
-            '.stage (string) is required - readOrCreate(connection/OjXY6FCWoE0Ee_Q=)',
+        expect2(await $conn.findModel({ ...$eventA, stage: null }).catch(GETERR)).toEqual(
+            '.stage (string) is required - findModel(connection/OjXY6FCWoE0Ee_Q=)',
         );
-        expect2(await $conn.readOrCreate({ ...$eventA, domain: null }).catch(GETERR)).toEqual(
-            '.domain (string) is required - readOrCreate(connection/OjXY6FCWoE0Ee_Q=)',
+        expect2(await $conn.findModel({ ...$eventA, domain: null }).catch(GETERR)).toEqual(
+            '.domain (string) is required - findModel(connection/OjXY6FCWoE0Ee_Q=)',
         );
 
         //* validate a updateDisconnection
