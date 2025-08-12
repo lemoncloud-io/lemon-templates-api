@@ -6,6 +6,8 @@
 
 Summarized specifications to design modeling
 
+----------------
+
 ## VERSION INFO
 
 | Version   | Description
