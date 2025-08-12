@@ -153,6 +153,7 @@ describe('BackendProxy', () => {
             connected: 0,
             disConnectedAt: current,
             reason: 'Client-side close frame status not set',
+            disconnectCode: 1005,
         });
         expect2(await $conn.updateDisconnection($eventD)).toEqual({
             ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
@@ -160,6 +161,7 @@ describe('BackendProxy', () => {
             connected: 0,
             disConnectedAt: current,
             reason: 'Client-side close frame status not set',
+            disconnectCode: 1005,
         });
 
         const $eventE = _loadEvent('wss-dis2-event'); // not saved connection

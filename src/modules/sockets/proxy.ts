@@ -163,6 +163,7 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
 
         // STEP.4 prepare updates
         const $ups = onlyDefined<ConnectionModel>({
+            disconnectCode: event?.disconnectCode,
             disConnectedAt: current,
             reason,
         });

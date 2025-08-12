@@ -87,6 +87,10 @@ export interface ConnectionModel extends Model {
      * (extended) The reason for disconnection, if applicable.
      */
     reason?: string;
+    /**
+     * (extended) The code of disconnection.
+     */
+    disconnectCode?: number;
 }
 
 /**

@@ -99,6 +99,7 @@ export const convertWSSEvent = (event?: WSSEvent): SocketEvent => {
     const messageId = `${$req?.messageId || ''}`;
     const apiId = `${$req?.apiId || ''}`;
     const connectedAt = $req?.connectedAt || 0;
+    const disconnectCode = $req?.disconnectStatusCode ?? 0;
     const body = event && event.body;
 
     // extract `auth` from query.
@@ -123,6 +124,7 @@ export const convertWSSEvent = (event?: WSSEvent): SocketEvent => {
         messageId,
         apiId,
         connectedAt,
+        disconnectCode,
         body,
     });
 };

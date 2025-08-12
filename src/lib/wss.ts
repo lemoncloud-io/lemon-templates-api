@@ -168,7 +168,7 @@ export class WSSAgent {
     public async onMessage(event?: SocketEvent): Promise<any> {
         const errScope = `onMessage(${event?.direction}/${event?.id ?? ''})`;
         event = event ?? this.event;
-        const { body, connectionId } = event;
+        const { body, param, connectionId } = event;
 
         // STEP.0 validate body, and parse payload
         const $msg = parseMessage(body);
@@ -179,16 +179,18 @@ export class WSSAgent {
         // STEP.1 route to handler
         switch (action) {
             case 'echo':
-                const $res = onlyDefined({ param: event?.param, body, connectionId });
-                return buildSocketResponse('echo', $res);
+                const $echo = buildSocketResponse('echo', onlyDefined({ param, body, connectionId }));
+                await this.doSend($echo, { event });
+                return $echo;
             case 'ping':
-                //TODO [Steve] 응답주는게 별 의미가 없음 (status must be 200) but 확인필요! @250808
-                // return buildSocketResponse('pong', { connectionId });
-                await this.doSend(buildSocketResponse('pong', $msg?.data));
-                return;
+                const $pong = buildSocketResponse('pong', $msg?.data);
+                await this.doSend($pong, { event });
+                return $pong;
             default:
                 const message = `@action[${action}] is not supported - ${errScope}`;
-                return buildSocketResponse('error', { message, action });
+                const $err = buildSocketResponse('error', { message, action });
+                await this.doSend($pong, { event });
+                return $err;
         }
     }
 
