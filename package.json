@@ -1,6 +1,6 @@
 {
   "name": "lemon-templates-api",
-  "version": "0.25.804a",
+  "version": "0.25.808",
   "description": "lemon-templates management api",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -57,7 +57,7 @@
   "author": "Steve Jung (steve@lemoncloud.io)",
   "license": "MIT",
   "dependencies": {
-    "lemon-core": "^4.0.5"
+    "lemon-core": "^4.0.6"
   },
   "devDependencies": {
     "@cruglobal/serverless-merge-config": "^1.1.0",

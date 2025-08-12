@@ -141,10 +141,11 @@ export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
 
 //* main test body.
 describe('abstract-services', () => {
-    it('should pass basic functions', async () => {
-        const PROFILE = await loadProfile(process); // override process.env.
-        PROFILE && console.info('! PROFILE=', PROFILE);
+    const PROFILE = loadProfile(process); // override process.env.
+    PROFILE && console.info('! PROFILE=', PROFILE);
 
+    //* basic test
+    it('should pass basic functions', async () => {
         const { service } = instance();
         expect2(() => true).toEqual(true);
 
@@ -807,11 +808,9 @@ describe('abstract-services', () => {
     });
 
     it('should pass doScanLast', async () => {
-        const PROFILE = await loadProfile(process); // override process.env.
-        PROFILE && console.info('! PROFILE=', PROFILE);
-
         const { service } = instance();
         if (PROFILE !== 'lemon') return; // ignore this.
+
         const result = await service.$test.doScanLast({ limit: 3 });
         //* 1. doScanLast with { limit }
         expect2(() => result.count).toEqual(3);

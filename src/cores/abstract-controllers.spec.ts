@@ -82,11 +82,11 @@ export const instance = (options?: { auth?: AuthType; session?: boolean; domain?
 
 //* main test body.
 describe('AbstractCRUDController', () => {
+    const PROFILE = loadProfile(process); // override process.env.
+    PROFILE && console.info('! PROFILE=', PROFILE);
+
     //* test transformer
     it('should pass basic transformer', async () => {
-        const PROFILE = await loadProfile(process); // override process.env.
-        PROFILE && console.info('! PROFILE=', PROFILE);
-
         const { trans } = instance();
 
         // 기본형

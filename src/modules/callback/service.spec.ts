@@ -9,7 +9,7 @@
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 import { loadProfile } from 'lemon-core/dist/environ';
-import { expect2, NextIdentityAccess, _it, GETERR, $info } from 'lemon-core';
+import { expect2, _it, $info } from 'lemon-core';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';

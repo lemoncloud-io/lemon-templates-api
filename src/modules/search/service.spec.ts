@@ -259,6 +259,7 @@ describe('SearchService', () => {
 
         //! WARN - must config the test section in `env/lemon.yml`
         if (PROFILE !== 'lemon') return; //* ignore if not in lemon profile.
+
         expect2(() => $U.env('OS2_INDEX', '')).toEqual(indexName);
         expect2(() => $U.env('OS2_ENDPOINT', '')).toEqual(endpoint);
         expect2(() => $ES6.options).toEqual(null);

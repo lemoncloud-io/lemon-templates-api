@@ -49,6 +49,8 @@ export const instance = (type: 'authed' | 'public' = 'authed', isDummy = true) =
 
 //* main test body.
 describe('abstract-rest-apis', () => {
+    const PROFILE = loadProfile(process); // override process.env.
+    PROFILE && console.info('! PROFILE=', PROFILE);
     // //* test function
     // it('should pass basic function', async () => {
     //     const { trans } = instance();
@@ -56,9 +58,6 @@ describe('abstract-rest-apis', () => {
 
     //* test dummy-rest-api
     it('should pass dummy-rest-api(authed)', async () => {
-        const PROFILE = await loadProfile(process); // override process.env.
-        PROFILE && console.info('! PROFILE=', PROFILE);
-
         const $api = instance('authed', true);
 
         expect2(() => $api?.hello()).toEqual(`dummy-rest-api://self/sites`);
