@@ -19,7 +19,11 @@ import { convertWSSEvent, buildSocketResponse, parseMessage, parseBase64 } from 
 export { SocketPayload, SocketResponse } from './wss-types';
 import { BackendService } from '../service/backend-service';
 import { onlyDefined } from '../cores';
-import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
+import {
+    ApiGatewayManagementApiClient,
+    DeleteConnectionCommand,
+    PostToConnectionCommand,
+} from '@aws-sdk/client-apigatewaymanagementapi';
 const NS = $U.NS(`wss`, 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -80,11 +84,18 @@ export const $sockets = (service: BackendService, event?: WSSEvent, context?: Ne
  * - support class for WebSocket events.
  */
 export class WSSAgent {
+    private readonly $client: ApiGatewayManagementApiClient;
+
     /**
      * default constructor
      */
     public constructor(readonly service: BackendService, readonly event: SocketEvent, readonly context: NextContext) {
         _log(NS, `WSSAgent(${event?.type || ''}/${event?.connectionId || ''})...`);
+        const { stage, domain } = event;
+        const endpoint = `https://${domain}/${stage}`;
+        const region = $U.env('DEFAULT_REGION', 'ap-northeast-2');
+        _inf(NS, `> $config =`, $U.json({ region, endpoint }));
+        this.$client = new ApiGatewayManagementApiClient({ region, endpoint });
     }
 
     /** say hello */
@@ -101,11 +112,11 @@ export class WSSAgent {
         if (!type) {
             throw new Error(`@type (string) is required - ${errScope}`);
         } else if (type == 'CONNECT') {
-            return this.doConnect(event);
+            return this.onConnect(event).then(() => null);
         } else if (type == 'DISCONNECT') {
-            return this.doDisconnect(event);
+            return this.onDisconnect(event).then(() => null);
         } else if (type == 'MESSAGE') {
-            return this.onMessage(event);
+            return this.onMessage(event).then(() => null); //! return must be void (200);
         } else {
             throw new Error(`@type[${type}] is invalid! - ${errScope}`);
         }
@@ -114,7 +125,7 @@ export class WSSAgent {
     /**
      * handle for connection event.
      */
-    public async doConnect(event?: SocketEvent): Promise<any> {
+    public async onConnect(event?: SocketEvent): Promise<any> {
         const errScope = `doConnect(${event?.id ?? ''})`;
         event = event ?? this.event;
         _log(NS, `${errScope}...`);
@@ -135,12 +146,12 @@ export class WSSAgent {
      * handle for disconnection event.
      * - 연결 해제 시 끊기는 이유와 끊긴 시각을 기록한다.
      */
-    public async doDisconnect(event?: SocketEvent): Promise<any> {
-        const errScope = `doDisconnect(${event?.id ?? ''})`;
+    public async onDisconnect(event?: SocketEvent): Promise<any> {
+        const errScope = `onDisconnect(${event?.id ?? ''})`;
         event = event ?? this.event;
         _log(NS, `${errScope}...`);
 
-        // STEP.
+        // STEP. find connection model and update disconnection
         const $prxy = this.service.createProxy(this.context);
         const $disc = await $prxy.connection.updateDisconnection(event);
 
@@ -173,7 +184,7 @@ export class WSSAgent {
             case 'ping':
                 //TODO [Steve] 응답주는게 별 의미가 없음 (status must be 200) but 확인필요! @250808
                 // return buildSocketResponse('pong', { connectionId });
-                await this.doSend(buildSocketResponse('pong', $msg?.data), { event });
+                await this.doSend(buildSocketResponse('pong', $msg?.data));
                 return;
             default:
                 const message = `@action[${action}] is not supported - ${errScope}`;
@@ -188,12 +199,8 @@ export class WSSAgent {
         const event = options?.event ?? this.event;
         const errScope = `doSend(${event?.direction}/${event?.id ?? ''})`;
 
-        const { stage, domain, connectionId } = event;
+        const { connectionId } = this.event;
         const connId = parseBase64(connectionId);
-        const endpoint = `https://${domain}/${stage}`;
-        const config = { region: 'ap-northeast-2', endpoint };
-        _inf(NS, `> config =`, $U.json(config));
-        const $client = new ApiGatewayManagementApiClient(config);
         const command = new PostToConnectionCommand({
             ConnectionId: 0 ? connId : connectionId,
             Data: data && typeof data === 'object' ? JSON.stringify(data) : `${data ?? ''}`,
@@ -202,18 +209,40 @@ export class WSSAgent {
 
         // ignore internal error
         try {
-            const $res = await $client.send(command);
+            const $res = await this.$client.send(command);
             //TODO [Steve] `Forbidden` occured in ssocio/VPC configuration @250808
             //NOTE - 다만 lemon에서는 잘 작동하는듯함. (VPC 구성 없음!)
-            _log(NS, `> $res@${errScope} =`, $U.json($res));
             // $res := {"$metadata":{"httpStatusCode":200,"requestId":"b86aec0a-85aa-4ab3-bbf4-30c52c808970","attempts":1,"totalRetryDelay":0}}
-            const statusCode = $res?.$metadata?.httpStatusCode;
-        } catch (error) {
+            _log(NS, `> $res@${errScope} =`, $U.json($res));
+        } catch (e) {
             //TODO [Steve] need to report error @250808
-            _log(NS, `> error@${errScope} =`, GETERR(error), error);
+            _err(NS, `> error@${errScope} =`, GETERR(e), e);
+            throw e;
         }
 
         // returns -> any purpose ??
         return { connectionId };
+    }
+
+    /**
+     * delete connection by id
+     */
+    private async disconnectClient(event: SocketEvent) {
+        const errScope = `disconnectClient(${event?.direction}/${event?.id ?? ''}))`;
+        _log(NS, `${errScope}...`);
+
+        const { connectionId } = event;
+        const connId = parseBase64(connectionId);
+        const command = new DeleteConnectionCommand({ ConnectionId: 0 ? connId : connectionId });
+        _inf(NS, `> command =`, $U.json(command));
+
+        // ignore internal error
+        try {
+            const $res = await this.$client.send(command);
+            _log(NS, `> $res@${errScope} =`, $U.json($res));
+        } catch (e) {
+            _err(NS, `> error@${errScope} =`, GETERR(e), e);
+            throw e;
+        }
     }
 }
