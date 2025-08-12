@@ -10,7 +10,7 @@
  * @date        2025-07-31 optimized `$T.B()` for boolean conversion.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 import { GeneralItem } from 'lemon-model';
 import { ListParam, PaginateParam } from './types';

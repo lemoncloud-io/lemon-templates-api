@@ -26,7 +26,7 @@
  * @date        2025-08-01 optimized `canDo()` for better security.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $T, $U, _log, _inf, _err, loadDataYml, NextContext, my_sequence } from 'lemon-core';

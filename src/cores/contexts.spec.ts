@@ -6,7 +6,7 @@
  * @date        2024-11-29 initial samples.
  *
  * @copyright   (C) 2024 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 import { NextContext } from 'lemon-model';
 import { expect2 } from 'lemon-core';

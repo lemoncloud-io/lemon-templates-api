@@ -7,7 +7,7 @@
  * @date        2022-09-21 optimized w/ `abstract-rest-apis`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';

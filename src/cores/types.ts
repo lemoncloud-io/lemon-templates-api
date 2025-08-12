@@ -10,7 +10,7 @@
  * @date        2024-11-14 optimized `IdentityToken`.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 //NOTE - must use `lemon-model` to publish w/o `lemon-core`.
 import { NextIdentity, CoreModel, View, Body } from 'lemon-model';

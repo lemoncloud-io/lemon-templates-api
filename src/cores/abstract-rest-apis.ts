@@ -9,7 +9,7 @@
  * @date        2025-02-26 optimized `$createApi` w/ reversor.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 
 import { $protocol, NextContext } from 'lemon-core';

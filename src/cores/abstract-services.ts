@@ -28,9 +28,10 @@
  * @date        2025-07-17 optimized `onAfterSave` with `lemon-core@4.0.4`
  * @date        2025-07-23 optimized `buildQuery()` with `hidden` + `aggregation` option.
  * @date        2025-08-01 optimized `canDo()` for better security w/ session.
+ * @date        2025-08-11 optimized `OS2FGACManager` for latest features.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import $cores, { $U, _log, _inf, _err, NUL404, GETERR, asyncCredentials } from 'lemon-core';
@@ -44,6 +45,7 @@ import { ApiHttpProxy, APIHeaders, elasticsearch, SearchResponse, DynamoOption, 
 import { BulkItemsResult, IdentityToken, ListResult, PaginateParam } from './types';
 import { $T, onlyDefined, parsePaginateParam } from './commons';
 import { keys } from 'ts-transformer-keys';
+import { CrendentialForAWS } from 'lemon-core/dist/environ';
 const NAME = $U.env('NAME', 'lemon');
 const NS = $U.NS('HDBS', 'green');
 /**
@@ -1786,7 +1788,7 @@ export class OS2Service<T extends Elastic6Item = any> extends Elastic6Service<an
     public async deleteItem(id: string): Promise<T> {
         const { indexName, docType } = this.options;
         const type = `${docType}`;
-        _log(NS, `- readItem(${id})`);
+        _log(NS, `- deleteItem(${id})`);
 
         const params: ElasticParams = { index: indexName, type, id, body: {} };
         _log(NS, `> params[${id}] =`, $U.json(params));
@@ -1892,7 +1894,7 @@ export class OS2Service<T extends Elastic6Item = any> extends Elastic6Service<an
  * type: `OS2FGACManager`
  * - FGAC(Fine Grained Access Controll) Proxy for OS2
  */
-class OS2FGACManager {
+export class OS2FGACManager {
     private _fgacProxy: ApiHttpProxy;
 
     public constructor(options: Elastic6Option, accessKey: string, secretKey: string) {
@@ -1991,6 +1993,81 @@ class OS2FGACManager {
     public async doFgacDeleteIndex<R = any>(index: string): Promise<R> {
         return this.proxy.doProxy('DELETE', index, '');
     }
+
+    /**
+     * FGAC 기반 인덱스 설명: client.indices.describe() 대응
+     */
+    public async doFgacDescribe<R = any>(index: string): Promise<{ settings: R; mappings: R }> {
+        const errScope = `doFgacDescribe(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        // 1) 설정 조회
+        const resSettings = await this.doFgacGetSettings(index);
+        //    resSettings.body 안에 { [index]: { settings: { … } } } 형태로 들어옴
+
+        // 2) 매핑 조회
+        const resMappings = await this.doFgacGetMapping(index);
+        //    resMappings.body 안에 { [index]: { mappings: { … } } } 형태로 들어옴
+
+        return {
+            settings: resSettings[index]?.settings || {},
+            mappings: resMappings[index]?.mappings || {},
+        };
+    }
+
+    /**
+     * FGAC 기반 인덱스 Settings 변경: client.indices.putSettings() 대응
+     */
+    public async doFgacPutSettings<R = any>(index: string, settings: Record<string, any>): Promise<R> {
+        const errScope = `doFgacPutSettings(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+        return this.proxy.doProxy('PUT', index, `_settings`, undefined, { settings });
+    }
+    /**
+     * FGAC 기반 인덱스 Settings 조회: client.indices.getSettings() 대응
+     */
+    public async doFgacGetSettings<R = any>(index: string): Promise<R> {
+        const errScope = `doFgacGetSettings(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        return this.proxy.doProxy('GET', index, `_settings`);
+    }
+    /**
+     * FGAC 기반 인덱스 Mapping 조회: client.indices.getMapping() 대응
+     */
+    public async doFgacGetMapping<R = any>(index: string): Promise<R> {
+        const errScope = `doFgacGetMapping(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        return this.proxy.doProxy('GET', index, `_mapping`);
+    }
+    /**
+     * FGAC 기반 인덱스 Mapping 변경: client.indices.putMapping() 대응
+     */
+    public async doFgacPutMapping<R = any>(index: string, mapping: Record<string, any>): Promise<R> {
+        const errScope = `doFgacPutMapping(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        return this.proxy.doProxy('PUT', index, `_mapping`, undefined, mapping);
+    }
+    /**
+     * FGAC 기반 인덱스 닫기: client.indices.close() 대응
+     */
+    public async doFgacCloseIndex<R = any>(index: string): Promise<R> {
+        const errScope = `doFgacCloseIndex(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        return this.proxy.doProxy('POST', index, `_close`);
+    }
+    /**
+     * FGAC 기반 인덱스 열기: client.indices.open() 대응
+     */
+    public async doFgacOpenIndex<R = any>(index: string): Promise<R> {
+        const errScope = `doFgacOpenIndex(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        return this.proxy.doProxy('POST', index, `_open`);
+    }
 }
 
 /** extended option for `OS2Instance` */
@@ -2015,6 +2092,7 @@ export class OS2Instance extends Elastic6Instance {
     public constructor({
         endpoint,
         indexName,
+        idName,
         esVersion,
         esDocType,
         tableName,
@@ -2026,6 +2104,7 @@ export class OS2Instance extends Elastic6Instance {
     }: {
         endpoint: string;
         indexName: string;
+        idName?: string;
         esVersion: string;
         esDocType: string;
         tableName: string;
@@ -2043,6 +2122,7 @@ export class OS2Instance extends Elastic6Instance {
             autocompleteFields,
             roleName,
             userName,
+            idName: idName === null ? undefined : idName ?? '$id',
         });
         if (endpoint && indexName) {
             if (esDocType) options.docType = esDocType;
@@ -2060,6 +2140,10 @@ export class OS2Instance extends Elastic6Instance {
     public get options(): OS2Option {
         if (!this.elastic) return null;
         return this.elastic.options;
+    }
+
+    public get $X2(): typeof $X2 {
+        return $X2;
     }
 
     /**
@@ -2275,7 +2359,7 @@ const $X2 = {
         };
     },
     /** load local credentials (for dev) */
-    loadCredentials: async (profile?: string) => {
+    loadCredentials: async (profile?: string): Promise<CrendentialForAWS> => {
         const errScope = `loadCredentials(${profile ?? ''})`;
         const _profile = (name: string) => {
             if (typeof name === 'string') return name ? name : null;
