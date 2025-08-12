@@ -1,16 +1,13 @@
 # lemon-templates-api
 
-- api microservice
+- api microservice for supporting nothing.
 
 ## Description
 
 Summarized specifications to design modeling
 
-
-----------------
-# VERSION INFO #
+## VERSION INFO
 
 | Version   | Description
 |--         |--
-| 0.24.1210 | optimized `lemon-core@3.2.10`, and `cores`.
-
+| 0.25.808  | optimized `lemon-core@4.0.6` initially.
