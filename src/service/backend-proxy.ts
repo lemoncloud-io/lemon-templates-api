@@ -8,14 +8,15 @@
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _inf, _log, _err, NextContext } from 'lemon-core';
+import { $U, _inf, _log, _err, NextContext, my_parrallel } from 'lemon-core';
 import { $T } from '../cores/commons';
 import { ModelType } from './backend-types';
 import { BackendService } from './backend-service';
 import { MyCoreProxy } from '../cores/abstract-services';
 import { CallbackManagerProxy } from '../modules/callback/proxy';
 import { MockManagerProxy, TestManagerProxy } from '../modules/mock/proxy';
-import { ConnectionManagerProxy, SocketManagerProxy } from '../modules/sockets/proxy';
+import { ConnectionManagerProxy, SocketManagerProxy, ChannelManagerProxy } from '../modules/sockets/proxy';
+import { ChannelModel } from '../modules/sockets/model';
 const NS = $U.NS('backend', 'blue'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -24,7 +25,8 @@ const NS = $U.NS('backend', 'blue'); // NAMESPACE TO BE PRINTED.
  */
 export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
     public readonly socket: SocketManagerProxy;
-    public readonly connection: ConnectionManagerProxy; // for backward compatibility
+    public readonly connection: ConnectionManagerProxy;
+    public readonly channel: ChannelManagerProxy;
 
     public readonly callback: CallbackManagerProxy;
     public readonly test: TestManagerProxy;
@@ -41,6 +43,7 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
 
         this.socket = new SocketManagerProxy(this, service.$socket);
         this.connection = new ConnectionManagerProxy(this, service.$connection);
+        this.channel = new ChannelManagerProxy(this, service.$channel);
 
         this.callback = new CallbackManagerProxy(this, service.$callback);
         this.test = new TestManagerProxy(this, service.$test);
@@ -85,4 +88,39 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
         if (typeof s === 'string' && s.length <= maxLen && /^[1-9][0-9]{0,5}$/.test(s)) return $T.N(s);
         return s;
     };
+
+    /**
+     * establish a channel group
+     */
+    public async establishChannel(
+        channel: string,
+        stereo: string,
+    ): Promise<{
+        $master: ChannelModel;
+        $channel: ChannelModel;
+    }> {
+        const errScope = `establishChannel(${channel ?? ''}/${stereo ?? ''})`;
+
+        // STEP.0 validate parameters
+        if (!channel) throw new Error(`@channel (string) is required - ${errScope}`);
+        if (!stereo) throw new Error(`@stereo (string) is required - ${errScope}`);
+
+        // STEP.1 prepare master & sub channel model.
+        const masterId = this.channel.asChannelId(channel);
+        const channelId = this.channel.asChannelId(channel, stereo);
+
+        // STEP.2 build channel models
+        const models: ChannelModel[] = [
+            { id: masterId, channel },
+            { id: channelId, stereo, channel },
+        ];
+
+        // STEP.3 get or create channel models in parallel
+        const $models = await my_parrallel(models, N => this.channel.get(N.id, N));
+
+        // STEP.4 prepare results
+        const $master = $models?.at(0);
+        const $channel = $models?.at(1);
+        return { $master, $channel };
+    }
 }

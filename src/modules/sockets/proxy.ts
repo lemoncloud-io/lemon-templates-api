@@ -12,8 +12,8 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, $T, _inf, _log, _err } from 'lemon-core';
 import { MyCoreProxy, MyManagerProxy, onlyDefined } from '../../cores';
-import { ConnectionModel, ModelType, SocketModel } from './model';
-import { BackendService, ConnectionModelManager, SocketModelManager } from './service';
+import { ChannelModel, ConnectionModel, ModelType, SocketModel } from './model';
+import { BackendService, ChannelModelManager, ConnectionModelManager, SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
 import { SocketEvent } from '../../lib/wss-types';
 import { parseBase64 } from '../../lib/tools';
@@ -23,6 +23,7 @@ const NS = $U.NS('sockets', 'blue'); // NAMESPACE TO BE PRINTED.
 export abstract class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
     readonly socket: SocketManagerProxy;
     readonly connection: ConnectionManagerProxy;
+    readonly channel: ChannelManagerProxy;
 
     // backend-service.
     readonly service: BackendService;
@@ -170,4 +171,37 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
         const $final = await this.set($conn.id, $ups);
         return $final;
     }
+}
+
+/**
+ * type: `ChannelManagerProxy`
+ * - the manager-proxy for channel-model
+ */
+export class ChannelManagerProxy extends MyManagerProxy<ChannelModel, ChannelModelManager, BackendService> {
+    /** default construction */
+    public constructor(readonly proxy: BackendProxy, manager: ChannelModelManager) {
+        super(proxy, manager);
+    }
+
+    /**
+     * validate before creating or updating.
+     */
+    public async validateModel<T extends ChannelModel>(model: T, modelId?: string): Promise<T> {
+        const $org = modelId ? await this.get(modelId, true) : null;
+        const isCreate = !$org;
+        const validated = await this.$mgr.validateModel(model, $org);
+
+        //* test case for api calling.
+        const errScope = `validate(${this.$mgr.type}/${modelId ?? ''})`;
+
+        // returns.
+        return validated as T;
+    }
+
+    /**
+     * convert to `channel-id`
+     * @param channel   name of channel
+     * @param stereo    stereo as `role`.
+     */
+    public asChannelId = (channel: string, stereo?: string) => (stereo ? `${channel}.${stereo}` : `${channel}`);
 }

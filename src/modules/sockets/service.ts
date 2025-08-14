@@ -12,7 +12,7 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, _inf, _log, _err, CoreModel } from 'lemon-core';
 import { $T, MyCoreManager, MyCoreService } from '../../cores';
-import { $FIELD, ConnectionModel, ModelType, SocketModel } from './model';
+import { $FIELD, ChannelModel, ConnectionModel, ModelType, SocketModel } from './model';
 import { BackendProxy } from './proxy';
 const NS = $U.NS('socket', 'blue'); // NAMESPACE TO BE PRINTED.
 
@@ -20,6 +20,7 @@ const NS = $U.NS('socket', 'blue'); // NAMESPACE TO BE PRINTED.
 export interface BackendService<T extends ModelType = any> extends MyCoreService<CoreModel<T>, T, BackendProxy> {
     readonly $socket: SocketModelManager;
     readonly $connection: ConnectionModelManager;
+    readonly $channel: ChannelModelManager;
 
     /** say hello() */
     hello(): string;
@@ -57,6 +58,25 @@ export class ConnectionModelManager extends MyCoreManager<ConnectionModel, Model
      * @override validate
      */
     public async validateModel(model: ConnectionModel, $org?: ConnectionModel) {
+        const errScope = `validate(${this.type}/${model?.id ?? ''})`;
+        const isCreate = !$org;
+        return model;
+    }
+}
+
+/**
+ * class: `ChannelModelManager`
+ * - manager for channel-model.
+ */
+export class ChannelModelManager extends MyCoreManager<ChannelModel, ModelType, BackendService> {
+    public constructor(parent: BackendService) {
+        super('channel', parent, $FIELD.channel, { enableSync: false });
+    }
+
+    /**
+     * @override validate
+     */
+    public async validateModel(model: ChannelModel, $org?: ChannelModel) {
         const errScope = `validate(${this.type}/${model?.id ?? ''})`;
         const isCreate = !$org;
         return model;
