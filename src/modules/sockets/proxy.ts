@@ -119,6 +119,7 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
             domain,
             connectionId,
             connected: 1,
+            disConnectedAt: 0,
             connectedAt,
             origin: event?.origin,
             remote: event?.remote,
@@ -236,8 +237,10 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
 
         const $res = useSearch ? await _search() : await _scan();
         const { list, total, aggr } = $res;
+        const took = $prf.took();
+        _log(NS, `> search.took = `, took);
 
-        return { ...$page, list, total, aggr, took: $prf.took() };
+        return { ...$page, list, total, aggr, took };
     }
 }
 
