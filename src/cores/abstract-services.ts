@@ -29,6 +29,7 @@
  * @date        2025-07-23 optimized `buildQuery()` with `hidden` + `aggregation` option.
  * @date        2025-08-01 optimized `canDo()` for better security w/ session.
  * @date        2025-08-11 optimized `OS2FGACManager` for latest features.
+ * @date        2025-08-14 optimized `OS2.deleteIndex()` for latest features.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
@@ -1580,6 +1581,22 @@ export class OS2Service<T extends Elastic6Item = any> extends Elastic6Service<an
             index: indexName,
             acknowledged: res.body.shards_acknowledged,
         };
+    }
+
+    /**
+     * delete index by name
+     */
+    public async deleteIndex(indexName: string): Promise<any> {
+        _log(NS, `- deleteIndex(${indexName})`);
+        const client = this.client;
+        const res = await client.indices.delete({ index: indexName }).catch(
+            $ERROR.handler('delete', e => {
+                const msg = GETERR(e);
+                if (msg.startsWith('404 INDEX NOT FOUND')) throw new Error(`404 NOT FOUND - index:${indexName}`);
+                throw e;
+            }),
+        );
+        return res;
     }
 
     /**
