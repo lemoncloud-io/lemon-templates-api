@@ -18,7 +18,7 @@ import { SocketActionType, SocketEvent } from './wss-types';
 import { convertWSSEvent, buildSocketResponse, parseMessage, parseBase64 } from './tools';
 export { SocketPayload, SocketResponse } from './wss-types';
 import { BackendService } from '../service/backend-service';
-import { onlyDefined } from '../cores';
+import { $T, onlyDefined } from '../cores';
 import {
     ApiGatewayManagementApiClient,
     DeleteConnectionCommand,
@@ -128,18 +128,32 @@ export class WSSAgent {
     public async onConnect(event?: SocketEvent): Promise<any> {
         const errScope = `doConnect(${event?.id ?? ''})`;
         event = event ?? this.event;
-        _log(NS, `${errScope}...`);
 
-        // TODO - run authorization
-        // STEP.1 find or create connection
-        const $prxy = this.service.createProxy(this.context);
-        const $conn = await $prxy.connection.findModel(event);
+        // STEP.0 extract parameters
+        const { param } = event;
+        const channel = $T.S2(param?.channel, 'lemon');
+        const stereo = $T.S2(param?.stereo, 'none');
+        _log(NS, `> ${channel}:${stereo}@${errScope}`);
 
-        //! returns
-        return {
-            id: event?.id,
-            $conn,
-        };
+        //! run in guard-proxy
+        return this.service.guardProxy(this.context, async proxy => {
+            // STEP.1 find or create channel model
+            const { $channel } = await proxy.establishChannel(channel, stereo);
+            _log(NS, `> $channel[${$channel?.id}] = `, $U.json($channel));
+
+            // STEP.2 find or create connection model
+            const $conn = await proxy.connection.findModel(event);
+            _log(NS, `> $conn[${$conn?.id}] = `, $U.json($conn));
+
+            // STEP.3 update connection model with channel
+            //TODO - 테스트를 위한 단일 채널 연결! @aiden
+            const $res = await proxy.connection.updateConnection($conn, { channels: [$channel.id] });
+            return {
+                id: event?.id,
+                $conn: $res,
+                $channel,
+            };
+        });
     }
 
     /**
@@ -151,15 +165,17 @@ export class WSSAgent {
         event = event ?? this.event;
         _log(NS, `${errScope}...`);
 
-        // STEP. find connection model and update disconnection
-        const $prxy = this.service.createProxy(this.context);
-        const $disc = await $prxy.connection.updateDisconnection(event);
+        //! run in guard-proxy
+        return this.service.guardProxy(this.context, async proxy => {
+            // STEP.1 update disconnection info
+            // TODO - 리팩토링 예정 @aiden
+            const $conn = await proxy.connection.updateDisconnection(event);
 
-        //! returns
-        return {
-            id: event?.id,
-            $disc,
-        };
+            return {
+                id: event?.id,
+                $conn,
+            };
+        });
     }
 
     /**
