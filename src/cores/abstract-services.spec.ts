@@ -528,7 +528,7 @@ describe('abstract-services', () => {
                     ],
                 },
             },
-            aggs: { stereo: { terms: { field: 'stereo.keyword', missing: 'N/A', order: { _key: 'asc' }, size: 10 } } },
+            aggs: { stereo: { terms: { field: 'stereo.keyword', missing: 'N/A', order: { _key: 'asc' }, size: 12 } } },
         };
 
         expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
@@ -538,19 +538,19 @@ describe('abstract-services', () => {
         );
 
         //* validate param option
-        expect2(() => service.$test.buildQuery({})).toEqual('.limit(number) is required - buildQuery()');
+        expect2(() => service.$test.buildQuery({})).toEqual('.limit(number) is required - buildQuery(test)');
         expect2(() => service.$test.buildQuery({ limit: '30' as any })).toEqual(
-            '.limit(number) is required - buildQuery()',
+            '.limit(number) is required - buildQuery(test)',
         );
         expect2(() => service.$test.buildQuery({ limit: '30' as any, page: 10 })).toEqual(
-            '.limit(number) is required - buildQuery()',
+            '.limit(number) is required - buildQuery(test)',
         );
-        // expect2(() => service.$test.buildQuery({ limit: 30 })).toEqual('.page(number) is required - buildQuery()');
+        // expect2(() => service.$test.buildQuery({ limit: 30 })).toEqual('.page(number) is required - buildQuery(test)');
         expect2(() => service.$test.buildQuery({ limit: 30, page: '10' as any })).toEqual(
-            '.page(number) is required - buildQuery()',
+            '.page(number) is required - buildQuery(test)',
         );
         expect2(() => service.$test.buildQuery({ limit: 30, page: 0, offset: '10' as any })).toEqual(
-            '.offset(number) is required - buildQuery()',
+            '.offset(number) is required - buildQuery(test)',
         );
 
         //* validate filter by attributes
