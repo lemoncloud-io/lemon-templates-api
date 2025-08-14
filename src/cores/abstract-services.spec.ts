@@ -276,37 +276,40 @@ describe('abstract-services', () => {
         };
 
         //! test with sample session.
-        //TODO - remove `context-session.json` in the future.
-        const dir = `sample/context-session.json`;
-        const $ctx = loadSample('session')?.context?.identity;
-        // const $ctx = loadJsonSync(dir)?.context?.identity;
-        expect2(() => getCurrentSession({ useSession: false })).toEqual(null);
-        expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
-            sid: expect.any(String),
-            uid: expect.any(String),
-        });
-        expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
-            sid: $ctx?.sid,
-            uid: $ctx?.uid,
-        });
-        expect2(() => getCurrentSession({ useSession: true })).toEqual(null);
-        expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: dir }), 'sid,uid').toEqual({
-            sid: $ctx?.sid,
-            uid: $ctx?.uid,
-        });
-        expect2(() => getCurrentSession({ useSession: '1' })).toEqual(null);
-        expect2(() => getCurrentSession({ useSession: dir }), 'sid,uid').toEqual({
-            sid: $ctx?.sid,
-            uid: $ctx?.uid,
-        });
+        //NOTE - check with `context-session.json` local file (ONLY in templates-api)
+        const $pack = loadJsonSync('package.json');
+        if ($pack?.name == 'lemon-templates-api') {
+            const dir = `sample/context-session.json`;
+            const $ctx = loadSample('session')?.context?.identity;
+            // const $ctx = loadJsonSync(dir)?.context?.identity;
+            expect2(() => getCurrentSession({ useSession: false })).toEqual(null);
+            expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
+                sid: expect.any(String),
+                uid: expect.any(String),
+            });
+            expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
+                sid: $ctx?.sid,
+                uid: $ctx?.uid,
+            });
+            expect2(() => getCurrentSession({ useSession: true })).toEqual(null);
+            expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: dir }), 'sid,uid').toEqual({
+                sid: $ctx?.sid,
+                uid: $ctx?.uid,
+            });
+            expect2(() => getCurrentSession({ useSession: '1' })).toEqual(null);
+            expect2(() => getCurrentSession({ useSession: dir }), 'sid,uid').toEqual({
+                sid: $ctx?.sid,
+                uid: $ctx?.uid,
+            });
 
-        expect2(() => getCurrentSession({ useSession: 'wrongPath' })).toEqual(
-            "@file[wrongPath] is invalid, ENOENT: no such file or directory, open './wrongPath'",
-        );
-        expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: 'wrongPath' })).toEqual(null);
-        expect2(() => getCurrentSession({ USE_SESSION: 'wrongPath' })).toEqual(null);
+            expect2(() => getCurrentSession({ useSession: 'wrongPath' })).toEqual(
+                "@file[wrongPath] is invalid, ENOENT: no such file or directory, open './wrongPath'",
+            );
+            expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: 'wrongPath' })).toEqual(null);
+            expect2(() => getCurrentSession({ USE_SESSION: 'wrongPath' })).toEqual(null);
 
-        expect2(() => proxy.asCurrentIdentityId(context)).toEqual(identity.identityId);
+            expect2(() => proxy.asCurrentIdentityId(context)).toEqual(identity.identityId);
+        }
 
         const parent: CoreModel = {
             sid: '0000008',
