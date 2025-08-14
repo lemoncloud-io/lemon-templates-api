@@ -1330,7 +1330,7 @@ export class MyManagerProxy<
      * @param model creation model
      * @param validate (optional) flag to validate (default is true)
      */
-    public async makeModel<T extends MyModel>(model: T, validate?: boolean): Promise<T> {
+    public async makeModel<T extends MyModel>(model: MyModel, validate?: boolean): Promise<T> {
         const errScope = `makeModel(${this.$mgr.type}/${model?.id ?? ''})`;
         if (!model) throw new Error(`@model (${this.$mgr.type}-model) is required - ${errScope}`);
         validate = validate ?? true;
