@@ -26,7 +26,7 @@ export { ModelType };
 export class BackendService extends MyCoreService<Model, ModelType, BackendProxy> {
     // model managers
     public readonly $socket: SocketModelManager;
-    public readonly $connection: SocketModelManager;
+    public readonly $connection: ConnectionModelManager;
     public readonly $channel: ChannelModelManager;
 
     public readonly $callback: CallbackModelManager;

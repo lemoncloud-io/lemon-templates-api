@@ -10,8 +10,8 @@
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _inf, _log, _err, CoreModel } from 'lemon-core';
-import { $T, MyCoreManager, MyCoreService } from '../../cores';
+import { $U, _inf, _log, _err, CoreModel, DynamoScanFilter, SimpleSet } from 'lemon-core';
+import { $T, MyCoreManager, MyCoreService, SearchParam } from '../../cores';
 import { $FIELD, ChannelModel, ConnectionModel, ModelType, SocketModel } from './model';
 import { BackendProxy } from './proxy';
 const NS = $U.NS('socket', 'blue'); // NAMESPACE TO BE PRINTED.
@@ -61,6 +61,30 @@ export class ConnectionModelManager extends MyCoreManager<ConnectionModel, Model
         const errScope = `validate(${this.type}/${model?.id ?? ''})`;
         const isCreate = !$org;
         return model;
+    }
+
+    /** 목록 검색을 위한 추가 조건 스캔 필터 빌드 함수 */
+    public asScanFilter(filter: DynamoScanFilter, params?: SearchParam<ConnectionModel> & SimpleSet): DynamoScanFilter {
+        // STEP.1 build scan-filter w/ parameter.
+        const _P = <T = string | number>(name: string): T => params && (params as any)[name];
+        const _add_filter = (filter$: DynamoScanFilter | DynamoScanFilter[]) => {
+            return [...((filter as DynamoScanFilter[]) || []), ...(Array.isArray(filter$) ? filter$ : [filter$])];
+        };
+
+        //* add custom filters.
+        const $filter: DynamoScanFilter = [];
+        const pChannel = _P<string>('channel');
+        if (pChannel) {
+            $filter.push({ key: 'channels', operator: 'contains', value: pChannel });
+        }
+        const pConnected = _P<string>('connected');
+        if (pConnected) {
+            $filter.push({ key: 'disConnectedAt', comparator: '<=', value: 0 });
+        }
+
+        // STEP.4 do merge array
+        const $res = _add_filter($filter);
+        return $res;
     }
 }
 
