@@ -11,14 +11,14 @@
  * @origin      `@lemoncloud/lemon-cluster-api/cluster`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _log, _inf, _err, GETERR, NextContext, $slack } from 'lemon-core';
+import { $U, _log, _inf, _err, GETERR, NextContext, $slack, my_parrallel } from 'lemon-core';
 import { WSSEvent, LambdaHandlerService, WSSHandler } from 'lemon-core';
 import { failure, notfound, success } from 'lemon-core/dist/cores/lambda/lambda-wss-handler';
-import { SocketActionType, SocketEvent } from './wss-types';
+import { ConnectionInfo, SocketActionType, SocketEvent } from './wss-types';
 import { convertWSSEvent, buildSocketResponse, parseMessage, parseBase64 } from './tools';
 export { SocketPayload, SocketResponse } from './wss-types';
 import { BackendService } from '../service/backend-service';
-import { onlyDefined } from '../cores';
+import { $T, onlyDefined } from '../cores';
 import {
     ApiGatewayManagementApiClient,
     DeleteConnectionCommand,
@@ -84,18 +84,11 @@ export const $sockets = (service: BackendService, event?: WSSEvent, context?: Ne
  * - support class for WebSocket events.
  */
 export class WSSAgent {
-    private readonly $client: ApiGatewayManagementApiClient;
-
     /**
      * default constructor
      */
     public constructor(readonly service: BackendService, readonly event: SocketEvent, readonly context: NextContext) {
         _log(NS, `WSSAgent(${event?.type || ''}/${event?.connectionId || ''})...`);
-        const { stage, domain } = event;
-        const endpoint = `https://${domain}/${stage}`;
-        const region = $U.env('DEFAULT_REGION', 'ap-northeast-2');
-        _inf(NS, `> $config =`, $U.json({ region, endpoint }));
-        this.$client = new ApiGatewayManagementApiClient({ region, endpoint });
     }
 
     /** say hello */
@@ -128,18 +121,32 @@ export class WSSAgent {
     public async onConnect(event?: SocketEvent): Promise<any> {
         const errScope = `doConnect(${event?.id ?? ''})`;
         event = event ?? this.event;
-        _log(NS, `${errScope}...`);
 
-        // TODO - run authorization
-        // STEP.1 find or create connection
-        const $prxy = this.service.createProxy(this.context);
-        const $conn = await $prxy.connection.findModel(event);
+        // STEP.0 extract parameters
+        const { param } = event;
+        const channel = $T.S2(param?.channel, 'lemon');
+        const stereo = $T.S2(param?.stereo, 'none');
+        _log(NS, `> ${channel}:${stereo}@${errScope}`);
 
-        //! returns
-        return {
-            id: event?.id,
-            $conn,
-        };
+        //! run in guard-proxy
+        return this.service.guardProxy(this.context, async proxy => {
+            // STEP.1 find or create channel model
+            const { $channel } = await proxy.establishChannel(channel, stereo);
+            _log(NS, `> $channel[${$channel?.id}] = `, $U.json($channel));
+
+            // STEP.2 find or create connection model
+            const $conn = await proxy.connection.findModel(event);
+            _log(NS, `> $conn[${$conn?.id}] = `, $U.json($conn));
+
+            // STEP.3 update connection model with channel
+            //TODO - 테스트를 위한 단일 채널 연결! @aiden
+            const $res = await proxy.connection.updateConnection($conn, { channels: [$channel.id] });
+            return {
+                id: event?.id,
+                $conn: $res,
+                $channel,
+            };
+        });
     }
 
     /**
@@ -151,15 +158,17 @@ export class WSSAgent {
         event = event ?? this.event;
         _log(NS, `${errScope}...`);
 
-        // STEP. find connection model and update disconnection
-        const $prxy = this.service.createProxy(this.context);
-        const $disc = await $prxy.connection.updateDisconnection(event);
+        //! run in guard-proxy
+        return this.service.guardProxy(this.context, async proxy => {
+            // STEP.1 update disconnection info
+            // TODO - 리팩토링 예정 @aiden
+            const $conn = await proxy.connection.updateDisconnection(event);
 
-        //! returns
-        return {
-            id: event?.id,
-            $disc,
-        };
+            return {
+                id: event?.id,
+                $conn,
+            };
+        });
     }
 
     /**
@@ -180,38 +189,54 @@ export class WSSAgent {
         switch (action) {
             case 'echo':
                 const $echo = buildSocketResponse('echo', onlyDefined({ param, body, connectionId }));
-                await this.doSend($echo, { event });
+                await this.postClientMessage($echo, event);
                 return $echo;
             case 'ping':
                 const $pong = buildSocketResponse('pong', $msg?.data);
-                await this.doSend($pong, { event });
+                await this.postClientMessage($pong, event);
                 return $pong;
+            case 'broadcat':
+                const channel = 'ssocio-orders-api';
+                const stereo = 'orders';
+                const $braodcast = await this.broadcast(channel, stereo, $msg?.data);
+                return {};
             default:
                 const message = `@action[${action}] is not supported - ${errScope}`;
                 const $err = buildSocketResponse('error', { message, action });
-                await this.doSend($pong, { event });
+                await this.postClientMessage($err, event);
                 return $err;
         }
     }
 
     /**
+     * post to client
+     * @param payload   object or string
+     * @param $conn     connection-info
+     */
+    public postClientMessage = async (payload: any, $conn?: ConnectionInfo) => {
+        $conn = $conn || this.event;
+        const { stage, domain, connectionId } = $conn;
+        if (!domain) throw new Error(`@domain (string) is required!`);
+        const url = `https://${domain}/${stage || ''}`;
+        return this.doSend(url, connectionId, payload);
+    };
+
+    /**
      * send message to client.
      */
-    public async doSend(data?: any, options?: { event?: SocketEvent }) {
-        const event = options?.event ?? this.event;
-        const errScope = `doSend(${event?.direction}/${event?.id ?? ''})`;
-
-        const { connectionId } = this.event;
-        const connId = parseBase64(connectionId);
+    public async doSend(endpoint: string, connectionId: string, payload?: any) {
+        const errScope = `doSend(${endpoint ?? ''}/${connectionId ?? ''})`;
+        const region = $U.env('DEFAULT_REGION', 'ap-northeast-2');
+        const $client = new ApiGatewayManagementApiClient({ region, endpoint });
         const command = new PostToConnectionCommand({
-            ConnectionId: 0 ? connId : connectionId,
-            Data: data && typeof data === 'object' ? JSON.stringify(data) : `${data ?? ''}`,
+            ConnectionId: connectionId,
+            Data: payload && typeof payload === 'object' ? JSON.stringify(payload) : `${payload ?? ''}`,
         });
         _inf(NS, `> command =`, $U.json(command));
 
         // ignore internal error
         try {
-            const $res = await this.$client.send(command);
+            const $res = await $client.send(command);
             //TODO [Steve] `Forbidden` occured in ssocio/VPC configuration @250808
             //NOTE - 다만 lemon에서는 잘 작동하는듯함. (VPC 구성 없음!)
             // $res := {"$metadata":{"httpStatusCode":200,"requestId":"b86aec0a-85aa-4ab3-bbf4-30c52c808970","attempts":1,"totalRetryDelay":0}}
@@ -227,24 +252,47 @@ export class WSSAgent {
     }
 
     /**
-     * delete connection by id
+     * broadcast message to all nodes in the channel/stereo.
+     *
+     * @param channel
+     * @param stereo
+     * @param data
+     * @param type
+     * @returns
      */
-    private async disconnectClient(event: SocketEvent) {
-        const errScope = `disconnectClient(${event?.direction}/${event?.id ?? ''}))`;
+    public async broadcast(channel: string, stereo: string, data?: any) {
+        const errScope = `broadcast(${channel ?? ''}/${stereo ?? ''})`;
         _log(NS, `${errScope}...`);
 
-        const { connectionId } = event;
-        const connId = parseBase64(connectionId);
-        const command = new DeleteConnectionCommand({ ConnectionId: 0 ? connId : connectionId });
-        _inf(NS, `> command =`, $U.json(command));
+        // STEP.1 prepare messasge to be sent
+        return this.service.guardProxy(this.context, async proxy => {
+            const { $channel } = await proxy.establishChannel(channel, stereo);
+            _log(NS, `> $channel[${$channel?.id}] =`, $U.json($channel));
 
-        // ignore internal error
-        try {
-            const $res = await this.$client.send(command);
-            _log(NS, `> $res@${errScope} =`, $U.json($res));
-        } catch (e) {
-            _err(NS, `> error@${errScope} =`, GETERR(e), e);
-            throw e;
-        }
+            const { list: $conns } = await proxy.connection.listAvailableConns($channel.id, { useSearch: false });
+            if (!$conns || !$conns?.length) return 0;
+
+            const $sent = await my_parrallel($conns, async N => {
+                const connId = N?.id ? $T.S2(N.id) : null;
+                const $conn = connId ? await proxy.connection.get(connId) : null;
+                //! if valid, post msg...
+                if ($conn?.connected && $conn?.connectionId) {
+                    return this.postClientMessage(data, $conn)
+                        .then(() => {
+                            return { id: N.id, error: null };
+                        })
+                        .catch(e => {
+                            const error = e instanceof Error ? GETERR(e) : e;
+                            if (error?.message === '410') return { id: N.id }; //! ignore if `GoneException`
+                            _err(NS, `>> conn[${connId}].err =`, $U.json(error));
+                            return { error: e, id: N.id, $conn };
+                        });
+                }
+                return null;
+            });
+
+            const errors = $sent.filter(N => N && N.error);
+            return { $conns, $sent, count: $sent.length, errors };
+        });
     }
 }

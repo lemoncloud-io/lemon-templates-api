@@ -11,14 +11,14 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import $core, { $U, _log, _inf, _err, NextHandler } from 'lemon-core';
-import { AbstractCRUDController } from '../../cores';
+import { $T, AbstractCRUDController } from '../../cores';
 import { SocketModel } from './model';
 import { SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
 import { SocketBody, SocketView } from './views';
 //WARN - use `BackendService` from main service due to proper `BackendProxy`.
 import $service, { BackendService, ModelType } from '../../service/backend-service';
-import { LambdaWSSHandler } from '../../lib/wss';
+import { $sockets, LambdaWSSHandler } from '../../lib/wss';
 const NS = $U.NS('sockets', 'yellow'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -66,6 +66,28 @@ export class SocketAPIController extends AbstractCRUDController<
             // returns default.
             return { id, hello, param, body, context: { clientIp: $ctx.clientIp } };
         });
+    };
+
+    /**
+     * broadcast `body` to all connections in `id`
+     *
+     * ```sh
+     * $ echo '{"hello":"world"}' | http ':8832/sockets/lemon.none/broadcast'
+     * $ echo '{"id":"O100001"}' | http ':8832/sockets/ssocio-orders-api.orders/broadcast'
+     * ```
+     * @param id    channel-id like `lemon-sandbox-api.hello`
+     */
+    public doPostBroadcast: NextHandler = async (id, param, body, $ctx) => {
+        const errScope = `doPostBroadcast(${id ?? ''})`;
+        $ctx && _log(NS, `> context =`, $U.json($ctx));
+        id = id === '0' ? '' : $T.S2(id).trim();
+        const [channel, stereo] = `${id || ''}`.split('.');
+
+        // STEP.0 validate parameters.
+        if (!channel) throw new Error(`@channel (string) is required - ${errScope}`);
+        if (!stereo) throw new Error(`@stereo (string) is required - ${errScope}`);
+        const $result = await $sockets(this.service, null, $ctx).broadcast(channel, stereo, body);
+        return $result;
     };
 }
 

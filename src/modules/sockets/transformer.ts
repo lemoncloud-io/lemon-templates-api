@@ -10,8 +10,8 @@
  */
 import { AbstractTransformer } from 'lemon-core';
 import { $T } from '../../cores/commons';
-import { SocketModel } from './model';
-import { SocketBody, SocketView } from './views';
+import { ConnectionModel, SocketModel } from './model';
+import { ConnectionBody, ConnectionView, SocketBody, SocketView } from './views';
 
 /**
  * class: `SocketTransformer`
@@ -41,8 +41,49 @@ export class SocketTransformer extends AbstractTransformer<SocketModel, SocketVi
 }
 
 /**
+ * class: `ConnectionTransformer`
+ */
+export class ConnectionTransformer extends AbstractTransformer<ConnectionModel, ConnectionView, ConnectionBody> {
+    /**
+     * @override
+     */
+    public modelAsView(model: ConnectionModel, hasCores?: boolean): ConnectionView {
+        const view = super.modelAsView(model, hasCores);
+        return this.onlyDefined<ConnectionView>({
+            ...view,
+            stereo: model.stereo,
+            stage: model.stage,
+            domain: model.domain,
+            connectionId: model.connectionId,
+
+            connected: model.connected,
+            granted: model.granted,
+            connectedAt: model.connectedAt,
+            disConnectedAt: model.disConnectedAt,
+
+            origin: model.origin,
+            remote: model.remote,
+            agent: model.agent,
+            reason: model.reason,
+            disconnectCode: model.disconnectCode,
+            channels: model.channels,
+        });
+    }
+    /**
+     * @override
+     */
+    public bodyToModel(body: ConnectionBody, isCreate?: boolean): ConnectionModel {
+        const model = super.bodyToModel(body, isCreate);
+        if (!model) return model;
+
+        return model;
+    }
+}
+
+/**
  * defualt export w/ instance
  */
 export const $trans = {
     socket: new SocketTransformer(),
+    conns: new ConnectionTransformer(),
 };

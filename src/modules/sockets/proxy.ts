@@ -10,10 +10,10 @@
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _inf, _log, _err } from 'lemon-core';
-import { MyCoreProxy, MyManagerProxy, onlyDefined } from '../../cores';
-import { ConnectionModel, ModelType, SocketModel } from './model';
-import { BackendService, ConnectionModelManager, SocketModelManager } from './service';
+import { $U, $T, _inf, _log, _err, SearchQuery } from 'lemon-core';
+import { ListResult, MyCoreProxy, MyManagerProxy, SearchParam, onlyDefined, parsePaginateParam } from '../../cores';
+import { ChannelModel, ConnectionModel, ModelType, SocketModel } from './model';
+import { BackendService, ChannelModelManager, ConnectionModelManager, SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
 import { SocketEvent } from '../../lib/wss-types';
 import { parseBase64 } from '../../lib/tools';
@@ -23,6 +23,7 @@ const NS = $U.NS('sockets', 'blue'); // NAMESPACE TO BE PRINTED.
 export abstract class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
     readonly socket: SocketManagerProxy;
     readonly connection: ConnectionManagerProxy;
+    readonly channel: ChannelManagerProxy;
 
     // backend-service.
     readonly service: BackendService;
@@ -118,6 +119,7 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
             domain,
             connectionId,
             connected: 1,
+            disConnectedAt: 0,
             connectedAt,
             origin: event?.origin,
             remote: event?.remote,
@@ -170,4 +172,107 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
         const $final = await this.set($conn.id, $ups);
         return $final;
     }
+
+    /**
+     * update connection model
+     */
+    public async updateConnection<T extends ConnectionModel>(model: T, $ups: T): Promise<T> {
+        const errScope = `updateConnection(${this.$mgr.type}/${model?.id ?? ''})`;
+
+        /** STEP.0 validate parameters */
+        if (!model) throw new Error(`@model (connection-model) is required - ${errScope}`);
+        if (!model?.id) throw new Error(`@model.id (string) is required - ${errScope}`);
+
+        /** STEP.1 extract parameters */
+        const $updates = onlyDefined<T>({ ...$ups });
+
+        // STEP.2 validate and update model
+        const $valid = await this.validateModel($updates, model.id);
+        const $final = await this.set(model.id, $valid);
+        return $final as T;
+    }
+
+    /**
+     * list the available connections by channel.
+     * @param channel
+     * @param options
+     * @returns
+     */
+    public async listAvailableConns(
+        channel: string,
+        options?: { useSearch?: boolean },
+    ): Promise<ListResult<ConnectionModel>> {
+        const errScope = `listAvailableConns(${this.$mgr.type}/${channel ?? ''})`;
+        const $prf = $T.perf();
+        const useSearch = options?.useSearch ?? false;
+        const $page = parsePaginateParam({ limit: 30 });
+        if (!channel) throw new Error(`@channel (string) is required - ${errScope}`);
+
+        const _scan = async () => {
+            const $def = this.$mgr.buildScanFilter();
+            const filter = this.$mgr.asScanFilter($def, { channel, connected: 1 });
+            const $res = await this.$mgr.doScan($page, filter);
+            return $res;
+        };
+        const _search = async (): Promise<ListResult<ConnectionModel, { key: string; count: number }>> => {
+            const body = this.$mgr.buildQuery($page);
+            const $must: SearchQuery[] = [];
+            if (channel) {
+                $must.push({ terms: { channels: channel } });
+                $must.push({
+                    bool: {
+                        should: [
+                            { bool: { must_not: { exists: { field: 'disConnectedAt' } } } },
+                            { range: { disConnectedAt: { lte: 0 } } },
+                        ],
+                        minimum_should_match: 1,
+                    },
+                });
+            }
+            body.query.bool.must = $must;
+
+            const $res = await this.$mgr.parent.doSearch<ConnectionModel>(body);
+            return { list: $res?.list, total: $res?.total, aggr: null };
+        };
+
+        const $res = useSearch ? await _search() : await _scan();
+        const { list, total, aggr } = $res;
+        const took = $prf.took();
+        _log(NS, `> search.took = `, took);
+
+        return { ...$page, list, total, aggr, took };
+    }
+}
+
+/**
+ * type: `ChannelManagerProxy`
+ * - the manager-proxy for channel-model
+ */
+export class ChannelManagerProxy extends MyManagerProxy<ChannelModel, ChannelModelManager, BackendService> {
+    /** default construction */
+    public constructor(readonly proxy: BackendProxy, manager: ChannelModelManager) {
+        super(proxy, manager);
+    }
+
+    /**
+     * validate before creating or updating.
+     */
+    public async validateModel<T extends ChannelModel>(model: T, modelId?: string): Promise<T> {
+        const $org = modelId ? await this.get(modelId, true) : null;
+        const isCreate = !$org;
+        const validated = await this.$mgr.validateModel(model, $org);
+
+        //* test case for api calling.
+        const errScope = `validate(${this.$mgr.type}/${modelId ?? ''})`;
+
+        // returns.
+        return validated as T;
+    }
+
+    /**
+     * convert to `channel-id`
+     * @param channel   name of channel
+     * @param stereo    stereo as `role`.
+     */
+    public asChannelId = (channel: string, stereo?: string) => (stereo ? `${channel}.${stereo}` : `${channel}`);
 }
