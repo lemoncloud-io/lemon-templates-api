@@ -126,7 +126,7 @@ provider:
         - kms:Decrypt
         - kms:Encrypt
         - kms:Verify
-      Resource: "arn:aws:kms:${self:provider.region}:*:key/${self:custom.CONF.${self:custom.CORE.profile}.kmsKey, ''}"   #TODO - improve resource setting.
+      Resource: "arn:aws:kms:${self:provider.region}:*:key/${self:custom.CONF.${self:custom.CORE.profile}.kmsKey, '*'}"   #TODO - improve resource setting.
     # NOTE - only required from `xxxx-backend-api` which make `session-token`.
     # # KMS (#NOTE - kms:Sign is ONLY possible by exact ARN. so use `kmsSignKey` in config.js)
     # - Effect: Allow
