@@ -9,13 +9,13 @@
  * @date        2023-01-20 optimized `doSearch()` w/ `SearchParam()`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { $U, expect2, GETERR, NextContext, NextIdentity, SearchBody, SearchResult } from 'lemon-core';
+import { $T, $U, expect2, GETERR, NextContext, NextIdentity, SearchBody, SearchResult } from 'lemon-core';
 import { SimpleSet, CoreModel, filterFields, loadJsonSync } from 'lemon-core';
-import { MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
+import { CanDoActionType, MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
 import { keys } from 'ts-transformer-keys';
 import { PaginateParam } from './types';
 import { loadSample } from './contexts.spec';
@@ -141,10 +141,11 @@ export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
 
 //* main test body.
 describe('abstract-services', () => {
-    it('should pass basic functions', async () => {
-        const PROFILE = await loadProfile(process); // override process.env.
-        PROFILE && console.info('! PROFILE=', PROFILE);
+    const PROFILE = loadProfile(process); // override process.env.
+    PROFILE && console.info('! PROFILE=', PROFILE);
 
+    //* basic test
+    it('should pass basic functions', async () => {
         const { service } = instance();
         expect2(() => true).toEqual(true);
 
@@ -175,8 +176,8 @@ describe('abstract-services', () => {
     });
 
     it('should pass ManagerProxy', async () => {
-        const { service, current } = instance();
-        const proxy = service.createProxy(null as any);
+        const { service, current, context } = instance('session');
+        const proxy = service.createProxy(context);
 
         expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
         expect2(() => proxy.hello()).toEqual('manager-proxy:TT/dummy-data.yml');
@@ -250,13 +251,18 @@ describe('abstract-services', () => {
             error: "ENOENT: no such file or directory, open './src/cores/context-session.json'",
         });
 
-        const context = loadSample('session')?.context;
         expect2(() => context?.identity, 'sid,uid').toEqual({ sid: '1000008', uid: '1000007' });
         const identity = context?.identity;
 
-        expect2(() => proxy.getCurrentSession({ throwable: true })).toEqual(
+        const $noCtx = service.createProxy(null as any);
+        expect2(() => $noCtx.getCurrentSession({ throwable: true })).toEqual(
             '403 IDENTITY-TOKEN - .identity (IdentityToken) is required - context:',
         );
+        expect2(() => proxy.getCurrentSession({ throwable: true }), 'sid,uid').toEqual({
+            sid: '1000008',
+            uid: '1000007',
+        });
+
         const getCurrentSession = (options: {
             /** (default false for test) */
             throwable?: boolean;
@@ -266,40 +272,44 @@ describe('abstract-services', () => {
             USE_SESSION?: string;
         }) => {
             options.throwable = options.throwable === undefined ? false : options.throwable;
-            return proxy.getCurrentSession(options);
+            return $noCtx.getCurrentSession(options);
         };
 
         //! test with sample session.
-        //TODO - remove `context-session.json` in the future.
-        const dir = `sample/context-session.json`;
-        const $ctx = loadJsonSync(dir)?.context?.identity;
-        expect2(() => getCurrentSession({ useSession: false })).toEqual(null);
-        expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
-            sid: expect.any(String),
-            uid: expect.any(String),
-        });
-        expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
-            sid: $ctx.sid,
-            uid: $ctx.uid,
-        });
-        expect2(() => getCurrentSession({ useSession: true })).toEqual(null);
-        expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: dir }), 'sid,uid').toEqual({
-            sid: $ctx.sid,
-            uid: $ctx.uid,
-        });
-        expect2(() => getCurrentSession({ useSession: '1' })).toEqual(null);
-        expect2(() => getCurrentSession({ useSession: dir }), 'sid,uid').toEqual({
-            sid: $ctx.sid,
-            uid: $ctx.uid,
-        });
+        //NOTE - check with `context-session.json` local file (ONLY in templates-api)
+        const $pack = loadJsonSync('package.json');
+        if ($pack?.name == 'lemon-templates-api') {
+            const dir = `sample/context-session.json`;
+            const $ctx = loadSample('session')?.context?.identity;
+            // const $ctx = loadJsonSync(dir)?.context?.identity;
+            expect2(() => getCurrentSession({ useSession: false })).toEqual(null);
+            expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
+                sid: expect.any(String),
+                uid: expect.any(String),
+            });
+            expect2(() => getCurrentSession({ useSession: true, USE_SESSION: dir }), 'sid,uid').toEqual({
+                sid: $ctx?.sid,
+                uid: $ctx?.uid,
+            });
+            expect2(() => getCurrentSession({ useSession: true })).toEqual(null);
+            expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: dir }), 'sid,uid').toEqual({
+                sid: $ctx?.sid,
+                uid: $ctx?.uid,
+            });
+            expect2(() => getCurrentSession({ useSession: '1' })).toEqual(null);
+            expect2(() => getCurrentSession({ useSession: dir }), 'sid,uid').toEqual({
+                sid: $ctx?.sid,
+                uid: $ctx?.uid,
+            });
 
-        expect2(() => getCurrentSession({ useSession: 'wrongPath' })).toEqual(
-            "@file[wrongPath] is invalid, ENOENT: no such file or directory, open './wrongPath'",
-        );
-        expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: 'wrongPath' })).toEqual(null);
-        expect2(() => getCurrentSession({ USE_SESSION: 'wrongPath' })).toEqual(null);
+            expect2(() => getCurrentSession({ useSession: 'wrongPath' })).toEqual(
+                "@file[wrongPath] is invalid, ENOENT: no such file or directory, open './wrongPath'",
+            );
+            expect2(() => getCurrentSession({ useSession: '1', USE_SESSION: 'wrongPath' })).toEqual(null);
+            expect2(() => getCurrentSession({ USE_SESSION: 'wrongPath' })).toEqual(null);
 
-        expect2(() => proxy.asCurrentIdentityId(context)).toEqual(identity.identityId);
+            expect2(() => proxy.asCurrentIdentityId(context)).toEqual(identity.identityId);
+        }
 
         const parent: CoreModel = {
             sid: '0000008',
@@ -322,6 +332,158 @@ describe('abstract-services', () => {
             sid: '0000008',
             uid: '0000007',
         });
+
+        //* test of canDo() w/o session.
+        const _ctx = (N: NextIdentity, domain?: string): NextContext<NextIdentity> => {
+            const $ctx = proxy.context as NextContext<NextIdentity>;
+            domain = domain ?? $ctx?.domain;
+            return { ...$ctx, identity: { ...$ctx?.identity, ...N }, domain };
+        };
+        const _can = (action?: any, M?: Model, opts?: any) => proxy.tests.canDo(action, M, opts);
+        const $user0 = _ctx({ roles: ['user'] }); // normal user.
+        const $user1 = _ctx({ roles: ['user'], uid: '2002' }); // diff uid.
+        const $user2 = _ctx({ roles: ['user'], uid: '2002', sid: '999' }); // idff uid & sid.
+        const $admin = _ctx({ roles: ['admin'] }); // admin for all.
+        const $other = _ctx({ roles: ['other'] });
+
+        // test of basic canDo in core-proxy.
+        if (1) {
+            expect2(() => proxy.canDo(null, null)).toEqual('400 INVALID - @model.type (string) is required!');
+            expect2(() => proxy.canDo(null, {})).toEqual('400 INVALID - @model.type (string) is required!');
+            expect2(() => proxy.canDo(null, { type: '' as any })).toEqual(false);
+            expect2(() => proxy.canDo(null, { type: 'test' })).toEqual(
+                '400 INVALID - action[] is invalid @canDo(:test/-)',
+            );
+        }
+
+        // test of basic canDo in manager-proxy.
+        if (1) {
+            expect2(() => _can()).toEqual('400 INVALID - action[] is invalid @canDo(:test/-)');
+            expect2(() => _can(null, null, { errScope: 'xxx' })).toEqual('400 INVALID - action[] is invalid @xxx');
+            expect2(() => _can('', null, { errScope: 'xxx' })).toEqual('400 INVALID - action[] is invalid @xxx');
+            expect2(() => _can(1, null, { errScope: 'xxx' })).toEqual('400 INVALID - action[1] is invalid @xxx');
+            expect2(() => _can('s', null, { errScope: 'xxx' })).toEqual('400 INVALID - action[s] is invalid @xxx');
+            expect2(() => _can('s', null)).toEqual('400 INVALID - action[s] is invalid @canDo(s:test/-)');
+
+            expect2(() => $user0, 'domain').toEqual({ domain: 'api.lemoncloud.io' });
+            expect2(() => $user0?.identity, 'sid,uid,roles').toEqual({
+                sid: '1000008',
+                uid: '1000007',
+                roles: ['user'],
+            });
+            expect2(() => $admin?.identity, 'sid,uid,roles').toEqual({
+                sid: '1000008',
+                uid: '1000007',
+                roles: ['admin'],
+            });
+            expect2(() => $other?.identity, 'sid,uid,roles').toEqual({
+                sid: '1000008',
+                uid: '1000007',
+                roles: ['other'],
+            });
+
+            const $opts = { context: $user0, throwable: false };
+            expect2(() => proxy.assertContext({ isLocal: true }, $opts)).toEqual(false);
+            expect2(() => proxy.assertContext({ isSigned: true, isAuthed: false }, $opts)).toEqual(false);
+            expect2(() => proxy.assertContext({ isAuthed: true, hasRole: 'admin' }, $opts)).toEqual(false);
+
+            expect2(() => $T.S2(undefined, 'admin')).toEqual('admin');
+            expect2(() => $T.S2(null, 'admin')).toEqual('admin');
+            expect2(() => $T.S2('', 'admin')).toEqual('');
+
+            expect2(() => proxy.hasAdminRole(null, { context: $user0 })).toEqual(false);
+            expect2(() => proxy.hasAdminRole('user', { context: $user0 })).toEqual(true);
+            expect2(() => proxy.hasAdminRole(null, { context: $admin })).toEqual(true);
+            expect2(() => proxy.hasAdminRole(null, { context: $other })).toEqual(false);
+        }
+
+        //* test of canDo() w/ session(user0).
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string, M = model1) =>
+                _can(action, M, { context: $user0, throwable: false });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(true);
+            expect2(() => _can2('read')).toEqual(true);
+            expect2(() => _can2('create')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(true);
+            expect2(() => _can2('delete')).toEqual(true);
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+
+            //* test with other sid.
+            const _sid = (sid?: string) => ({ ...model1, sid });
+            expect2(() => _can2('read', _sid())).toEqual(true);
+            expect2(() => _can2('read', _sid(''))).toEqual(true);
+            expect2(() => _can2('read', _sid('1'))).toEqual(false);
+        }
+        //* test of canDo() w/ session(user1).
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string) =>
+                _can(action, model1, { context: $user1, throwable: false });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(true);
+            expect2(() => _can2('read')).toEqual(true);
+            expect2(() => _can2('create')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(false);
+            expect2(() => _can2('delete')).toEqual(false);
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+        }
+        //* test of canDo() w/ session(user1) + throwable.
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string) =>
+                _can(action, model1, { context: $user1, throwable: true });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(true);
+            expect2(() => _can2('read')).toEqual(true);
+            expect2(() => _can2('create')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(
+                '403 NOT ALLOWED - action[update] is invalid @canDo(update:test/1000001)',
+            );
+            expect2(() => _can2('delete')).toEqual(
+                '403 NOT ALLOWED - action[delete] is invalid @canDo(delete:test/1000001)',
+            );
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+        }
+
+        //* test of canDo() w/ session(user2).
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string, throwable: boolean = false) =>
+                _can(action, model1, { context: $user2, throwable });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(false);
+            expect2(() => _can2('read')).toEqual(false);
+            expect2(() => _can2('create')).toEqual(false);
+            expect2(() => _can2('update')).toEqual(false);
+            expect2(() => _can2('delete')).toEqual(false);
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+
+            expect2(() => _can2('delete', true)).toEqual(
+                '403 NOT ALLOWED - action[delete] is invalid @canDo(delete:test/1000001)',
+            );
+        }
+        //* test of canDo() w/ session(admin).
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string) =>
+                _can(action, model1, { context: $admin, throwable: false });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(true);
+            expect2(() => _can2('read')).toEqual(true);
+            expect2(() => _can2('create')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(true);
+            expect2(() => _can2('delete')).toEqual(true);
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+        }
+        //* test of canDo() w/ session(other).
+        if (1) {
+            const _can2 = (action?: CanDoActionType | string) =>
+                _can(action, model1, { context: $other, throwable: false });
+            expect2(() => _can2()).toEqual('400 INVALID - action[] is invalid @canDo(:test/1000001)');
+            expect2(() => _can2('list')).toEqual(true);
+            expect2(() => _can2('read')).toEqual(true);
+            expect2(() => _can2('create')).toEqual(true);
+            expect2(() => _can2('update')).toEqual(true);
+            expect2(() => _can2('delete')).toEqual(true);
+            expect2(() => _can2('some')).toEqual('400 INVALID - action[some] is invalid @canDo(some:test/1000001)');
+        }
     });
 
     it('should pass packSearchParam(session)', async () => {
@@ -369,7 +531,7 @@ describe('abstract-services', () => {
                     ],
                 },
             },
-            aggs: { stereo: { terms: { field: 'stereo.keyword', missing: 'N/A', order: { _key: 'asc' }, size: 10 } } },
+            aggs: { stereo: { terms: { field: 'stereo.keyword', missing: 'N/A', order: { _key: 'asc' }, size: 12 } } },
         };
 
         expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
@@ -379,19 +541,19 @@ describe('abstract-services', () => {
         );
 
         //* validate param option
-        expect2(() => service.$test.buildQuery({})).toEqual('.limit(number) is required - buildQuery()');
+        expect2(() => service.$test.buildQuery({})).toEqual('.limit(number) is required - buildQuery(test)');
         expect2(() => service.$test.buildQuery({ limit: '30' as any })).toEqual(
-            '.limit(number) is required - buildQuery()',
+            '.limit(number) is required - buildQuery(test)',
         );
         expect2(() => service.$test.buildQuery({ limit: '30' as any, page: 10 })).toEqual(
-            '.limit(number) is required - buildQuery()',
+            '.limit(number) is required - buildQuery(test)',
         );
-        // expect2(() => service.$test.buildQuery({ limit: 30 })).toEqual('.page(number) is required - buildQuery()');
+        // expect2(() => service.$test.buildQuery({ limit: 30 })).toEqual('.page(number) is required - buildQuery(test)');
         expect2(() => service.$test.buildQuery({ limit: 30, page: '10' as any })).toEqual(
-            '.page(number) is required - buildQuery()',
+            '.page(number) is required - buildQuery(test)',
         );
         expect2(() => service.$test.buildQuery({ limit: 30, page: 0, offset: '10' as any })).toEqual(
-            '.offset(number) is required - buildQuery()',
+            '.offset(number) is required - buildQuery(test)',
         );
 
         //* validate filter by attributes
@@ -649,11 +811,9 @@ describe('abstract-services', () => {
     });
 
     it('should pass doScanLast', async () => {
-        const PROFILE = await loadProfile(process); // override process.env.
-        PROFILE && console.info('! PROFILE=', PROFILE);
-
         const { service } = instance();
         if (PROFILE !== 'lemon') return; // ignore this.
+
         const result = await service.$test.doScanLast({ limit: 3 });
         //* 1. doScanLast with { limit }
         expect2(() => result.count).toEqual(3);

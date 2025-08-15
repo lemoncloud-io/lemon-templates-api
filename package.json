@@ -65,7 +65,7 @@
   "author": "Steve Jung (steve@lemoncloud.io)",
   "license": "MIT",
   "dependencies": {
-    "lemon-core": "^4.0.5",
+    "lemon-core": "^4.0.7",
     "ws": "^8.18.3"
   },
   "devDependencies": {
@@ -84,7 +84,7 @@
     "eslint-config-prettier": "^8.5.0",
     "eslint-plugin-prettier": "^4.0.0",
     "jest": "^27.5.1",
-    "lemon-devkit": "^0.0.3",
+    "lemon-devkit": "^0.0.6",
     "lint-staged": "^13.1.0",
     "nodemon": "^2.0.18",
     "prettier": "^2.6.2",
