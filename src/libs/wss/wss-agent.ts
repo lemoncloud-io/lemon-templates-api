@@ -13,17 +13,13 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, _log, _inf, _err, GETERR, NextContext, $slack, my_parrallel } from 'lemon-core';
 import { WSSEvent, LambdaHandlerService, WSSHandler } from 'lemon-core';
+import { $T, onlyDefined } from '../../cores';
 import { failure, notfound, success } from 'lemon-core/dist/cores/lambda/lambda-wss-handler';
-import { ConnectionInfo, SocketActionType, SocketEvent } from './wss-types';
-import { convertWSSEvent, buildSocketResponse, parseMessage, parseBase64 } from './tools';
+import { convertWSSEvent, buildSocketResponse, parseMessage } from './tools';
+import { ConnectionInfo, SocketActionType, SocketEvent, SocketEventType } from './wss-types';
 export { SocketPayload, SocketResponse } from './wss-types';
-import { BackendService } from '../service/backend-service';
-import { $T, onlyDefined } from '../cores';
-import {
-    ApiGatewayManagementApiClient,
-    DeleteConnectionCommand,
-    PostToConnectionCommand,
-} from '@aws-sdk/client-apigatewaymanagementapi';
+import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
+import { BackendService } from '../../service/backend-service';
 const NS = $U.NS(`wss`, 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -60,14 +56,14 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
         await _slack().catch(e => _err(NS, `! error@slack =`, GETERR(e), e));
 
         //TODO - define the exact type of result(WSResult).
-        return $sockets(this.service, event, context)
-            .$run()
-            .then(r => success(r || ''))
-            .catch(e => {
-                const err = GETERR(e);
-                if (err.startsWith('404 ')) return notfound(err);
-                return failure(err);
-            });
+        try {
+            const $res = await $sockets(this.service, event, context).$run();
+            if (typeof $res !== undefined) return success($res);
+        } catch (e) {
+            const err = GETERR(e);
+            if (err.startsWith('404 ')) return notfound(err);
+            return failure(err);
+        }
     };
 }
 
@@ -97,22 +93,25 @@ export class WSSAgent {
     /**
      * run and return response.
      */
-    public $run = async (): Promise<any> => {
+    public $run = async (): Promise<void> => {
         const event = this.event;
         const errScope = `$run(${event?.direction ?? '-'}/${event?.id ?? ''})`;
         if (!event || !event.id) throw new Error(`@event is required - ${errScope}`);
-        const type = event?.type;
-        if (!type) {
-            throw new Error(`@type (string) is required - ${errScope}`);
-        } else if (type == 'CONNECT') {
-            return this.onConnect(event).then(() => null);
-        } else if (type == 'DISCONNECT') {
-            return this.onDisconnect(event).then(() => null);
-        } else if (type == 'MESSAGE') {
-            return this.onMessage(event).then(() => null); //! return must be void (200);
-        } else {
-            throw new Error(`@type[${type}] is invalid! - ${errScope}`);
-        }
+        const _run = async (type: SocketEventType) => {
+            if (!type) {
+                throw new Error(`@type (string) is required - ${errScope}`);
+            } else if (type == 'CONNECT') {
+                return this.onConnect(event);
+            } else if (type == 'DISCONNECT') {
+                return this.onDisconnect(event);
+            } else if (type == 'MESSAGE') {
+                return this.onMessage(event);
+            } else {
+                throw new Error(`@type[${type}] is invalid! - ${errScope}`);
+            }
+        };
+        //* return must be void (200);
+        await _run(event?.type);
     };
 
     /**
@@ -128,7 +127,7 @@ export class WSSAgent {
         const stereo = $T.S2(param?.stereo, 'none');
         _log(NS, `> ${channel}:${stereo}@${errScope}`);
 
-        //! run in guard-proxy
+        //* run in guard-proxy
         return this.service.guardProxy(this.context, async proxy => {
             // STEP.1 find or create channel model
             const { $channel } = await proxy.establishChannel(channel, stereo);
@@ -158,7 +157,7 @@ export class WSSAgent {
         event = event ?? this.event;
         _log(NS, `${errScope}...`);
 
-        //! run in guard-proxy
+        //* run in guard-proxy
         return this.service.guardProxy(this.context, async proxy => {
             // STEP.1 update disconnection info
             // TODO - 리팩토링 예정 @aiden
@@ -181,7 +180,6 @@ export class WSSAgent {
 
         // STEP.0 validate body, and parse payload
         const $msg = parseMessage(body);
-        const connId = parseBase64(connectionId);
         const action = $msg.action as SocketActionType;
         _inf(NS, `> action @${errScope} =`, action);
 
@@ -195,16 +193,9 @@ export class WSSAgent {
                 const $pong = buildSocketResponse('pong', $msg?.data);
                 await this.postClientMessage($pong, event);
                 return $pong;
-            case 'broadcat':
-                const channel = 'ssocio-orders-api';
-                const stereo = 'orders';
-                const $braodcast = await this.broadcast(channel, stereo, $msg?.data);
-                return {};
             default:
-                const message = `@action[${action}] is not supported - ${errScope}`;
-                const $err = buildSocketResponse('error', { message, action });
-                await this.postClientMessage($err, event);
-                return $err;
+                const message = `@action[${action}] is invalid (not supported) - ${errScope}`;
+                throw new Error(message);
         }
     }
 
@@ -275,15 +266,15 @@ export class WSSAgent {
             const $sent = await my_parrallel($conns, async N => {
                 const connId = N?.id ? $T.S2(N.id) : null;
                 const $conn = connId ? await proxy.connection.get(connId) : null;
-                //! if valid, post msg...
+                //* if valid, post msg...
                 if ($conn?.connected && $conn?.connectionId) {
                     return this.postClientMessage(data, $conn)
                         .then(() => {
-                            return { id: N.id, error: null };
+                            return { id: N.id, error: null as string };
                         })
                         .catch(e => {
                             const error = e instanceof Error ? GETERR(e) : e;
-                            if (error?.message === '410') return { id: N.id }; //! ignore if `GoneException`
+                            if (error?.message === '410') return { id: N.id }; //* ignore if `GoneException`
                             _err(NS, `>> conn[${connId}].err =`, $U.json(error));
                             return { error: e, id: N.id, $conn };
                         });

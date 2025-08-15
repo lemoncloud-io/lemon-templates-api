@@ -16,9 +16,9 @@ import { SocketModel } from './model';
 import { SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
 import { SocketBody, SocketView } from './views';
+import { $sockets, LambdaWSSHandler } from '../../libs/wss/wss-agent';
 //WARN - use `BackendService` from main service due to proper `BackendProxy`.
 import $service, { BackendService, ModelType } from '../../service/backend-service';
-import { $sockets, LambdaWSSHandler } from '../../lib/wss';
 const NS = $U.NS('sockets', 'yellow'); // NAMESPACE TO BE PRINTED.
 
 /**

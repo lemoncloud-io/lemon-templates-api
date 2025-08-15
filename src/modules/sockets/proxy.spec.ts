@@ -10,8 +10,8 @@
  */
 import { loadProfile } from 'lemon-core/dist/environ';
 import { expect2, NextIdentityAccess, $info, loadJsonSync, GETERR } from 'lemon-core';
-import { SocketEvent } from '../../lib/wss-types';
-import { convertWSSEvent } from '../../lib/tools';
+import { SocketEvent } from '../../libs/wss/wss-types';
+import { convertWSSEvent } from '../../libs/wss/tools';
 import { ConnectionModel } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
@@ -37,8 +37,8 @@ export const instance = (type: $service.AuthType = 'authed', params?: $service.S
 
 //! main test body.
 describe('BackendProxy', () => {
-    // const PROFILE = loadProfile(process); // override process.env.
-    // PROFILE && console.info('! PROFILE =', PROFILE);
+    const PROFILE = loadProfile(process); // override process.env.
+    PROFILE && console.info('! PROFILE =', PROFILE);
 
     //! basic function
     it('should pass basic function', async () => {
@@ -81,6 +81,7 @@ describe('BackendProxy', () => {
         const expected: ConnectionModel = {
             connectionId: $eventA.connectionId,
             connectedAt: $eventA.connectedAt,
+            disConnectedAt: 0,
             domain: $eventA.domain,
             remote: $eventA.remote,
             stage: $eventA.stage,

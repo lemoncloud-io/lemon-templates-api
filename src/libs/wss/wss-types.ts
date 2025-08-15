@@ -117,14 +117,6 @@ const $LUT = {
         echo: 'echo',
         /** message */
         message: 'message',
-        /** auth */
-        auth: 'auth',
-        /** success */
-        success: 'success',
-        /** error */
-        error: 'error',
-        /** unknown */
-        unknown: 'unknown',
     },
     /**
      * EventType
