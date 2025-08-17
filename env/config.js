@@ -23,22 +23,26 @@
         lemon: {
             name: 'lemon-app',
             runtime: 'nodejs22.x',                              // Powered by the V8 JavaScript Engine (used in Chromium)
-            region: 'ap-northeast-2',
+            region: 'ap-northeast-2',                           // Region to deploy the Lambda function
             env: 'lemon.yml',                                   // environment file
+        },
+        ssocio: {
+            name: 'ssocio-app',
+            runtime: 'nodejs22.x',                              // Powered by the V8 JavaScript Engine (used in Chromium)
+            region: 'ap-northeast-2',                           // Region to deploy the Lambda function
+            env: 'ssocio.yml',                                  // environment file
             //WARN! lambda를 VPC에서 이용할경우 NAT와 VPCE 등 네트워크 설정 구성 필요함!!! (refer to `lemon-hello-api`)
-            securityGroupIds: ['sg-08770106971509def'],         // securityGroup : `lemon-services-api`
-            subnetIds: ['subnet-0a53bcd7f3d256ce4','subnet-0ee4d1ca5eb964fc5'],   // subnetIds in VPC
-            kmsKey: '*',                                        // KMS key-id to encrypt/decrypt or verify token.
+            securityGroupIds: ['sg-0b0fb4d4bd885c7cd'],         // securityGroupIds `lemon-micro-private`
+            subnetIds: ['subnet-0fcfaad965a2dc997', 'subnet-03a5987eac7caa520'], // subnetIds `subnet-private-2a/2c`
         },
         none: {
             name: 'none-app',
             runtime: 'nodejs22.x',                              // Powered by the V8 JavaScript Engine (used in Chromium)
-            region: 'ap-northeast-2',
+            region: 'ap-northeast-2',                           // Region to deploy the Lambda function
             env: 'none.yml',                                    // environment file
             //WARN! lambda를 VPC에서 이용할경우 NAT와 VPCE 등 네트워크 설정 구성 필요함!!! (refer to `lemon-hello-api`)
             securityGroupIds: undefined,                        // securityGroupIds in VPC
             subnetIds: undefined,                               // subnetIds in VPC
-            kmsKey: undefined,                                  // KMS key-id to encrypt/decrypt or verify token.
         },
     };
 }

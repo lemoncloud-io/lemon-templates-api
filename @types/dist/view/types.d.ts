@@ -9,3 +9,4 @@
  */
 export * from '../service/backend-types';
 export * from '../modules/mock/views';
+export * from '../modules/sockets/views';

@@ -1,0 +1,38 @@
+{
+    "!": "GoingAway Disconnect Event (10분간 통신 없을 때 발생)",
+    "context": {},
+    "event":{
+        "headers": {
+            "Host": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "x-api-key": "",
+            "X-Forwarded-For": "",
+            "x-restapi": ""
+        },
+        "multiValueHeaders": {
+            "Host": ["qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com"],
+            "x-api-key": [""],
+            "X-Forwarded-For": [""],
+            "x-restapi": [""]
+        },
+        "requestContext": {
+            "routeKey": "$disconnect",
+            "disconnectStatusCode": 1001,
+            "eventType": "DISCONNECT",
+            "extendedRequestId": "Om9k6EupoE0ER9g=",
+            "requestTime": "01/Aug/2025:03:59:40 +0000",
+            "messageDirection": "IN",
+            "disconnectReason": "Going away",
+            "stage": "dev",
+            "connectedAt": 1754020169584,
+            "requestTimeEpoch": 1754020780323,
+            "identity": {
+                "sourceIp": "117.111.17.8"
+            },
+            "requestId": "Om9k6EupoE0ER9g=",
+            "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "Om3jjdCeIE0CFVg=",
+            "apiId": "qksfa5jxm1"
+        },
+        "isBase64Encoded": false
+    }
+}

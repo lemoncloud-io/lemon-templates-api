@@ -26,12 +26,16 @@
  * @date        2025-01-03 optimized `buildQuery()` w/ sort + offset.
  * @date        2025-03-24 optimized `OS2Instance` with `lemon-core@3.2.13`
  * @date        2025-07-17 optimized `onAfterSave` with `lemon-core@4.0.4`
+ * @date        2025-07-23 optimized `buildQuery()` with `hidden` + `aggregation` option.
+ * @date        2025-08-01 optimized `canDo()` for better security w/ session.
+ * @date        2025-08-11 optimized `OS2FGACManager` for latest features.
+ * @date        2025-08-14 optimized `OS2.deleteIndex()` for latest features.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import $cores, { $U, $T, _log, _inf, _err, NUL404, GETERR, asyncCredentials } from 'lemon-core';
+import $cores, { $U, _log, _inf, _err, NUL404, GETERR, asyncCredentials } from 'lemon-core';
 import { my_parrallel, SearchType, _ES6, createSigV4Proxy, my_sequence } from 'lemon-core';
 import { Elastic6Service, Elastic6Option, Elastic6QueryService, Elastic6Synchronizer } from 'lemon-core';
 import { $ERROR, Incrementable, GETERR$, CoreManager, CoreModel, CoreService } from 'lemon-core';
@@ -40,8 +44,9 @@ import { NextContext, NextIdentity, NextIdentityCognito, getIdentityId, waited, 
 import { DynamoScanService, DynamoScanFilter, DynamoScanResult, GeneralItem, Elastic6Instance } from 'lemon-core';
 import { ApiHttpProxy, APIHeaders, elasticsearch, SearchResponse, DynamoOption, Elastic6Item } from 'lemon-core';
 import { BulkItemsResult, IdentityToken, ListResult, PaginateParam } from './types';
+import { $T, onlyDefined, parsePaginateParam } from './commons';
 import { keys } from 'ts-transformer-keys';
-import { onlyDefined, parsePaginateParam } from './commons';
+import { CrendentialForAWS } from 'lemon-core/dist/environ';
 const NAME = $U.env('NAME', 'lemon');
 const NS = $U.NS('HDBS', 'green');
 /**
@@ -50,6 +55,41 @@ const NS = $U.NS('HDBS', 'green');
 const CORE_FIELDS: string[] = keys<CoreModel>();
 
 export type SearchParam<T> = T & { [key: string]: string | number };
+
+/**
+ * lookup table for common types.
+ */
+const $LUT = {
+    /**
+     * type: `CanDoAction`
+     */
+    CanDoAction: {
+        list: 'list',
+        read: 'read',
+        create: 'create',
+        update: 'update',
+        delete: 'delete',
+    },
+};
+
+/**
+ * type: `CanDoActionType`
+ */
+export type CanDoActionType = keyof typeof $LUT.CanDoAction;
+
+/**
+ * Optional parameters for `canDo()`
+ */
+export interface CanDoOptions {
+    /** error scope to print */
+    errScope?: string;
+    /** flag to throw error if not allowed (default false) */
+    throwable?: boolean;
+    /** flag to use session (default true) */
+    useSession?: boolean;
+    /** current context to override */
+    context?: NextContext;
+}
 
 /**
  * type: `ScanLastParams`
@@ -310,14 +350,14 @@ export abstract class MyCoreManager<
     public buildQuery<T extends Model>(
         param: PaginateParam,
         model?: SearchParam<T>,
-        options?: { errScope?: string },
+        options?: { errScope?: string; hidden?: boolean | number; aggregation?: string },
     ): SearchBody {
-        const errScope = options?.errScope ?? `- buildQuery()`;
-        if (typeof param?.limit !== 'number') throw new Error(`.limit(number) is required ${errScope}`.trim());
-        if (param?.page && typeof param?.page !== 'number')
-            throw new Error(`.page(number) is required ${errScope}`.trim());
+        const errScope = options?.errScope ?? `buildQuery(${this.type})`;
+        if (typeof param?.limit !== 'number') throw new Error(`.limit(number) is required - ${errScope}`);
+        if (param?.page && typeof param?.page !== 'number') throw new Error(`.page(number) is required - ${errScope}`);
         if (param?.offset && typeof param?.offset !== 'number')
-            throw new Error(`.offset(number) is required ${errScope}`.trim());
+            throw new Error(`.offset(number) is required - ${errScope}`);
+        const aggregation = options?.aggregation ?? 'stereo'; // default aggregation
 
         // STEP.0 validate parameters.
         const { limit } = param;
@@ -337,58 +377,55 @@ export abstract class MyCoreManager<
                     ],
                 },
             },
-            aggs: {
-                stereo: {
-                    terms: {
-                        field: 'stereo.keyword',
-                        missing: 'N/A',
-                        order: { _key: 'asc' },
-                        size: 10,
-                    },
-                },
-            },
         };
 
-        //* helper function.
-        const _add_filter = (query: SearchQuery | SearchQuery[]) => {
-            const filter = [...((body.query.bool.filter as any[]) || []), ...(Array.isArray(query) ? query : [query])];
-            body.query.bool.filter = filter;
-        };
-        const _add_must = (query: SearchQuery | SearchQuery[]) => {
-            const must = [...((body.query.bool.must as any[]) || []), ...(Array.isArray(query) ? query : [query])];
-            body.query.bool.must = must;
-        };
-        const _add_must_not = (query: SearchQuery | SearchQuery[]) => {
-            const must_not = [
-                ...((body.query.bool.must_not as any[]) || []),
-                ...(Array.isArray(query) ? query : [query]),
-            ];
-            body.query.bool.must_not = must_not;
-        };
+        //* apply aggregation if needed.
+        if (aggregation && typeof aggregation === 'string' && aggregation.length > 0) {
+            body.aggs = {
+                [aggregation]: {
+                    terms: {
+                        field: `${aggregation}.keyword`,
+                        missing: 'N/A',
+                        order: { _key: 'asc' },
+                        size: 12,
+                    },
+                },
+            };
+        }
 
         // 1-0. default filter.
         if (model?.stereo === null) {
-            _add_must_not({ term: { [`stereo.keyword`]: '#' } });
+            // _add_must_not({ term: { [`stereo.keyword`]: '#' } });
+            this.addQueryTerm(body, 'must_not', { term: { [`stereo.keyword`]: '#' } });
+        }
+        // 1-1. support `hidden` flag.
+        if (options?.hidden !== undefined) {
+            const hidden = Boolean(options?.hidden);
+            if (hidden) {
+                this.addQueryTerm(body, 'must', { term: { hidden: 1 } });
+            } else {
+                this.addQueryTerm(body, 'must_not', { term: { hidden: 1 } });
+            }
         }
 
-        // 1-1. filter by attributes.
+        // 1-2. filter by attributes.
         if (model && Object.keys(model).length > 0) {
             _inf(this.logNS, `> filters =`, $U.json(model));
             Object.entries(model).forEach(([key, val]) => {
                 if (typeof val === 'string') {
                     if (val === '') {
-                        _add_must_not({ exists: { field: `${key}` } });
+                        this.addQueryTerm(body, 'must_not', { exists: { field: `${key}` } });
                     } else if (val === '!') {
-                        _add_must({ exists: { field: `${key}` } });
+                        this.addQueryTerm(body, 'must', { exists: { field: `${key}` } });
                     } else {
-                        _add_filter({ term: { [`${key}.keyword`]: val } });
+                        this.addQueryTerm(body, 'filter', { term: { [`${key}.keyword`]: val } });
                     }
                 } else if (val === null) {
                     // ignore
                 } else if (typeof val === 'number') {
-                    _add_filter({ term: { [`${key}`]: val } });
+                    this.addQueryTerm(body, 'filter', { term: { [`${key}`]: val } });
                 } else if (typeof val === 'object' && Array.isArray(val)) {
-                    _add_must({
+                    this.addQueryTerm(body, 'must', {
                         bool: {
                             should: (val as any[]).map(n => ({
                                 term: {
@@ -407,6 +444,44 @@ export abstract class MyCoreManager<
     }
 
     /**
+     * Query 기준 추가하기.
+     */
+    public addQueryTerm(body: SearchBody, term: 'filter' | 'must' | 'must_not', query: SearchQuery | SearchQuery[]) {
+        if (!body) throw new Error(`@body (SearchBody) is required!`);
+        if (!body.query || !body.query.bool) {
+            body.query = { bool: { filter: [], must: [], must_not: [] } };
+        }
+
+        //* helper function.
+        const _add_filter = (query: SearchQuery | SearchQuery[]) => {
+            const filter = [...((body.query.bool.filter as any[]) || []), ...(Array.isArray(query) ? query : [query])];
+            body.query.bool.filter = filter;
+        };
+        const _add_must = (query: SearchQuery | SearchQuery[]) => {
+            const must = [...((body.query.bool.must as any[]) || []), ...(Array.isArray(query) ? query : [query])];
+            body.query.bool.must = must;
+        };
+        const _add_must_not = (query: SearchQuery | SearchQuery[]) => {
+            const must_not = [
+                ...((body.query.bool.must_not as any[]) || []),
+                ...(Array.isArray(query) ? query : [query]),
+            ];
+            body.query.bool.must_not = must_not;
+        };
+
+        if (term === 'filter') {
+            _add_filter(query);
+        } else if (term === 'must') {
+            _add_must(query);
+        } else if (term === 'must_not') {
+            _add_must_not(query);
+        } else {
+            throw new Error(`@term(${term}) is not supported!`);
+        }
+        return body;
+    }
+
+    /**
      * sort 기준 추가하기.
      */
     public addSortTerm(body: SearchBody, param?: PaginateParam) {
@@ -420,6 +495,7 @@ export abstract class MyCoreManager<
             else if (sort === 'name') body.sort = { 'name.keyword': { order, missing: '_last' } };
             else if (sort === 'brand') body.sort = { 'brand.keyword': { order, missing: '_last' } };
             else if (sort === 'color') body.sort = { 'color.keyword': { order, missing: '_last' } };
+            else if (sort === 'order') body.sort = { order: { order, missing } };
             else if (sort === 'createdAt') body.sort = { createdAt: { order, missing } };
             else if (sort === 'updatedAt') body.sort = { updatedAt: { order, missing } };
             else if (sort) body.sort = { [`${sort}.keyword`]: { order, missing } };
@@ -462,10 +538,10 @@ export abstract class MyCoreManager<
      * @param filter
      * @returns
      */
-    public async doScan(
+    public async doScan<R = { key: string; count: number }>(
         $page: PaginateParam,
         filter?: DynamoScanFilter,
-    ): Promise<ListResult<Model, { key: string; count: number }>> {
+    ): Promise<ListResult<Model, R>> {
         const options = this.parent.dynamoOptions;
         const idName = options.idName || '_id';
         //* check if dummy table
@@ -500,7 +576,8 @@ export abstract class MyCoreManager<
         const list = _page(list0, page, limit);
 
         //* returns.
-        return { list, total, limit, aggr: [{ key: '#scan', count: total }] };
+        const aggr = [{ key: '#scan', count: total } as unknown as R];
+        return { list, total, limit, aggr };
     }
 
     /**
@@ -543,11 +620,13 @@ export abstract class MyCoreManager<
      * @param filters model filters
      * @param param (optional) addtion params
      */
-    public async list(
+    public async list<R = { key: string; count: number }>(
         $page: PaginateParam,
         $param?: SearchParam<Model>,
-    ): Promise<ListResult<Model, { key: string; count: number }>> {
+        options?: { hidden?: boolean | number; aggregation?: string },
+    ): Promise<ListResult<Model, R>> {
         _log(this.logNS, `list(${$page?.limit ?? ''}, ${$page?.page ?? ''})..`);
+        const aggregation = options?.aggregation ?? 'stereo'; // default aggregation
 
         //* use dynamo-scan if no search configuration.
         if (!this.parent.hasSearchEngine()) {
@@ -556,26 +635,27 @@ export abstract class MyCoreManager<
         }
 
         // 1. build search request body
-        const body = this.buildQuery($page, $param);
+        const body = this.buildQuery($page, $param, options);
 
         // 2. search w/ query
         const result = await this.parent.doSearch<Model>(body);
 
         // 3. extract names only
-        const buckets = result?.aggregations?.names?.buckets || result?.aggregations?.stereo?.buckets;
-        _log(this.logNS, `> buckets =`, $U.json(buckets));
-        const aggr = (buckets as { key: string; doc_count: number }[])?.reduce<{ key: string; count: number }[]>(
-            (R, bucket) => {
+        const _aggr = (): R[] => {
+            if (!aggregation) return [];
+            const buckets = result?.aggregations?.[aggregation]?.buckets;
+            buckets && _log(this.logNS, `> buckets =`, $U.json(buckets));
+            if (!buckets || !Array.isArray(buckets)) return [];
+            return (buckets as { key: string; doc_count: number }[])?.reduce<R[]>((L: R[], bucket) => {
                 const key = $T.S(bucket.key);
                 const count = $T.N(bucket.doc_count, 0);
-                R.push({ key, count });
-                return R;
-            },
-            [],
-        );
+                L.push({ key, count } as unknown as R);
+                return L;
+            }, []);
+        };
 
         // returns.
-        return { total: result.total, list: result.list, aggr };
+        return { total: result.total, list: result.list, aggr: _aggr(), limit: $page?.limit, page: $page?.page };
     }
 
     /**
@@ -849,6 +929,8 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         LOCAL_ACCOUNT?: string;
         /** (optional) env.USE_SESSION */
         USE_SESSION?: string;
+        /** (optional) next context to override */
+        context?: NextContext;
     }): IdentityToken {
         // const useSession = !$U.env('LOCAL_ACCOUNT') ? $U.env('USE_SESSION') : null;
         const throwable = options?.throwable ?? true;
@@ -859,7 +941,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         LOCAL_ACCOUNT && _inf(this.service.NS, `> LOCAL_ACCOUNT =`, LOCAL_ACCOUNT);
         USE_SESSION && _inf(this.service.NS, `> use-session =`, useSession, USE_SESSION);
 
-        const context: NextContext<IdentityToken> = this.context as any;
+        const context = (options?.context ?? this.context) as unknown as NextContext<IdentityToken>;
         //* WARN - in case of local, no need to throw error.
         const isLocal = context?.domain === 'localhost';
 
@@ -943,9 +1025,16 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
             hasRole?: string;
         },
         /** (optional) */
-        options?: { throwable?: boolean; errScope?: string },
+        options?: {
+            /** (optional) throwable to throw error if error */
+            throwable?: boolean;
+            /** (optional) errScope to override in error */
+            errScope?: string;
+            /** (optional) next context to override */
+            context?: NextContext;
+        },
     ) {
-        const context = this.context;
+        const context = options?.context ?? this.context;
         const throwable = options?.throwable ?? true;
         const errScope = options?.errScope ?? `assertContext()`;
         const $idt = context?.identity as NextIdentityCognito;
@@ -953,12 +1042,12 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
         //* call in local
         const isLocal = context?.domain === 'localhost';
         //* signed call with access-key
-        const isSigned = isS(($idt as any)?.accessKey);
+        const isSigned = isS($idt?.accessKey);
         //* authed by cognito provider.
         const isAuthed = isS($idt?.identityProvider) && isS($idt?.identityId) && isS($idt?.identityPoolId);
         //* check if has role
         const _hasRole = (role: string): boolean => {
-            const $sess = this.getCurrentSession({ throwable: false });
+            const $sess = this.getCurrentSession({ throwable: false, context });
             return $sess?.roles?.includes(role);
         };
 
@@ -993,7 +1082,8 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
      * @param options optionals
      * @returns boolean
      */
-    public hasAdminRole(role = 'admin', options?: { errScope?: string }) {
+    public hasAdminRole(role?: string, options?: { errScope?: string; context?: NextContext }) {
+        role = $T.S2(role, 'admin');
         const $option = { ...options, throwable: false };
         if (this.assertContext({ isLocal: true }, $option)) return true;
         if (this.assertContext({ isSigned: true, isAuthed: false }, $option)) return true;
@@ -1003,6 +1093,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
 
     /**
      * prepare `next-context` w/ the customized { domain, userAgent }
+     *
      * @param identityId the target identity-id
      * @param options additional options.
      */
@@ -1036,6 +1127,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
 
     /**
      * from `identity-token`, make base of model { sid, uid }
+     *
      * @param proxy the current proxy.
      * @returns base model
      */
@@ -1066,6 +1158,23 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
             base['uid'] = base['uid'] ?? parent?.uid;
         }
         return base;
+    }
+
+    /**
+     * Check if the user can perform a specific action on a model.
+     * - override this method to implement custom logic.
+     *
+     * @param action The action to check.
+     * @param model The model to check against. (.type is used to find the manager-proxy)
+     * @param options Optional parameters for the check.
+     * @returns True if the action is allowed, false otherwise.
+     */
+    public canDo<M extends CoreModel<U>>(action: CanDoActionType, model?: M, options?: CanDoOptions): boolean {
+        const type = model?.type;
+        if (typeof type !== 'string') throw new Error(`400 INVALID - @model.type (string) is required!`);
+        const $prx = this.getManagerProxy<M, MyCoreManager<M, U, MyService>>(type);
+        if (!$prx) return false;
+        return $prx.canDo(action, model, options);
     }
 }
 
@@ -1221,7 +1330,7 @@ export class MyManagerProxy<
      * @param model creation model
      * @param validate (optional) flag to validate (default is true)
      */
-    public async makeModel<T extends MyModel>(model: T, validate?: boolean): Promise<T> {
+    public async makeModel<T extends MyModel>(model: MyModel, validate?: boolean): Promise<T> {
         const errScope = `makeModel(${this.$mgr.type}/${model?.id ?? ''})`;
         if (!model) throw new Error(`@model (${this.$mgr.type}-model) is required - ${errScope}`);
         validate = validate ?? true;
@@ -1240,6 +1349,65 @@ export class MyManagerProxy<
         if ($org?.id !== modelId) throw new Error(`.id[${model?.id}] is invalid (mismatched ${modelId}) - ${errScope}`);
         const $res = hasId ? this.override($org, $def3) : $org;
         return $res as T; //! return the model with id.
+    }
+
+    /**
+     * Check if the current user can perform the specified action on the given model.
+     * - override this method to implement custom logic.
+     *
+     * @param action The action to check.
+     * @param model The model to check against.
+     * @param options Additional options for the check.
+     * @returns True if the action is allowed, false otherwise.
+     */
+    public canDo<T extends MyModel>(action: CanDoActionType, model?: T, options?: CanDoOptions): boolean {
+        const errScope = options?.errScope ?? `canDo(${action ?? ''}:${this.$mgr.type}/${model?.id ?? '-'})`;
+        const useSession = options?.useSession ?? this.proxy.service.isUseSssion();
+        const throwable = options?.throwable ?? true;
+        const context = options?.context;
+
+        // STEP.0 validate parameters.
+        const _act = $T.asLut(action, $LUT.CanDoAction, { throwable: false, default: null });
+        if (!_act || typeof _act !== 'string')
+            throw new Error(`400 INVALID - action[${action ?? ''}] is invalid @${errScope}`);
+
+        // no session but required.
+        const $sess = this.proxy.getCurrentSession({ throwable, useSession, context });
+        if (useSession && !$sess) return false;
+
+        // admin can do anything.
+        const isAdmin = this.proxy.hasAdminRole(null, { errScope, context });
+        const hasRole = $sess?.roles?.length > 0 ? true : false; // guest if empty.
+        if (isAdmin) return true;
+
+        // session & model information.
+        const S = { sid: $T.S2($sess?.sid), uid: $T.S2($sess?.uid) };
+        const M = { sid: $T.S2(model?.sid), uid: $T.S2(model?.uid) };
+
+        // check action.
+        if (hasRole) {
+            switch (_act) {
+                case 'list':
+                case 'read':
+                case 'create':
+                    // (default) action is allowed if sid matches or no sid.
+                    if (!M.sid) return true;
+                    if (S.sid === M.sid) return true;
+                    break;
+                case 'update':
+                case 'delete':
+                    // (default) action is allowed if sid&uid matches or no sid.
+                    if (!M.sid) return true;
+                    if (S.sid === M.sid && S.uid === M.uid) return true;
+                    break;
+                default:
+                    throw new Error(`400 INVALID - action[${_act}] is invalid @${errScope}`);
+            }
+        }
+
+        // not allowed.
+        if (throwable) throw new Error(`403 NOT ALLOWED - action[${_act}] is invalid @${errScope}`);
+        return false;
     }
 }
 
@@ -1413,6 +1581,22 @@ export class OS2Service<T extends Elastic6Item = any> extends Elastic6Service<an
             index: indexName,
             acknowledged: res.body.shards_acknowledged,
         };
+    }
+
+    /**
+     * delete index by name
+     */
+    public async deleteIndex(indexName: string): Promise<any> {
+        _log(NS, `- deleteIndex(${indexName})`);
+        const client = this.client;
+        const res = await client.indices.delete({ index: indexName }).catch(
+            $ERROR.handler('delete', e => {
+                const msg = GETERR(e);
+                if (msg.startsWith('404 INDEX NOT FOUND')) throw new Error(`404 NOT FOUND - index:${indexName}`);
+                throw e;
+            }),
+        );
+        return res;
     }
 
     /**
@@ -1621,7 +1805,7 @@ export class OS2Service<T extends Elastic6Item = any> extends Elastic6Service<an
     public async deleteItem(id: string): Promise<T> {
         const { indexName, docType } = this.options;
         const type = `${docType}`;
-        _log(NS, `- readItem(${id})`);
+        _log(NS, `- deleteItem(${id})`);
 
         const params: ElasticParams = { index: indexName, type, id, body: {} };
         _log(NS, `> params[${id}] =`, $U.json(params));
@@ -1727,7 +1911,7 @@ export class OS2Service<T extends Elastic6Item = any> extends Elastic6Service<an
  * type: `OS2FGACManager`
  * - FGAC(Fine Grained Access Controll) Proxy for OS2
  */
-class OS2FGACManager {
+export class OS2FGACManager {
     private _fgacProxy: ApiHttpProxy;
 
     public constructor(options: Elastic6Option, accessKey: string, secretKey: string) {
@@ -1826,6 +2010,81 @@ class OS2FGACManager {
     public async doFgacDeleteIndex<R = any>(index: string): Promise<R> {
         return this.proxy.doProxy('DELETE', index, '');
     }
+
+    /**
+     * FGAC 기반 인덱스 설명: client.indices.describe() 대응
+     */
+    public async doFgacDescribe<R = any>(index: string): Promise<{ settings: R; mappings: R }> {
+        const errScope = `doFgacDescribe(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        // 1) 설정 조회
+        const resSettings = await this.doFgacGetSettings(index);
+        //    resSettings.body 안에 { [index]: { settings: { … } } } 형태로 들어옴
+
+        // 2) 매핑 조회
+        const resMappings = await this.doFgacGetMapping(index);
+        //    resMappings.body 안에 { [index]: { mappings: { … } } } 형태로 들어옴
+
+        return {
+            settings: resSettings[index]?.settings || {},
+            mappings: resMappings[index]?.mappings || {},
+        };
+    }
+
+    /**
+     * FGAC 기반 인덱스 Settings 변경: client.indices.putSettings() 대응
+     */
+    public async doFgacPutSettings<R = any>(index: string, settings: Record<string, any>): Promise<R> {
+        const errScope = `doFgacPutSettings(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+        return this.proxy.doProxy('PUT', index, `_settings`, undefined, { settings });
+    }
+    /**
+     * FGAC 기반 인덱스 Settings 조회: client.indices.getSettings() 대응
+     */
+    public async doFgacGetSettings<R = any>(index: string): Promise<R> {
+        const errScope = `doFgacGetSettings(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        return this.proxy.doProxy('GET', index, `_settings`);
+    }
+    /**
+     * FGAC 기반 인덱스 Mapping 조회: client.indices.getMapping() 대응
+     */
+    public async doFgacGetMapping<R = any>(index: string): Promise<R> {
+        const errScope = `doFgacGetMapping(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        return this.proxy.doProxy('GET', index, `_mapping`);
+    }
+    /**
+     * FGAC 기반 인덱스 Mapping 변경: client.indices.putMapping() 대응
+     */
+    public async doFgacPutMapping<R = any>(index: string, mapping: Record<string, any>): Promise<R> {
+        const errScope = `doFgacPutMapping(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        return this.proxy.doProxy('PUT', index, `_mapping`, undefined, mapping);
+    }
+    /**
+     * FGAC 기반 인덱스 닫기: client.indices.close() 대응
+     */
+    public async doFgacCloseIndex<R = any>(index: string): Promise<R> {
+        const errScope = `doFgacCloseIndex(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        return this.proxy.doProxy('POST', index, `_close`);
+    }
+    /**
+     * FGAC 기반 인덱스 열기: client.indices.open() 대응
+     */
+    public async doFgacOpenIndex<R = any>(index: string): Promise<R> {
+        const errScope = `doFgacOpenIndex(${index})`;
+        if (!index) throw new Error(`.index(string) is required - ${errScope}`);
+
+        return this.proxy.doProxy('POST', index, `_open`);
+    }
 }
 
 /** extended option for `OS2Instance` */
@@ -1850,6 +2109,7 @@ export class OS2Instance extends Elastic6Instance {
     public constructor({
         endpoint,
         indexName,
+        idName,
         esVersion,
         esDocType,
         tableName,
@@ -1861,6 +2121,7 @@ export class OS2Instance extends Elastic6Instance {
     }: {
         endpoint: string;
         indexName: string;
+        idName?: string;
         esVersion: string;
         esDocType: string;
         tableName: string;
@@ -1878,6 +2139,7 @@ export class OS2Instance extends Elastic6Instance {
             autocompleteFields,
             roleName,
             userName,
+            idName: idName === null ? undefined : idName ?? '$id',
         });
         if (endpoint && indexName) {
             if (esDocType) options.docType = esDocType;
@@ -1895,6 +2157,10 @@ export class OS2Instance extends Elastic6Instance {
     public get options(): OS2Option {
         if (!this.elastic) return null;
         return this.elastic.options;
+    }
+
+    public get $X2(): typeof $X2 {
+        return $X2;
     }
 
     /**
@@ -2110,7 +2376,7 @@ const $X2 = {
         };
     },
     /** load local credentials (for dev) */
-    loadCredentials: async (profile?: string) => {
+    loadCredentials: async (profile?: string): Promise<CrendentialForAWS> => {
         const errScope = `loadCredentials(${profile ?? ''})`;
         const _profile = (name: string) => {
             if (typeof name === 'string') return name ? name : null;

@@ -5,6 +5,7 @@
  * @author      Steve <steve@lemoncloud.io>
  * @date        2022-02-22 optimized w/ `lemon-core#3.0` and `@elastic/elasticsearch`
  * @date        2024-12-20 optimized with `lemon-core#3.2.11`
+ * @date        2025-08-04 optimized with `lemon-core#4.0.5` of `$ES6`.
  *
  * @origin      lemon-templates-api
  * @copyright (C) 2021 LemonCloud Co Ltd. - All Rights Reserved.
@@ -23,7 +24,7 @@ import {
     Elastic6Instance,
 } from 'lemon-core';
 import { $T } from '../../cores/commons';
-import { _OS2 } from '../../cores/abstract-services';
+import { $ES6 } from '../../cores/abstract-services';
 import {
     $FIELD,
     SearchBody,
@@ -100,12 +101,11 @@ export class SearchService
     /**
      * constructor
      */
-    public constructor(tableName: string, ns: string, options: Elastic6Option) {
+    public constructor(tableName: string, ns: string, options?: Elastic6Option) {
         super(ns);
         _log(NS, `SearchService(${tableName}, ${ns})..`);
         this.tableName = tableName;
-        const $es6 = _OS2(options);
-        this.instance = $es6;
+        this.instance = $ES6;
         this.$query = new MyQueryManager(this);
         this.$batch = new MyBatchManager(this);
     }

@@ -32,6 +32,10 @@ const $LUT = {
     ModelType: {
         /** socket model */
         socket: 'socket',
+        /** connection model */
+        connection: 'connection',
+        /** channel model */
+        channel: 'channel',
     },
 };
 

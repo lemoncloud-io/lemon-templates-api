@@ -25,13 +25,106 @@ export type ModelType = keyof typeof $LUT.ModelType;
 export type Model = CoreModel<ModelType>;
 
 /**
- * class: `SocketModel`
+ * interface: `SocketModel`
  */
 export interface SocketModel extends Model {
     /** id of model */
     id?: string;
     /** name of model */
     name?: string;
+}
+
+/**
+ * interface: `ConnectionModel`
+ * - a model for each connection to websocket.
+ * - 웹소켓 연결 정보를 저장하는 모델
+ */
+export interface ConnectionModel extends Model {
+    /**
+     * as `conn-id`
+     */
+    id?: string;
+    /**
+     * stereo type as initial `role`.
+     */
+    stereo?: string;
+
+    /**
+     * (required) The deployment stage of the API (e.g., 'dev', 'prod').
+     */
+    stage?: string;
+    /**
+     * (required) The domain name of the WebSocket API.
+     */
+    domain?: string;
+    /**
+     * (required) The unique identifier for the WebSocket connection.
+     */
+    connectionId?: string;
+
+    /** (internal) count of connected items */
+    connected?: number;
+    /** (internal) count of granted items */
+    granted?: number;
+    /** (internal) Timestamp when the connection was established. */
+    connectedAt?: number;
+    /** (internal) Timestamp when the connection was terminated. */
+    disConnectedAt?: number;
+
+    /**
+     * (extended) The origin of the request.
+     */
+    origin?: string;
+    /**
+     * (extended) The remote IP address of the client.
+     */
+    remote?: string;
+    /**
+     * (extended) The User-Agent string of the client.
+     */
+    agent?: string;
+    /**
+     * (extended) The reason for disconnection, if applicable.
+     */
+    reason?: string;
+    /**
+     * (extended) The code of disconnection.
+     */
+    disconnectCode?: number;
+
+    /**
+     * 현재 연결이 구독 중인 채널(토픽) 목록
+     */
+    channels?: string[];
+}
+
+/**
+ * interface: `ChannelModel`
+ * - 채널(토픽)을 기록함. MSA의 이벤트 토픽 등으로 사용.
+ */
+export interface ChannelModel extends Model {
+    /**
+     * id of channel
+     * - combined with `service` and model `type`
+     * - ex) `lemon-orders-api:order`
+     */
+    id?: string;
+    /**
+     * the topic name of this channel
+     * - ex) `lemon-orders-api`
+     */
+    channel?: string;
+    /**
+     * the model type this channel belongs to
+     * - ex) `orders`, `payments`, `notifications`
+     */
+    stereo?: string;
+
+    /** (optional) description of this channel */
+    desc?: string;
+
+    /** (internal) count of subscribers */
+    subscribed?: number;
 }
 
 /**
@@ -55,6 +148,8 @@ export const $HEAD = {};
 // extract field names from models
 export const $FIELD = {
     socket: filterFields(keys<SocketModel>(), ['meta']),
+    connection: filterFields(keys<ConnectionModel>(), ['meta']),
+    channel: filterFields(keys<ChannelModel>(), ['meta']),
 };
 
 /** must export default as below */

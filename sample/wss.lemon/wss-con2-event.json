@@ -1,0 +1,65 @@
+{
+    "!":"wscat -c wss://qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com/dev?id=1234&no=1",
+    "context": {},
+    "event":{
+        "headers": {
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cache-Control": "no-cache",
+            "Host": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "Origin": "chrome-extension://gobngblklhkgmjhbpbdlkglbhhlafjnh",
+            "Pragma": "no-cache",
+            "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits",
+            "Sec-WebSocket-Key": "+byROFmsxlT/YZpeL2Y8Jw==",
+            "Sec-WebSocket-Version": "13",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+            "X-Amzn-Trace-Id": "Root=1-688c42eb-306881e41dd4339e1dcf90e1",
+            "X-Forwarded-For": "117.111.17.8",
+            "X-Forwarded-Port": "443",
+            "X-Forwarded-Proto": "https"
+        },
+        "multiValueHeaders": {
+            "Accept-Encoding": ["gzip, deflate, br, zstd"],
+            "Accept-Language": ["ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7"],
+            "Cache-Control": ["no-cache"],
+            "Host": ["qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com"],
+            "Origin": ["chrome-extension://gobngblklhkgmjhbpbdlkglbhhlafjnh"],
+            "Pragma": ["no-cache"],
+            "Sec-WebSocket-Extensions": ["permessage-deflate; client_max_window_bits"],
+            "Sec-WebSocket-Key": ["+byROFmsxlT/YZpeL2Y8Jw=="],
+            "Sec-WebSocket-Version": ["13"],
+            "User-Agent": ["Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36"],
+            "X-Amzn-Trace-Id": ["Root=1-688c42eb-306881e41dd4339e1dcf90e1"],
+            "X-Forwarded-For": ["117.111.17.8"],
+            "X-Forwarded-Port": ["443"],
+            "X-Forwarded-Proto": ["https"]
+        },
+        "queryStringParameters": {
+            "id": "1234",
+            "no": "1"
+        },
+        "multiValueQueryStringParameters": {
+            "id": ["1234"],
+            "no": ["1"]
+        },
+        "requestContext": {
+            "routeKey": "$connect",
+            "eventType": "CONNECT",
+            "extendedRequestId": "Om9k6EupoE0ER9g=",
+            "requestTime": "01/Aug/2025:04:30:35 +0000",
+            "messageDirection": "IN",
+            "stage": "dev",
+            "connectedAt": 1754022635849,
+            "requestTimeEpoch": 1754022635850,
+            "identity": {
+                "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+                "sourceIp": "117.111.17.8"
+            },
+            "requestId": "Om9k6EupoE0ER9g=",
+            "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "Om9k6fbfoE0CJhw=",
+            "apiId": "qksfa5jxm1"
+        },
+        "isBase64Encoded": false
+    }
+}

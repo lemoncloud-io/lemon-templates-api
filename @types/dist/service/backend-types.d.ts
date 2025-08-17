@@ -20,10 +20,11 @@ declare const $LUT: {
      */
     ModelType: {
         mock: string;
-        test: string; /**
-         * Possible type of language.
-         */
+        test: string;
         callback: string;
+        socket: string;
+        connection: string; /** Korean */
+        channel: string;
     };
     /**
      * Possible type of language.

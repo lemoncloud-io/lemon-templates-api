@@ -7,15 +7,21 @@
  * @date        2024-06-24 optimized `parseListParam()`
  * @date        2025-01-03 optimized `parseListParam()` w/ `offset`
  * @date        2025-05-25 optimized `$T.N()` + `parsePaginateParam()` w/ `noLimit` option
+ * @date        2025-07-31 optimized `$T.B()` for boolean conversion.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 import { GeneralItem } from 'lemon-model';
 import { ListParam, PaginateParam } from './types';
 
 import * as $core from 'lemon-core';
 const _T = $core.$T;
+
+/**
+ * type: boolean style number.
+ */
+type BoolFlag = 0 | 1;
 
 /**
  * extract only the defined attribute.
@@ -86,11 +92,13 @@ export const $T = {
         (v && Array.isArray(v) ? v : _T.SS(v)).map(v => _T.S2(v, '', ' ').trim() as T),
     /** convert to `boolean`. */
     B: (v: number | string | boolean, def?: 0 | 1 | boolean): boolean =>
-        typeof v === 'number' || typeof v === 'string'
+        typeof v === 'boolean'
+            ? v
+            : typeof v === 'number' || typeof v === 'string'
             ? Boolean($T.BN(v, typeof def === 'boolean' ? (def ? 1 : 0) : def))
             : Boolean(def),
     /** convert to boolean style number. */
-    BN: <T extends number = number>(v: any, def?: 0 | 1): T => (v === undefined ? (def as T) : (_T.B(v, def) as T)),
+    BN: <T extends number = BoolFlag>(v: any, def?: 0 | 1): T => (v === undefined ? (def as T) : (_T.B(v, def) as T)),
     /** convert to `number` */
     N: (v: boolean | number | string, def?: number): number =>
         typeof v === 'boolean' ? (v ? 1 : 0) : typeof v === 'number' || typeof v === 'string' ? _T.N(v, def) : def,

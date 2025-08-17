@@ -1,0 +1,26 @@
+{
+    "!": "",
+    "context": {},
+    "event": {
+        "requestContext": {
+            "routeKey": "$default",
+            "messageId": "Om0aieY-oE0CIWQ=",
+            "eventType": "MESSAGE",
+            "extendedRequestId": "Om9k6EupoE0ER9g=",
+            "requestTime": "01/Aug/2025:03:28:03 +0000",
+            "messageDirection": "IN",
+            "stage": "dev",
+            "connectedAt": 1754018879429,
+            "requestTimeEpoch": 1754018883091,
+            "identity": {
+                "sourceIp": "117.111.17.8"
+            },
+            "requestId": "Om9k6EupoE0ER9g=",
+            "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "Om0Z-eYtIE0CIWQ=",
+            "apiId": "qksfa5jxm1"
+        },
+        "body": "{\"type\":\"ping\",\"id\":\"test-1\",\"timestamp\":1640995200000,\"data\":{\"clientId\":\"test-client\",\"sequence\":1}}",
+        "isBase64Encoded": false
+    }
+}

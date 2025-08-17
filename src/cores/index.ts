@@ -6,7 +6,7 @@
  * @date        2022-06-21 optimized w/ `abstract-services`
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
- * @origin      `@lemoncloud/codes-backend-api/cores`
+ * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 export * from './types';
 export * from './commons';

@@ -16,7 +16,7 @@ import { $ES6, MyCoreService } from '../cores/abstract-services';
 import { SearchService, Elastic6Option } from '../modules/search/service';
 import { CallbackModelManager } from '../modules/callback/service';
 import { MockModelManager, TestModelManager } from '../modules/mock/service';
-import { SocketModelManager } from '../modules/sockets/service';
+import { ConnectionModelManager, SocketModelManager, ChannelModelManager } from '../modules/sockets/service';
 const NS = $U.NS('BACK', 'magenta'); // NAMESPACE TO BE PRINTED.
 export { ModelType };
 
@@ -26,6 +26,9 @@ export { ModelType };
 export class BackendService extends MyCoreService<Model, ModelType, BackendProxy> {
     // model managers
     public readonly $socket: SocketModelManager;
+    public readonly $connection: ConnectionModelManager;
+    public readonly $channel: ChannelModelManager;
+
     public readonly $callback: CallbackModelManager;
     public readonly $test: TestModelManager;
     public readonly $mock: MockModelManager;
@@ -44,6 +47,9 @@ export class BackendService extends MyCoreService<Model, ModelType, BackendProxy
 
         // create model managers
         this.$socket = new SocketModelManager(this);
+        this.$connection = new ConnectionModelManager(this);
+        this.$channel = new ChannelModelManager(this);
+
         this.$callback = new CallbackModelManager(this);
         this.$test = new TestModelManager(this);
         this.$mock = new MockModelManager(this);
