@@ -85,14 +85,22 @@ export class SocketAPIController
      * @param payload   object or string
      * @param event     connection-info
      */
-    public postClientMessage = async (payload: any, event: SocketEvent, options?: { conId?: string }) => {
+    public postClientMessage = async (
+        payload: any,
+        event: SocketEvent,
+        options?: { conId?: string; context?: NextContext; domain?: string },
+    ) => {
         const errScope = `postClientMessage(${this.type()})`;
-        const conId = options?.conId ?? event?.connectionId;
+        const conId = options?.conId || event?.connectionId;
+        const context = options?.context;
+        //TODO [Steve] use env whether to use protocol.
         if (conId) {
-            const url = `https://0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com/dev`;
+            const url = options?.domain
+                ? `https://${options.domain}/${event?.stage ?? ''}`
+                : `https://0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com/dev`;
             const param = { endpoint: url };
             const body = payload;
-            return $protocol({}, `//eureka-executes-api/connections/${conId}/send`).execute(param, body);
+            return $protocol({ ...context }, `//eureka-executes-api/connections/${conId}/send`).execute(param, body);
         }
         const { stage, domain } = event;
         if (!domain) throw new Error(`@domain (string) is required -${errScope}`);
@@ -172,8 +180,8 @@ export class SocketAPIController
         switch (action) {
             case 'ping':
                 const $pong = buildSocketResponse('pong', $msg?.data);
-                const conId = typeof $msg?.data === 'string' ? $msg.data : undefined;
-                await this.postClientMessage($pong, event, { conId });
+                const conId = typeof $msg?.data === 'string' ? $msg.data : event.connectionId;
+                await this.postClientMessage($pong, event, { conId, domain: event?.domain });
                 //WARN - should return `200` status.
                 //TODO [Steve] 각 status 에 따른 행동 패턴 정리하기!!
                 return null;
