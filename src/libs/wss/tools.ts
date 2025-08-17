@@ -54,6 +54,7 @@ export const parseBody = (body: any, key: string = 'body') => {
  * @param data string | object
  */
 export const parseMessage = <T = any>(data: any): SocketPayload<T> => {
+    if (data && typeof data === 'object' && !Array.isArray(data)) return data;
     if (typeof data !== 'string') return { action: '', data: data as T };
     const $cmd = !data.startsWith('{') ? { action: data } : parseBody(data, 'data'); //! data must be `string`
     const action = $cmd && $cmd?.action ? $T.asLut($cmd?.action, $LUT.ActionType, 'action') : '';

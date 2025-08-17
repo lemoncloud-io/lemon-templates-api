@@ -10,7 +10,7 @@
  * @copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import $cores, { $U, _log, _inf, _err, NextHandler, NextContext } from 'lemon-core';
+import $cores, { $U, _log, _inf, _err, NextHandler, NextContext, $protocol } from 'lemon-core';
 import { $T, AbstractCRUDController } from '../../cores';
 import { LambdaWSSHandler, WSSAgentRunner } from '../../libs/wss/wss-agent';
 import { SocketActionType, SocketEvent, SocketEventType } from '../../libs/wss/wss-types';
@@ -87,9 +87,15 @@ export class SocketAPIController
      */
     public postClientMessage = async (payload: any, event: SocketEvent, options?: { conId?: string }) => {
         const errScope = `postClientMessage(${this.type()})`;
+        const conId = options?.conId ?? event?.connectionId;
+        if (conId) {
+            const url = `https://0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com/dev`;
+            const param = { endpoint: url };
+            const body = payload;
+            return $protocol({}, `//eureka-executes-api/connections/${conId}/send`).execute(param, body);
+        }
         const { stage, domain } = event;
         if (!domain) throw new Error(`@domain (string) is required -${errScope}`);
-        const conId = options?.conId ?? event?.connectionId;
         const url = `https://${domain}/${stage ?? ''}`;
         return this.$wss.doSend(url, conId, payload);
     };
@@ -142,6 +148,11 @@ export class SocketAPIController
         return;
     };
 
+    /**
+     *
+     * ```
+     * $ echo '{"body":{"action":"ping","data":"PcKSjdK_oE0CIpg="}}' | http :8832/sockets/0/message
+     */
     public doPostMessage: SocketHandler<void> = async (id, param, event, $ctx) => {
         const errScope = `doPostMessage(${this.type()}/${id ?? ''})`;
         event && _log(NS, `> event =`, $U.json(event));
@@ -150,6 +161,7 @@ export class SocketAPIController
 
         // STEP.0 validate body, and parse payload
         const $msg = parseMessage(event?.body);
+        _inf(NS, `> message @${errScope} =`, $U.json($msg));
         const action = $msg?.action as SocketActionType;
         _inf(NS, `> action @${errScope} =`, action);
 
