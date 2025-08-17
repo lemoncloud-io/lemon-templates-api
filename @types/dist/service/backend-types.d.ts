@@ -24,6 +24,7 @@ declare const $LUT: {
         callback: string;
         socket: string;
         connection: string; /** Korean */
+        channel: string;
     };
     /**
      * Possible type of language.

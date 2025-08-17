@@ -28,6 +28,8 @@ declare const $LUT: {
         socket: string;
         /** connection model */
         connection: string;
+        /** channel model */
+        channel: string;
     };
 };
 /** must export $LUT as default */

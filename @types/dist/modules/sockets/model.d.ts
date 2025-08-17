@@ -82,6 +82,36 @@ export interface ConnectionModel extends Model {
      * (extended) The code of disconnection.
      */
     disconnectCode?: number;
+    /**
+     * 현재 연결이 구독 중인 채널(토픽) 목록
+     */
+    channels?: string[];
+}
+/**
+ * interface: `ChannelModel`
+ * - 채널(토픽)을 기록함. MSA의 이벤트 토픽 등으로 사용.
+ */
+export interface ChannelModel extends Model {
+    /**
+     * id of channel
+     * - combined with `service` and model `type`
+     * - ex) `lemon-orders-api:order`
+     */
+    id?: string;
+    /**
+     * the topic name of this channel
+     * - ex) `lemon-orders-api`
+     */
+    channel?: string;
+    /**
+     * the model type this channel belongs to
+     * - ex) `orders`, `payments`, `notifications`
+     */
+    stereo?: string;
+    /** (optional) description of this channel */
+    desc?: string;
+    /** (internal) count of subscribers */
+    subscribed?: number;
 }
 /**
  * extract field names from models
@@ -93,6 +123,7 @@ export declare const $HEAD: {};
 export declare const $FIELD: {
     socket: string[];
     connection: string[];
+    channel: string[];
 };
 /** must export default as below */
 declare const _default: {
@@ -100,6 +131,7 @@ declare const _default: {
     $FIELD: {
         socket: string[];
         connection: string[];
+        channel: string[];
     };
 };
 export default _default;
