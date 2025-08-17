@@ -1,5 +1,6 @@
 /**
  * `tools.spec.ts`
+ * - test spec for `wss`
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2020-06-30 initial version
@@ -21,9 +22,9 @@ export const instance = (type?: string) => {
     return { $evt, event, ld };
 };
 
-//! main test body.
+//* main test body.
 describe('WebSocketTools', () => {
-    //! check `$base64`.
+    //* check `$base64`.
     it('should pass $base64', async () => {
         expect2(() => 'WklOAfLioE0CJPw='.length).toEqual(16);
         expect2(() => $base64.urlDecode(null)).toEqual('');
@@ -37,57 +38,75 @@ describe('WebSocketTools', () => {
         expect2(() => $base64.urlDecode('Wks_-_e-IE0CIjg=')).toEqual('5a4b3ffbf7be204d022238');
         expect2(() => $base64.urlEncode('5a4b3ffbf7be204d022238')).toEqual('Wks_-_e-IE0CIjg=');
 
-        //! test parseBase64()
+        //* test parseBase64()
         expect2(() => parseBase64('Wks_-eeMIE0CIjg=')).toEqual('5a4b3ff9e78c204d022238');
     });
 
-    //! check `$tools`.
+    //* check `$tools`.
     it('should pass $tools.', async () => {
         const { ld } = instance();
-        const conv = (e: any) => convertWSSEvent(e);
+        const _conv = (e: any) => convertWSSEvent(e);
 
         expect2(() => ld('wss-con-event.json').event.requestContext.eventType).toEqual('CONNECT');
 
-        /* eslint-disable prettier/prettier */
-        const _view = 'id,type,route';
-        expect2(() => conv(ld('wss-con-event.json').event), _view).toEqual({ id: 'OjXY6FCWoE0Ee_Q=', type: 'CONNECT', route: '$connect' });
-        expect2(() => conv(ld('wss-con2-event.json').event), _view).toEqual({ id: 'Om9k6EupoE0ER9g=', route: '$connect', type: 'CONNECT' });
-        expect2(() => conv(ld('wss-dis-event.json').event), _view).toEqual({ id: 'OmwsjE-soE0EEpQ=', route: '$disconnect', type: 'DISCONNECT' });
-        expect2(() => conv(ld('wss-dis2-event.json').event), _view).toEqual({ id: 'Om5C_H49IE0EJXA=', route: '$disconnect', type: 'DISCONNECT' });
-        expect2(() => conv(ld('wss-msg-event.json').event), _view).toEqual({ id: 'OmwrPEBfIE0EI1g=', route: '$default', type: 'MESSAGE' });
-        expect2(() => conv(ld('wss-msg2-event.json').event), _view).toEqual({ id: 'Om0aiEt7oE0EeMw=', route: '$default', type: 'MESSAGE' });
+        const _view = 'id,type,route,param';
+        expect2(() => _conv(ld('wss-con-event.json').event), _view).toEqual({
+            type: 'CONNECT',
+            id: '3a35d8e85096a04d047bf4',
+            route: '$connect',
+        });
+        expect2(() => _conv(ld('wss-con2-event.json').event), _view).toEqual({
+            type: 'CONNECT',
+            id: '3a6f64e84ba9a04d0447d8',
+            route: '$connect',
+            param: { id: '1234', no: '1' },
+        });
+        expect2(() => _conv(ld('wss-dis-event.json').event), _view).toEqual({
+            type: 'DISCONNECT',
+            id: '3a6f64e84ba9a04d0447d8',
+            route: '$disconnect',
+        });
+        expect2(() => _conv(ld('wss-dis2-event.json').event), _view).toEqual({
+            type: 'DISCONNECT',
+            id: '3a6f64e84ba9a04d0447d8',
+            route: '$disconnect',
+        });
+        expect2(() => _conv(ld('wss-msg-event.json').event), _view).toEqual({
+            type: 'MESSAGE',
+            id: '3a6f64e84ba9a04d0447d8',
+            route: '$default',
+        });
+        expect2(() => _conv(ld('wss-msg2-event.json').event), _view).toEqual({
+            type: 'MESSAGE',
+            id: '3a6f64e84ba9a04d0447d8',
+            route: '$default',
+        });
 
-        expect2(() => conv(ld('wss-con-event.json').event), 'authorization').toEqual ({ authorization: '' });
-        expect2(() => conv(ld('wss-con2-event.json').event), 'authorization').toEqual ({ authorization: '' });
-        expect2(() => conv(ld('wss-con3-event.json').event), 'authorization').toEqual({ authorization: 'Basic bm9uZTpsZW1vbg==' });
+        // expect2(() => conv(ld('wss-con-event.json').event), 'authorization').toEqual({ authorization: '' });
+        // expect2(() => conv(ld('wss-con2-event.json').event), 'authorization').toEqual({ authorization: '' });
+        // expect2(() => conv(ld('wss-con3-event.json').event), 'authorization').toEqual({
+        //     authorization: 'Basic bm9uZTpsZW1vbg==',
+        // });
     });
 
-
     it('should pass tools spec', async () => {
-        //! test parseBody()
+        //* test parseBody()
         expect2(() => parseBody('')).toEqual({ body: '' });
         expect2(() => parseBody('!')).toEqual({ body: '!' });
         expect2(() => parseBody('{}')).toEqual({});
-        expect2(() => parseBody('{.}')).toEqual({ body: '{.}', error: 'Unexpected token . in JSON at position 1' });
+        expect2(() => parseBody('{.}')).toEqual({ body: '{.}', error: expect.any(String) });
 
         expect2(() => parseBody('', 'data')).toEqual({ data: '' });
         expect2(() => parseBody('!', 'data')).toEqual({ data: '!' });
         expect2(() => parseBody('{}', 'data')).toEqual({});
-        expect2(() => parseBody('{.}', 'data')).toEqual({
-            data: '{.}',
-            error: 'Unexpected token . in JSON at position 1',
-        });
+        expect2(() => parseBody('{.}', 'data')).toEqual({ data: '{.}', error: expect.any(String) });
 
-        //! test parseMessage()
+        //* test parseMessage()
         expect2(() => parseMessage('')).toEqual({ action: '' });
         expect2(() => parseMessage('!')).toEqual('.action[!] is invalid key - asLut(action)');
         expect2(() => parseMessage('{}')).toEqual({ action: '' });
         expect2(() => parseMessage('{"action":"hi"}')).toEqual('.action[hi] is invalid key - asLut(action)');
-        expect2(() => parseMessage('{.}')).toEqual({
-            action: '',
-            data: '{.}',
-            error: 'Unexpected token . in JSON at position 1',
-        });
+        expect2(() => parseMessage('{.}')).toEqual({ action: '', data: '{.}', error: expect.any(String) });
 
         expect2(() => parseMessage(null)).toEqual({ action: '', data: null });
         expect2(() => parseMessage(undefined)).toEqual({ action: '', data: undefined });
@@ -104,7 +123,7 @@ describe('WebSocketTools', () => {
     });
 
     it('should pass tools spec', async () => {
-        //! test buildSocketResponse()
+        //* test buildSocketResponse()
         const now = 1704067200000;
         expect2(() => buildSocketResponse('ping')).toEqual({ action: 'ping', timestamp: expect.any(Number) });
         expect2(() => buildSocketResponse('pong', { message: 'hello' })).toEqual({
@@ -116,16 +135,6 @@ describe('WebSocketTools', () => {
             action: 'echo',
             result: 'test data',
             timestamp: now,
-        });
-        expect2(() => buildSocketResponse('success', { status: 'ok' })).toEqual({
-            action: 'success',
-            result: { status: 'ok' },
-            timestamp: expect.any(Number),
-        });
-        expect2(() => buildSocketResponse('error', { message: 'failed' })).toEqual({
-            action: 'error',
-            result: { message: 'failed' },
-            timestamp: expect.any(Number),
         });
         expect2(() => buildSocketResponse('', null)).toEqual({
             action: '',

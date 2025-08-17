@@ -105,8 +105,8 @@ export interface ConnectionModel extends Model {
 export interface ChannelModel extends Model {
     /**
      * id of channel
-     * - combined with `channel` and `stereo`
-     * - ex) `lemon-orders-api:orders`
+     * - combined with `service` and model `type`
+     * - ex) `lemon-orders-api:order`
      */
     id?: string;
     /**
@@ -115,7 +115,7 @@ export interface ChannelModel extends Model {
      */
     channel?: string;
     /**
-     * the model name this channel belongs to
+     * the model type this channel belongs to
      * - ex) `orders`, `payments`, `notifications`
      */
     stereo?: string;

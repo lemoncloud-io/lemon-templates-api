@@ -78,16 +78,13 @@ export class CronAPIController extends GeneralWEBController {
      */
     public hello = () => `cron-api-controller`;
 
-    /* eslint-disable prettier/prettier */
-    /* eslint-enable prettier/prettier */
-
     /**
      * handle cron event
      */
     public handleEvent: CronNextHandler = async (id, param, body, context) =>
         this.handleNext(id, param, body, context)
             .catch(e => doReportError(e, context, null, { id, param, body }))
-            .then(() => undefined);
+            .then<void>(() => undefined);
 
     /**
      * handle the next event

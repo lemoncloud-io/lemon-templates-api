@@ -10,8 +10,8 @@
  */
 import { loadProfile } from 'lemon-core/dist/environ';
 import { expect2, NextIdentityAccess, $info, loadJsonSync, GETERR } from 'lemon-core';
-import { SocketEvent } from '../../lib/wss-types';
-import { convertWSSEvent } from '../../lib/tools';
+import { SocketEvent } from '../../libs/wss/wss-types';
+import { convertWSSEvent } from '../../libs/wss/tools';
 import { ConnectionModel } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
@@ -37,8 +37,8 @@ export const instance = (type: $service.AuthType = 'authed', params?: $service.S
 
 //! main test body.
 describe('BackendProxy', () => {
-    // const PROFILE = loadProfile(process); // override process.env.
-    // PROFILE && console.info('! PROFILE =', PROFILE);
+    const PROFILE = loadProfile(process); // override process.env.
+    PROFILE && console.info('! PROFILE =', PROFILE);
 
     //! basic function
     it('should pass basic function', async () => {
@@ -81,6 +81,7 @@ describe('BackendProxy', () => {
         const expected: ConnectionModel = {
             connectionId: $eventA.connectionId,
             connectedAt: $eventA.connectedAt,
+            disConnectedAt: 0,
             domain: $eventA.domain,
             remote: $eventA.remote,
             stage: $eventA.stage,
@@ -136,13 +137,13 @@ describe('BackendProxy', () => {
             '@event (socket-event) is required - findModel(connection/)',
         );
         expect2(await $conn.findModel({ ...$eventA, connectionId: null }).catch(GETERR)).toEqual(
-            '.connectionId (string) is required - findModel(connection/OjXY6FCWoE0Ee_Q=)',
+            '.connectionId (string) is required - findModel(connection/3a35d8e85096a04d047bf4)',
         );
         expect2(await $conn.findModel({ ...$eventA, stage: null }).catch(GETERR)).toEqual(
-            '.stage (string) is required - findModel(connection/OjXY6FCWoE0Ee_Q=)',
+            '.stage (string) is required - findModel(connection/3a35d8e85096a04d047bf4)',
         );
         expect2(await $conn.findModel({ ...$eventA, domain: null }).catch(GETERR)).toEqual(
-            '.domain (string) is required - findModel(connection/OjXY6FCWoE0Ee_Q=)',
+            '.domain (string) is required - findModel(connection/3a35d8e85096a04d047bf4)',
         );
 
         //* validate a updateDisconnection
@@ -173,7 +174,7 @@ describe('BackendProxy', () => {
             '@event (socket-event) is required - updateDisconnection(connection/)',
         );
         expect2(await $conn.updateDisconnection({ ...$eventA, connectionId: null }).catch(GETERR)).toEqual(
-            '.connectionId (string) is required - updateDisconnection(connection/OjXY6FCWoE0Ee_Q=)',
+            '.connectionId (string) is required - updateDisconnection(connection/3a35d8e85096a04d047bf4)',
         );
     });
 });

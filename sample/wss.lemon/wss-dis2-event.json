@@ -18,7 +18,7 @@
             "routeKey": "$disconnect",
             "disconnectStatusCode": 1001,
             "eventType": "DISCONNECT",
-            "extendedRequestId": "Om5C_H49IE0EJXA=",
+            "extendedRequestId": "Om9k6EupoE0ER9g=",
             "requestTime": "01/Aug/2025:03:59:40 +0000",
             "messageDirection": "IN",
             "disconnectReason": "Going away",
@@ -28,7 +28,7 @@
             "identity": {
                 "sourceIp": "117.111.17.8"
             },
-            "requestId": "Om5C_H49IE0EJXA=",
+            "requestId": "Om9k6EupoE0ER9g=",
             "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
             "connectionId": "Om3jjdCeIE0CFVg=",
             "apiId": "qksfa5jxm1"

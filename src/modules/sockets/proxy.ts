@@ -11,12 +11,12 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, $T, _inf, _log, _err, SearchQuery } from 'lemon-core';
-import { ListResult, MyCoreProxy, MyManagerProxy, SearchParam, onlyDefined, parsePaginateParam } from '../../cores';
+import { ListResult, MyCoreProxy, MyManagerProxy, onlyDefined, parsePaginateParam } from '../../cores';
 import { ChannelModel, ConnectionModel, ModelType, SocketModel } from './model';
 import { BackendService, ChannelModelManager, ConnectionModelManager, SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
-import { SocketEvent } from '../../lib/wss-types';
-import { parseBase64 } from '../../lib/tools';
+import { SocketEvent } from '../../libs/wss/wss-types';
+import { parseBase64 } from '../../libs/wss/tools';
 const NS = $U.NS('sockets', 'blue'); // NAMESPACE TO BE PRINTED.
 
 /** the expected `BackendProxy` */

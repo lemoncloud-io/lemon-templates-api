@@ -7,7 +7,6 @@
  *
  * @copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
-export * from '../lib/wss-types';
 export * from '../service/backend-types';
 export * from '../modules/mock/views';
 export * from '../modules/sockets/views';

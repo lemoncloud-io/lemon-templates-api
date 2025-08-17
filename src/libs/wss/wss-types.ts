@@ -74,7 +74,7 @@ export interface SocketEvent extends ConnectionInfo {
     id: string;
     type: SocketEventType;
     route: SocketRouteKeyType;
-    authorization: string;
+    authorization?: string;
     stage: SocketStageType;
     direction: SocketDirectionType;
     disconnectCode?: DisconnectStatusCode;
@@ -117,14 +117,6 @@ const $LUT = {
         echo: 'echo',
         /** message */
         message: 'message',
-        /** auth */
-        auth: 'auth',
-        /** success */
-        success: 'success',
-        /** error */
-        error: 'error',
-        /** unknown */
-        unknown: 'unknown',
     },
     /**
      * EventType

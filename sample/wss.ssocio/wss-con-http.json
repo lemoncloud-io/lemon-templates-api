@@ -1,0 +1,64 @@
+{
+    "!": "http --auth-type aws4 --auth profile=ssocio https://0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com/dev/@connections/Pb_WncCWoE0CJhA%3D",
+    "success": {
+        "!": "요청 성공시 응답",
+        "$": [
+            "HTTP/1.1 200 OK",
+            "Connection: keep-alive",
+            "Content-Length: 176",
+            "Content-Type: application/json",
+            "Date: Sun, 17 Aug 2025 06:46:53 GMT",
+            "X-Amzn-Trace-Id: Root=1-68a17add-5933af950f1286487c056a0c",
+            "x-amz-apigw-id: PcAioE2cIE0EAng=",
+            "x-amzn-RequestId: f0cdc92c-ae50-46fb-b11c-df363e697a0c"
+        ],
+        "connectedAt": "2025-08-17T06:46:17.558Z",
+        "identity": {
+            "sourceIp": "121.133.249.174",
+            "userAgent": null
+        },
+        "lastActiveAt": "2025-08-17T06:46:17.558Z"
+    },
+    "gone": {
+        "!": "연결 끊긴 이후에 응답",
+        "$": [
+            "HTTP/1.1 410 Gone",
+            "Connection: keep-alive",
+            "Content-Length: 0",
+            "Content-Type: application/json",
+            "Date: Sun, 17 Aug 2025 06:46:08 GMT",
+            "X-Amzn-Trace-Id: Root=1-68a17ab0-43d8a6084c0c7bc916598a90",
+            "x-amz-apigw-id: PcAbkFD-oE0EaNQ=",
+            "x-amzn-ErrorType: GoneException",
+            "x-amzn-RequestId: c5c728d3-d293-45cf-9b83-6a170c93bc67"
+        ]
+    },
+    "400": {
+        "!": "없는 연결 ID로 요청시 응답",
+        "$": [
+            "HTTP/1.1 400 Bad Request",
+            "Connection: keep-alive",
+            "Content-Length: 53",
+            "Content-Type: application/json",
+            "Date: Sun, 17 Aug 2025 06:50:08 GMT",
+            "x-amz-apigw-id: PcBBEGFNIE0EYWg=",
+            "x-amzn-ErrorType: BadRequestException",
+            "x-amzn-RequestId: a8f221ab-243d-4588-8768-be2d89c08710"
+        ],
+        "message": "Invalid connectionId: PcAdDfgyoE0CERA01"
+    },
+    "403": {
+        "!": "다른 profile로 권한이 없는 경우 응답",
+        "$": [
+            "HTTP/1.1 403 Forbidden",
+            "Connection: keep-alive",
+            "Content-Length: 107",
+            "Content-Type: application/json",
+            "Date: Sun, 17 Aug 2025 06:51:28 GMT",
+            "x-amz-apigw-id: PcBNpH7YIE0EaNQ=",
+            "x-amzn-ErrorType: AccessDeniedException",
+            "x-amzn-RequestId: 4fa97c0d-3252-486a-bc58-a5231137ee97"
+        ],
+        "Message": "User: arn:aws:iam::085403634746:user/serverless-api is not authorized to access this resource"
+    }
+}
