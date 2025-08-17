@@ -53,15 +53,15 @@ export interface SocketResponse<T = any> {
     /**
      * response status type
      */
-    action: SocketActionType;
+    action: SocketActionType | string;
     /**
      * response data
      */
-    result?: T;
+    data?: T;
     /**
-     * response timestamp
+     * timestamp in `YYYY-MM-DD HH:mm:ss`
      */
-    timestamp: number;
+    ts: string;
 }
 
 /**

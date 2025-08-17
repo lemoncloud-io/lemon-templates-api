@@ -72,8 +72,9 @@ export const buildSocketResponse = <T = any>(
     result?: T,
     options?: { current?: number },
 ): SocketResponse<T> => {
-    const timestamp = options?.current ?? $U.current_time_ms();
-    return { action, timestamp, result };
+    const current = options?.current ?? $U.current_time_ms();
+    const ts = $U.ts(current);
+    return { action, ts, data: result };
 };
 
 /**

@@ -111,7 +111,7 @@ describe('WebSocketTools', () => {
         expect2(() => parseMessage(null)).toEqual({ action: '', data: null });
         expect2(() => parseMessage(undefined)).toEqual({ action: '', data: undefined });
         expect2(() => parseMessage(0)).toEqual({ action: '', data: 0 });
-        expect2(() => parseMessage({ x: 2 })).toEqual({ action: '', data: { x: 2 } });
+        expect2(() => parseMessage({ x: 2 })).toEqual({ x: 2 });
         expect2(() => parseMessage('{"!":"hi"}')).toEqual({ action: '', '!': 'hi' });
         expect2(() => parseMessage('{"action":"ping"}')).toEqual({ action: 'ping' });
         expect2(() => parseMessage($U.json({ id: 1, action: '', data: {}, ts: 0 }))).toEqual({
@@ -125,21 +125,21 @@ describe('WebSocketTools', () => {
     it('should pass tools spec', async () => {
         //* test buildSocketResponse()
         const now = 1704067200000;
-        expect2(() => buildSocketResponse('ping')).toEqual({ action: 'ping', timestamp: expect.any(Number) });
+        expect2(() => buildSocketResponse('ping')).toEqual({ action: 'ping', ts: expect.any(String) });
         expect2(() => buildSocketResponse('pong', { message: 'hello' })).toEqual({
             action: 'pong',
-            result: { message: 'hello' },
-            timestamp: expect.any(Number),
+            data: { message: 'hello' },
+            ts: expect.any(String),
         });
         expect2(() => buildSocketResponse('echo', 'test data', { current: now })).toEqual({
             action: 'echo',
-            result: 'test data',
-            timestamp: now,
+            data: 'test data',
+            ts: $U.ts(now),
         });
         expect2(() => buildSocketResponse('', null)).toEqual({
             action: '',
-            result: null,
-            timestamp: expect.any(Number),
+            data: null,
+            ts: expect.any(String),
         });
 
         const complexData = {
@@ -151,8 +151,8 @@ describe('WebSocketTools', () => {
         };
         expect2(() => buildSocketResponse('message', complexData)).toEqual({
             action: 'message',
-            result: complexData,
-            timestamp: expect.any(Number),
+            data: complexData,
+            ts: expect.any(String),
         });
     });
 });
