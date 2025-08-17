@@ -18,7 +18,7 @@
             "routeKey": "$disconnect",
             "eventType": "DISCONNECT",
             "disconnectStatusCode": 1005,
-            "extendedRequestId": "OmwsjE-soE0EEpQ=",
+            "extendedRequestId": "Om9k6EupoE0ER9g=",
             "requestTime": "01/Aug/2025:03:02:39 +0000",
             "messageDirection": "IN",
             "disconnectReason": "Client-side close frame status not set",
@@ -28,7 +28,7 @@
             "identity": { 
                 "sourceIp": "221.149.250.13"
             },
-            "requestId": "OmwsjE-soE0EEpQ=",
+            "requestId": "Om9k6EupoE0ER9g=",
             "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
             "connectionId": "OjXY6chgoE0CIdw=",
             "apiId": "qksfa5jxm1"

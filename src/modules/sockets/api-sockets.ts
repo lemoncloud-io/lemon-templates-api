@@ -10,44 +10,74 @@
  * @copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import $core, { $U, _log, _inf, _err, NextHandler } from 'lemon-core';
+import $cores, { $U, _log, _inf, _err, NextHandler, NextContext } from 'lemon-core';
 import { $T, AbstractCRUDController } from '../../cores';
+import { LambdaWSSHandler, WSSAgentRunner } from '../../libs/wss/wss-agent';
+import { SocketEvent, SocketEventType } from '../../libs/wss/wss-types';
 import { SocketModel } from './model';
 import { SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
 import { SocketBody, SocketView } from './views';
-import { $sockets, LambdaWSSHandler } from '../../libs/wss/wss-agent';
 //WARN - use `BackendService` from main service due to proper `BackendProxy`.
 import $service, { BackendService, ModelType } from '../../service/backend-service';
 const NS = $U.NS('sockets', 'yellow'); // NAMESPACE TO BE PRINTED.
 
+type SocketHandler<Result = any> = NextHandler<{ [name: string]: string }, Result, SocketEvent>;
+
 /**
  * class: `SocketAPIController`
  */
-export class SocketAPIController extends AbstractCRUDController<
-    ModelType,
-    SocketModel,
-    SocketView,
-    SocketBody,
-    BackendService,
-    SocketModelManager,
-    SocketTransformer
-> {
+export class SocketAPIController
+    extends AbstractCRUDController<
+        ModelType,
+        SocketModel,
+        SocketView,
+        SocketBody,
+        BackendService,
+        SocketModelManager,
+        SocketTransformer
+    >
+    implements WSSAgentRunner
+{
     public readonly $wss: LambdaWSSHandler;
     /**
      * Modern constructor with WebSocket integration
      */
     public constructor(service: BackendService = $service, register?: boolean) {
         super('sockets', service, service.$socket, $trans.socket);
-        this.$wss = new LambdaWSSHandler(this.service);
-
-        //TODO [Steve] use `decode()` to handle event in this controller from wss @250808.
+        this.$wss = new LambdaWSSHandler(this.service, this);
         //! register into wss handler
-        register && $core.cores.lambda.lambda.setHandler('wss', this.$wss);
+        register && $cores.cores.lambda.lambda.setHandler('wss', this.$wss);
     }
 
     /** say hello */
     public hello = () => `socket-api-controller:${this.type()}`;
+
+    /**
+     * Handle incoming WebSocket events.
+     */
+    public async onSocketEvent(event: SocketEvent, context: NextContext): Promise<any> {
+        const errScope = `$run(${event?.direction ?? '-'}/${event?.id ?? ''})`;
+        if (!event) throw new Error(`@event is required - ${errScope}`);
+        if (!event?.id) throw new Error(`@event.id (string) is required - ${errScope}`);
+        const _run = async (type: SocketEventType | string) => {
+            if (!type) {
+                throw new Error(`@type (string) is required - ${errScope}`);
+            } else if (type == 'echo' || type == 'ECHO') {
+                return this.doPostEcho(event.id, event.param, event, context);
+            } else if (type == 'CONNECT') {
+                return this.doPostConnect(event.id, event.param, event, context);
+            } else if (type == 'DISCONNECT') {
+                return this.doPostDisconnect(event.id, event.param, event, context);
+            } else if (type == 'MESSAGE') {
+                return this.doPostMessage(event.id, event.param, event, context);
+            } else {
+                throw new Error(`@type[${type}] is invalid! - ${errScope}`);
+            }
+        };
+        //* return must be void (200);
+        return _run(event?.type);
+    }
 
     /**
      * GET /sockets/0/hello
@@ -68,6 +98,38 @@ export class SocketAPIController extends AbstractCRUDController<
         });
     };
 
+    public doPostEcho: SocketHandler<any> = async (id, param, body, $ctx) => {
+        const errScope = `doPostEcho(${this.type()}/${id ?? ''})`;
+        body && _log(NS, `> body =`, $U.json(body));
+        $ctx && _log(NS, `> context =`, $U.json($ctx));
+        id = id === '0' ? '' : $T.S2(id).trim();
+        return;
+    };
+
+    public doPostConnect: SocketHandler<any> = async (id, param, body, $ctx) => {
+        const errScope = `doPostConnect(${this.type()}/${id ?? ''})`;
+        body && _log(NS, `> body =`, $U.json(body));
+        $ctx && _log(NS, `> context =`, $U.json($ctx));
+        id = id === '0' ? '' : $T.S2(id).trim();
+        return;
+    };
+
+    public doPostDisconnect: SocketHandler<any> = async (id, param, body, $ctx) => {
+        const errScope = `doPostDisconnect(${this.type()}/${id ?? ''})`;
+        body && _log(NS, `> body =`, $U.json(body));
+        $ctx && _log(NS, `> context =`, $U.json($ctx));
+        id = id === '0' ? '' : $T.S2(id).trim();
+        return;
+    };
+
+    public doPostMessage: SocketHandler<any> = async (id, param, body, $ctx) => {
+        const errScope = `doPostMessage(${this.type()}/${id ?? ''})`;
+        body && _log(NS, `> body =`, $U.json(body));
+        $ctx && _log(NS, `> context =`, $U.json($ctx));
+        id = id === '0' ? '' : $T.S2(id).trim();
+        return;
+    };
+
     /**
      * broadcast `body` to all connections in `id`
      *
@@ -78,7 +140,8 @@ export class SocketAPIController extends AbstractCRUDController<
      * @param id    channel-id like `lemon-sandbox-api.hello`
      */
     public doPostBroadcast: NextHandler = async (id, param, body, $ctx) => {
-        const errScope = `doPostBroadcast(${id ?? ''})`;
+        const errScope = `doPostBroadcast(${this.type()}/${id ?? ''})`;
+        body && _log(NS, `> body =`, $U.json(body));
         $ctx && _log(NS, `> context =`, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id).trim();
         const [channel, stereo] = `${id || ''}`.split('.');
@@ -86,8 +149,8 @@ export class SocketAPIController extends AbstractCRUDController<
         // STEP.0 validate parameters.
         if (!channel) throw new Error(`@channel (string) is required - ${errScope}`);
         if (!stereo) throw new Error(`@stereo (string) is required - ${errScope}`);
-        const $result = await $sockets(this.service, null, $ctx).broadcast(channel, stereo, body);
-        return $result;
+        // const $result = await $sockets(this.service, null, $ctx).broadcast(channel, stereo, body);
+        // return $result;
     };
 }
 

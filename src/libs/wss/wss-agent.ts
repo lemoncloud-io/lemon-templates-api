@@ -11,7 +11,7 @@
  * @origin      `@lemoncloud/lemon-cluster-api/cluster`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _log, _inf, _err, GETERR, NextContext, $slack, my_parrallel } from 'lemon-core';
+import { $U, _log, _inf, _err, GETERR, NextContext, $slack, my_parrallel, doReportError } from 'lemon-core';
 import { WSSEvent, LambdaHandlerService, WSSHandler } from 'lemon-core';
 import { $T, onlyDefined } from '../../cores';
 import { failure, notfound, success } from 'lemon-core/dist/cores/lambda/lambda-wss-handler';
@@ -23,14 +23,27 @@ import { BackendService } from '../../service/backend-service';
 const NS = $U.NS(`wss`, 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
+ * type: `WSSAgentRunner`
+ * - interface for running WebSocket events.
+ */
+export interface WSSAgentRunner {
+    /**
+     * Handle incoming WebSocket events.
+     * @param event SocketEvent
+     * @param context NextContext
+     */
+    onSocketEvent(event: SocketEvent, context: NextContext): Promise<any>;
+}
+
+/**
  * class: `LambdaWSSHandler`
  * - the lambda handler for WSS events.
  * @implements @lemon-core/LambdaHandlerService<WSSHandler>
  */
 export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
-    readonly service: BackendService;
-    public constructor(service: BackendService) {
-        this.service = service;
+    public constructor(readonly service: BackendService, readonly runner: WSSAgentRunner) {
+        if (!service) throw new Error(`@service is required - LambdaWSSHandler`);
+        if (!runner) throw new Error(`@runner is required - LambdaWSSHandler`);
     }
 
     /**
@@ -43,6 +56,8 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
      */
     public handle: WSSHandler = async (event, context) => {
         _log(NS, `handle()...`);
+
+        //* decode event and notify into slack.
         const $req = event?.requestContext;
         const ROUTE = [$req?.eventType ?? '', $req?.routeKey ?? ''].join('/');
         _log(NS, `> context(${ROUTE}) =`, $U.json(context));
@@ -55,13 +70,15 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
         };
         await _slack().catch(e => _err(NS, `! error@slack =`, GETERR(e), e));
 
-        //TODO - define the exact type of result(WSResult).
+        //* handle the event..
         try {
-            const $res = await $sockets(this.service, event, context).$run();
+            const $evt = convertWSSEvent(event);
+            const $res = await this.runner.onSocketEvent($evt, context);
             if (typeof $res !== undefined) return success($res);
         } catch (e) {
             const err = GETERR(e);
             if (err.startsWith('404 ')) return notfound(err);
+            await doReportError(e, context, event);
             return failure(err);
         }
     };
@@ -69,6 +86,8 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
 
 /**
  * builder/factory for sockets per each event.
+ *
+ * @deprecated use `WSSAgentRunner` instead.
  */
 export const $sockets = (service: BackendService, event?: WSSEvent, context?: NextContext) => {
     const $evt = convertWSSEvent(event);
@@ -78,6 +97,8 @@ export const $sockets = (service: BackendService, event?: WSSEvent, context?: Ne
 /**
  * class: `WSSAgent`
  * - support class for WebSocket events.
+ *
+ * @deprecated use `WSSAgentRunner` instead.
  */
 export class WSSAgent {
     /**

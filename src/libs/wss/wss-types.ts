@@ -74,7 +74,7 @@ export interface SocketEvent extends ConnectionInfo {
     id: string;
     type: SocketEventType;
     route: SocketRouteKeyType;
-    authorization: string;
+    authorization?: string;
     stage: SocketStageType;
     direction: SocketDirectionType;
     disconnectCode?: DisconnectStatusCode;

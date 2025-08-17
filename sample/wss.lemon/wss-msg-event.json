@@ -6,7 +6,7 @@
             "routeKey": "$default",
             "messageId": "OmwrPeesIE0CFUQ=",
             "eventType": "MESSAGE",
-            "extendedRequestId": "OmwrPEBfIE0EI1g=",
+            "extendedRequestId": "Om9k6EupoE0ER9g=",
             "requestTime": "01/Aug/2025:03:02:31 +0000",
             "messageDirection": "IN",
             "stage": "dev",
@@ -15,7 +15,7 @@
             "identity": {
                 "sourceIp": "117.111.17.8"
             },
-            "requestId": "OmwrPEBfIE0EI1g=",
+            "requestId": "Om9k6EupoE0ER9g=",
             "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
             "connectionId": "Omwp-eeCIE0CFUQ=",
             "apiId": "qksfa5jxm1"

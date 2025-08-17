@@ -79,39 +79,38 @@ export const buildSocketResponse = <T = any>(
  * translate the origin event to socket-event
  */
 export const convertWSSEvent = (event?: WSSEvent): SocketEvent => {
-    const $hdr = event && event.headers;
-    let authorization = `${($hdr && $hdr.Authorization) || ''}`;
+    const $hdr = event?.headers;
+    // let authorization = `${($hdr && $hdr.Authorization) || ''}`;
     const origin = `${($hdr && $hdr['Origin']) || ''}`;
-    const param = { ...(event && event.queryStringParameters) };
+    const param = event?.queryStringParameters ? { ...event?.queryStringParameters } : undefined;
 
-    const $req: any = event && event.requestContext;
-    const $idt: any = $req?.identity;
-    const id = `${$req?.requestId || ''}`;
+    const $req = event?.requestContext;
+    const $idt = $req?.identity;
+    const id = $base64.urlDecode(`${$req?.requestId || ''}`);
     const type = `${$req?.eventType || ''}` as SocketEvent['type'];
     const route = `${$req?.routeKey || ''}` as SocketEvent['route'];
     const stage = `${$req?.stage || ''}` as SocketEvent['stage'];
     const remote = `${($hdr && $hdr['X-Forwarded-For']) || ($idt && $idt['sourceIp']) || ''}`;
     const agent = `${($hdr && $hdr['User-Agent']) || ($idt && $idt['userAgent']) || ''}`;
     const direction = `${$req?.messageDirection || ''}` as SocketEvent['direction'];
-    const reason = `${$req?.disconnectReason || ''}`;
+    const reason = `${($req as any)?.disconnectReason || ''}`;
     const domain = $U.env('WSS_DOMAIN', `${$req?.domainName || ''}`);
     const connectionId = `${$req?.connectionId || ''}`;
     const messageId = `${$req?.messageId || ''}`;
     const apiId = `${$req?.apiId || ''}`;
     const connectedAt = $req?.connectedAt || 0;
-    const disconnectCode = $req?.disconnectStatusCode ?? 0;
+    const disconnectCode = ($req as any)?.disconnectStatusCode ?? 0;
     const body = event && event.body;
 
     // extract `auth` from query.
-    const $qs = event && event.queryStringParameters;
-    if ($qs && $qs['auth']) authorization = authorization || `Basic ${$qs.auth}`.trim();
+    // const $qs = event && event.queryStringParameters;
+    // if ($qs && $qs['auth']) authorization = authorization || `Basic ${$qs.auth}`.trim();
 
     //! returns;
     return onlyDefined<SocketEvent>({
         id,
         type,
         route,
-        authorization,
         origin,
         param,
         stage,

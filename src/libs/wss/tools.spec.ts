@@ -45,47 +45,48 @@ describe('WebSocketTools', () => {
     //* check `$tools`.
     it('should pass $tools.', async () => {
         const { ld } = instance();
-        const conv = (e: any) => convertWSSEvent(e);
+        const _conv = (e: any) => convertWSSEvent(e);
 
         expect2(() => ld('wss-con-event.json').event.requestContext.eventType).toEqual('CONNECT');
 
-        const _view = 'id,type,route';
-        expect2(() => conv(ld('wss-con-event.json').event), _view).toEqual({
-            id: 'OjXY6FCWoE0Ee_Q=',
+        const _view = 'id,type,route,param';
+        expect2(() => _conv(ld('wss-con-event.json').event), _view).toEqual({
             type: 'CONNECT',
+            id: '3a35d8e85096a04d047bf4',
             route: '$connect',
         });
-        expect2(() => conv(ld('wss-con2-event.json').event), _view).toEqual({
-            id: 'Om9k6EupoE0ER9g=',
-            route: '$connect',
+        expect2(() => _conv(ld('wss-con2-event.json').event), _view).toEqual({
             type: 'CONNECT',
+            id: '3a6f64e84ba9a04d0447d8',
+            route: '$connect',
+            param: { id: '1234', no: '1' },
         });
-        expect2(() => conv(ld('wss-dis-event.json').event), _view).toEqual({
-            id: 'OmwsjE-soE0EEpQ=',
-            route: '$disconnect',
+        expect2(() => _conv(ld('wss-dis-event.json').event), _view).toEqual({
             type: 'DISCONNECT',
-        });
-        expect2(() => conv(ld('wss-dis2-event.json').event), _view).toEqual({
-            id: 'Om5C_H49IE0EJXA=',
+            id: '3a6f64e84ba9a04d0447d8',
             route: '$disconnect',
+        });
+        expect2(() => _conv(ld('wss-dis2-event.json').event), _view).toEqual({
             type: 'DISCONNECT',
+            id: '3a6f64e84ba9a04d0447d8',
+            route: '$disconnect',
         });
-        expect2(() => conv(ld('wss-msg-event.json').event), _view).toEqual({
-            id: 'OmwrPEBfIE0EI1g=',
-            route: '$default',
+        expect2(() => _conv(ld('wss-msg-event.json').event), _view).toEqual({
             type: 'MESSAGE',
+            id: '3a6f64e84ba9a04d0447d8',
+            route: '$default',
         });
-        expect2(() => conv(ld('wss-msg2-event.json').event), _view).toEqual({
-            id: 'Om0aiEt7oE0EeMw=',
-            route: '$default',
+        expect2(() => _conv(ld('wss-msg2-event.json').event), _view).toEqual({
             type: 'MESSAGE',
+            id: '3a6f64e84ba9a04d0447d8',
+            route: '$default',
         });
 
-        expect2(() => conv(ld('wss-con-event.json').event), 'authorization').toEqual({ authorization: '' });
-        expect2(() => conv(ld('wss-con2-event.json').event), 'authorization').toEqual({ authorization: '' });
-        expect2(() => conv(ld('wss-con3-event.json').event), 'authorization').toEqual({
-            authorization: 'Basic bm9uZTpsZW1vbg==',
-        });
+        // expect2(() => conv(ld('wss-con-event.json').event), 'authorization').toEqual({ authorization: '' });
+        // expect2(() => conv(ld('wss-con2-event.json').event), 'authorization').toEqual({ authorization: '' });
+        // expect2(() => conv(ld('wss-con3-event.json').event), 'authorization').toEqual({
+        //     authorization: 'Basic bm9uZTpsZW1vbg==',
+        // });
     });
 
     it('should pass tools spec', async () => {

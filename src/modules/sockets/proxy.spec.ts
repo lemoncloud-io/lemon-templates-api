@@ -137,13 +137,13 @@ describe('BackendProxy', () => {
             '@event (socket-event) is required - findModel(connection/)',
         );
         expect2(await $conn.findModel({ ...$eventA, connectionId: null }).catch(GETERR)).toEqual(
-            '.connectionId (string) is required - findModel(connection/OjXY6FCWoE0Ee_Q=)',
+            '.connectionId (string) is required - findModel(connection/3a35d8e85096a04d047bf4)',
         );
         expect2(await $conn.findModel({ ...$eventA, stage: null }).catch(GETERR)).toEqual(
-            '.stage (string) is required - findModel(connection/OjXY6FCWoE0Ee_Q=)',
+            '.stage (string) is required - findModel(connection/3a35d8e85096a04d047bf4)',
         );
         expect2(await $conn.findModel({ ...$eventA, domain: null }).catch(GETERR)).toEqual(
-            '.domain (string) is required - findModel(connection/OjXY6FCWoE0Ee_Q=)',
+            '.domain (string) is required - findModel(connection/3a35d8e85096a04d047bf4)',
         );
 
         //* validate a updateDisconnection
@@ -174,7 +174,7 @@ describe('BackendProxy', () => {
             '@event (socket-event) is required - updateDisconnection(connection/)',
         );
         expect2(await $conn.updateDisconnection({ ...$eventA, connectionId: null }).catch(GETERR)).toEqual(
-            '.connectionId (string) is required - updateDisconnection(connection/OjXY6FCWoE0Ee_Q=)',
+            '.connectionId (string) is required - updateDisconnection(connection/3a35d8e85096a04d047bf4)',
         );
     });
 });
