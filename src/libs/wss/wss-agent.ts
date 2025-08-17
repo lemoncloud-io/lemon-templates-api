@@ -82,6 +82,33 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
             return failure(err);
         }
     };
+
+    /**
+     * send message to client.
+     */
+    public async doSend(endpoint: string, connectionId: string, payload?: object | string) {
+        const errScope = `doSend(${endpoint ?? ''}/${connectionId ?? ''})`;
+        const region = $U.env('DEFAULT_REGION', 'ap-northeast-2');
+        const $client = new ApiGatewayManagementApiClient({ region, endpoint });
+        const command = new PostToConnectionCommand({
+            ConnectionId: connectionId,
+            Data: typeof payload !== 'string' ? JSON.stringify(payload) : payload,
+        });
+        // _inf(NS, `> command =`, $U.json(command));
+
+        // ignore internal error
+        try {
+            const $res = await $client.send(command);
+            //TODO [Steve] `Forbidden` occured in ssocio/VPC configuration @250808
+            //NOTE - 다만 lemon에서는 잘 작동하는듯함. (VPC 구성 없음!)
+            // $res := {"$metadata":{"httpStatusCode":200,"requestId":"b86aec0a-85aa-4ab3-bbf4-30c52c808970","attempts":1,"totalRetryDelay":0}}
+            _log(NS, `> $res@${errScope} =`, $U.json($res));
+            return $res;
+        } catch (e) {
+            _err(NS, `> error@${errScope} =`, GETERR(e), e);
+            throw e;
+        }
+    }
 }
 
 /**

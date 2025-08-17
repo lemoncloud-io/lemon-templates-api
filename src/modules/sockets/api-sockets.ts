@@ -13,7 +13,8 @@
 import $cores, { $U, _log, _inf, _err, NextHandler, NextContext } from 'lemon-core';
 import { $T, AbstractCRUDController } from '../../cores';
 import { LambdaWSSHandler, WSSAgentRunner } from '../../libs/wss/wss-agent';
-import { SocketEvent, SocketEventType } from '../../libs/wss/wss-types';
+import { SocketActionType, SocketEvent, SocketEventType } from '../../libs/wss/wss-types';
+import { buildSocketResponse, parseMessage } from '../../libs/wss/tools';
 import { SocketModel } from './model';
 import { SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
@@ -80,6 +81,20 @@ export class SocketAPIController
     }
 
     /**
+     * post to client
+     * @param payload   object or string
+     * @param event     connection-info
+     */
+    public postClientMessage = async (payload: any, event: SocketEvent, options?: { conId?: string }) => {
+        const errScope = `postClientMessage(${this.type()})`;
+        const { stage, domain } = event;
+        if (!domain) throw new Error(`@domain (string) is required -${errScope}`);
+        const conId = options?.conId ?? event?.connectionId;
+        const url = `https://${domain}/${stage ?? ''}`;
+        return this.$wss.doSend(url, conId, payload);
+    };
+
+    /**
      * GET /sockets/0/hello
      *
      * ```sh
@@ -98,17 +113,17 @@ export class SocketAPIController
         });
     };
 
-    public doPostEcho: SocketHandler<any> = async (id, param, body, $ctx) => {
+    public doPostEcho: SocketHandler<any> = async (id, param, event, $ctx) => {
         const errScope = `doPostEcho(${this.type()}/${id ?? ''})`;
-        body && _log(NS, `> body =`, $U.json(body));
+        event && _log(NS, `> event =`, $U.json(event));
         $ctx && _log(NS, `> context =`, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id).trim();
         return;
     };
 
-    public doPostConnect: SocketHandler<any> = async (id, param, body, $ctx) => {
+    public doPostConnect: SocketHandler<any> = async (id, param, event, $ctx) => {
         const errScope = `doPostConnect(${this.type()}/${id ?? ''})`;
-        body && _log(NS, `> body =`, $U.json(body));
+        event && _log(NS, `> event =`, $U.json(event));
         $ctx && _log(NS, `> context =`, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id).trim();
 
@@ -119,20 +134,41 @@ export class SocketAPIController
         return '';
     };
 
-    public doPostDisconnect: SocketHandler<any> = async (id, param, body, $ctx) => {
+    public doPostDisconnect: SocketHandler<any> = async (id, param, event, $ctx) => {
         const errScope = `doPostDisconnect(${this.type()}/${id ?? ''})`;
-        body && _log(NS, `> body =`, $U.json(body));
+        event && _log(NS, `> event =`, $U.json(event));
         $ctx && _log(NS, `> context =`, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id).trim();
         return;
     };
 
-    public doPostMessage: SocketHandler<any> = async (id, param, body, $ctx) => {
+    public doPostMessage: SocketHandler<void> = async (id, param, event, $ctx) => {
         const errScope = `doPostMessage(${this.type()}/${id ?? ''})`;
-        body && _log(NS, `> body =`, $U.json(body));
+        event && _log(NS, `> event =`, $U.json(event));
         $ctx && _log(NS, `> context =`, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id).trim();
-        return;
+
+        // STEP.0 validate body, and parse payload
+        const $msg = parseMessage(event?.body);
+        const action = $msg?.action as SocketActionType;
+        _inf(NS, `> action @${errScope} =`, action);
+
+        //* press `enter` and should get 404 error.
+        if (!event?.body) throw new Error(`404 NOT FOUND - empty body @${errScope}`);
+
+        // STEP.1 route to handler
+        switch (action) {
+            case 'ping':
+                const $pong = buildSocketResponse('pong', $msg?.data);
+                const conId = typeof $msg?.data === 'string' ? $msg.data : undefined;
+                await this.postClientMessage($pong, event, { conId });
+                //WARN - should return `200` status.
+                //TODO [Steve] 각 status 에 따른 행동 패턴 정리하기!!
+                return null;
+            default:
+                const message = `@action[${action}] is invalid (not supported) - ${errScope}`;
+                throw new Error(message);
+        }
     };
 
     /**

@@ -1,6 +1,6 @@
 {
   "name": "eureka-sockets-api",
-  "version": "0.25.805b",
+  "version": "0.25.805f",
   "description": "lemon sockets management api",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
