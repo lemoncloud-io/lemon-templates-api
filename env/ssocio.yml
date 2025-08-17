@@ -27,7 +27,7 @@ local:
 
   STAGE: '!develop'
   NS: TT
-  MY_DYNAMO_TABLE: ssocio-chatbots-table-dev
+  MY_DYNAMO_TABLE: eureka-sockets-table-dev
   USE_SESSION: sample/context/context-session.json             # Load sample for session use in local env
   # ES6_ENDPOINT: https://6w9hrac9dg.execute-api.ap-northeast-2.amazonaws.com/dev/search/0/proxy    # use search-proxy after deployment.
   ES6_ENDPOINT: 'https://localhost:8683'                       # use ssh tunnelling to manage indices setting.
@@ -35,7 +35,7 @@ local:
   # #WARN - for prod debugging.
   # STAGE: '!production'
   # NS: SS
-  # MY_DYNAMO_TABLE: ssocio-chatbots-table
+  # MY_DYNAMO_TABLE: eureka-sockets-table
   # USE_SESSION: sample/context/context-session.json             # Load sample for session use in local env
   # # ES6_ENDPOINT: https://qcpzq0ytbk.execute-api.ap-northeast-2.amazonaws.com/prod/search/0/proxy    # use search-proxy after deployment.
   # ES6_ENDPOINT: 'https://localhost:8683'

@@ -111,7 +111,12 @@ export class SocketAPIController
         body && _log(NS, `> body =`, $U.json(body));
         $ctx && _log(NS, `> context =`, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id).trim();
-        return;
+
+        const throws = param?.throws !== undefined ? $T.S2(param?.throws) : undefined;
+        if (throws) throw new Error(`${throws} - ${errScope}`);
+
+        // must returns some.
+        return '';
     };
 
     public doPostDisconnect: SocketHandler<any> = async (id, param, body, $ctx) => {
