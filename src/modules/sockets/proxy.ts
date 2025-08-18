@@ -10,13 +10,14 @@
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _inf, _log, _err, SearchQuery, NextContext, my_parrallel } from 'lemon-core';
+import { $U, $T, _inf, _log, _err, SearchQuery, my_parrallel, NUL404 } from 'lemon-core';
 import { ListResult, MyCoreProxy, MyManagerProxy, onlyDefined, parsePaginateParam } from '../../cores';
 import { ChannelModel, ConnectionModel, ModelType, SocketModel } from './model';
 import { BackendService, ChannelModelManager, ConnectionModelManager, SocketModelManager } from './service';
 import { $trans, ChannelTransformer, SocketTransformer } from './transformer';
 import { SocketEvent } from '../../libs/wss/wss-types';
 import { parseBase64 } from '../../libs/wss/tools';
+import { ChannelStereo } from './types';
 const NS = $U.NS('sockets', 'blue'); // NAMESPACE TO BE PRINTED.
 
 /** the expected `BackendProxy` */
@@ -250,6 +251,139 @@ export class ChannelManagerProxy extends MyManagerProxy<ChannelModel, ChannelMod
      * convert to `channel-id`
      * @param channel   name of channel
      * @param stereo    stereo as `role`.
+     * @deprecated not used anymore. use `alias` instead.
      */
     public asChannelId = (channel: string, stereo?: string) => (stereo ? `${channel}.${stereo}` : `${channel}`);
+
+    /** as alias-id */
+    public asAliasId = (
+        /** the topic name of channel */
+        service: string,
+        /** the model type */
+        modelType: string,
+        options?: { prefix?: string; stereo?: ChannelStereo; delim?: string },
+    ) => {
+        const prefix = options?.prefix ?? '@';
+        const stereo = options?.stereo ?? 'alias';
+        const _service = service?.toLocaleLowerCase() ?? '-';
+        const _modelType = modelType?.toLocaleLowerCase() ?? '-';
+        const delim = options?.delim ?? ':';
+        return [`${prefix}${stereo}`, _service, _modelType].join(delim);
+    };
+
+    /**
+     * find(or make) the alias model
+     */
+    public async getAlias$(
+        /** the topic name of channel */
+        service: string,
+        /** the model type */
+        modelType: string,
+        /** (optional) */
+        options?: { throwable?: boolean; errScope?: string; stereo?: ChannelStereo },
+    ): Promise<ChannelModel> {
+        const throwable = options?.throwable ?? true;
+        const errScope = options?.errScope ?? `findAlias(${this.$mgr.type ?? ''}/${service ?? ''}@${modelType ?? ''})`;
+        const stereo = options?.stereo ?? 'alias';
+        if (!service) return null;
+        try {
+            const id = this.asAliasId(service, modelType, { stereo });
+            const $def = onlyDefined<ChannelModel>({ stereo, id });
+            const $base = await this.proxy.makeModelBase($def, { useSession: true, throwable: false });
+            const $alias = await this.get(id, $base);
+            const isValid = $alias?.id && $alias.stereo === stereo;
+            if (!isValid)
+                throw new Error(`.stereo[${id}/${$alias?.stereo ?? ''}] is invalid (not ${stereo}) - ${errScope}`);
+            return $alias;
+        } catch (e) {
+            if (throwable) throw e;
+            return null;
+        }
+    }
+
+    /**
+     * update(or change) the alias of channel.
+     *
+     * @param service service to be updated
+     * @param modelType modelType to be updated
+     * @param $valid channel-model in valiadation.
+     *
+     * @returns the alias model by service and modelType.
+     */
+    public async updateAlias(
+        service: string,
+        modelType: string,
+        $valid?: ChannelModel,
+        options?: { errScope?: string },
+    ): Promise<ChannelModel> {
+        const errScope =
+            options?.errScope ?? `updateAlias(${this.$mgr.type ?? ''}/${service ?? ''}@${modelType ?? ''})`;
+        const modelId = $valid?.id;
+        const $org = modelId ? await this.get(modelId, false) : null;
+        if ($org?.id && $org?.id !== modelId)
+            throw new Error(`@channel.id[${$org?.id ?? ''}] is invalid (miss by ${modelId}) - ${errScope}`);
+
+        //* `.service` 혹은 `.modelType`이 기존에서 변경된 경우 처리하기
+        const _hasChanged = (N: ChannelModel, field: keyof ChannelModel, next?: string) =>
+            N?.[field] && N[field] !== next;
+
+        if (_hasChanged($org, 'service', service) || _hasChanged($org, 'modelType', modelType)) {
+            const $alias = await this.getAlias$($org.service, $org.modelType);
+            if ($alias?.id) await this.set($alias?.id, { aliasId: '', alias$: null });
+        }
+
+        //* re-link the alias by service&modelType.
+        const $alias = await this.getAlias$(service, modelType);
+        if ($alias?.aliasId && modelId && $alias?.aliasId !== modelId)
+            throw new Error(
+                `.alias[${service ?? ''}/${modelType ?? ''}] is invalid (occupied by ${
+                    $alias?.aliasId ?? ''
+                }) - ${errScope}`,
+            );
+        const $ups = onlyDefined<ChannelModel>({
+            modelType,
+            service,
+            aliasId: modelId ?? '',
+            alias$: this.trans.asHead({ ...$org, ...$valid }),
+        });
+        const $res = $alias?.id ? await this.set($alias.id, $ups) : $alias;
+        _log(NS, `>> final alias :=`, $U.json($res));
+        return $res;
+    }
+
+    /**
+     * find model by `service` and `modelType` w/ alias
+     * - use `makeModel()` to make alias in auto.
+     */
+    public findByAlias = (
+        service: string,
+        modelType: string,
+        options?: { throwable?: boolean; errScope?: string },
+    ): Promise<ChannelModel> => this.findByAlias$(service, modelType, { ...options, detail: false });
+    public async findByAlias$(
+        service: string,
+        modelType: string,
+        options?: { throwable?: boolean; errScope?: string; detail?: boolean },
+    ): Promise<ChannelModel> {
+        const errScope =
+            options?.errScope ?? `findByAlias$(${this.$mgr.type ?? ''}/${service ?? ''}@${modelType ?? ''})`;
+        const throwable = options?.throwable ?? true;
+        const detail = options?.detail ?? false;
+
+        //* find the alias by code.
+        const $alias = await this.getAlias$(service, modelType, options);
+        if (!$alias?.aliasId) {
+            if (throwable) throw new Error(`404 NOT FOUND - channel by alias@${errScope}`);
+            return null;
+        }
+
+        //* find target channel by alias.
+        const $channel = await this.get($alias?.aliasId, false).catch(NUL404);
+        if (!$channel?.id) {
+            if (throwable) throw new Error(`404 NOT FOUND - channel[${$alias?.aliasId}] by alias @${errScope}`);
+            return null;
+        }
+        if (detail) return { ...$channel, $alias }; // return the detail info.
+        return $channel;
+    }
 }

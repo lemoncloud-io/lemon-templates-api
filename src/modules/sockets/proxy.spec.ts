@@ -189,4 +189,49 @@ describe('BackendProxy', () => {
             '@model.id (string) is required - updateConnection(connection/)',
         );
     });
+
+    it('should pass ChannelManagerProxy', async () => {
+        const { service, proxy, _ts } = instance();
+        expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
+
+        const $channel = proxy.channel;
+        expect2(() => $channel.$mgr.hello()).toEqual(
+            'typed-storage-service:channel/proxy-storage-service:dummy-storage-service:dummy-data/_id',
+        );
+
+        //! test of `asAliasId()`
+        expect2(() => $channel.asAliasId(null, null)).toEqual('@alias:-:-');
+        expect2(() => $channel.asAliasId(undefined, undefined)).toEqual('@alias:-:-');
+        expect2(() => $channel.asAliasId('', '')).toEqual('@alias::');
+        expect2(() => $channel.asAliasId('aaa', 'bbb')).toEqual('@alias:aaa:bbb');
+        expect2(() => $channel.asAliasId('AAA', 'BBB', { prefix: '#' })).toEqual('#alias:aaa:bbb');
+        expect2(() => $channel.asAliasId('lemon-hello-api', 'hello')).toEqual('@alias:lemon-hello-api:hello');
+        expect2(() => $channel.asAliasId('test-api', 'test-model', { delim: '|' })).toEqual(
+            '@alias|test-api|test-model',
+        );
+        expect2(() => $channel.asAliasId('test-api', 'test-model', { prefix: '$', stereo: '', delim: '/' })).toEqual(
+            '$/test-api/test-model',
+        );
+        expect2(await $channel.getAlias$(null, null).catch(GETERR)).toEqual(null);
+        expect2(await $channel.getAlias$(undefined, undefined).catch(GETERR)).toEqual(null);
+        expect2(await $channel.getAlias$('-', null).catch(GETERR), 'id').toEqual({ id: '@alias:-:-' });
+        expect2(await $channel.getAlias$('-', '-').catch(GETERR), 'id').toEqual({ id: '@alias:-:-' });
+
+        //! test of `updateAlias()`
+        const _updateAlias = (service: string, type: string, id?: string) =>
+            $channel.updateAlias(service, type, { id }).catch(GETERR);
+
+        expect2(await _updateAlias('hello', 'test'), 'service,modelType,aliasId').toEqual({
+            aliasId: '',
+            service: 'hello',
+            modelType: 'test',
+        });
+        expect2(await _updateAlias('hello', 'test', 'a'), 'aliasId').toEqual({ aliasId: 'a' });
+        expect2(await _updateAlias('hello', 'test', 'b'), 'aliasId').toEqual(
+            '.alias[hello/test] is invalid (occupied by a) - updateAlias(channel/hello@test)',
+        );
+        expect2(await _updateAlias('hello', 'test'), 'aliasId').toEqual({ aliasId: '' });
+        expect2(await _updateAlias('Hello', 'test', 'b'), 'aliasId').toEqual({ aliasId: 'b' });
+        expect2(await _updateAlias('Hello', '', ''), 'aliasId').toEqual({ aliasId: '' });
+    });
 });
