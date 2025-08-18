@@ -91,6 +91,7 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
 
     /**
      * establish a channel group
+     * @deprecated 미사용 제거예정.
      */
     public async establishChannel(
         channel: string,
@@ -108,11 +109,12 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
         // STEP.1 prepare master & sub channel model.
         const masterId = this.channel.asChannelId(channel);
         const channelId = this.channel.asChannelId(channel, stereo);
+        const type = `${stereo}` as any;
 
         // STEP.2 build channel models
         const models: ChannelModel[] = [
             { id: masterId, channel },
-            { id: channelId, stereo, channel },
+            { id: channelId, stereo: type, channel },
         ];
 
         // STEP.3 get or create channel models in parallel

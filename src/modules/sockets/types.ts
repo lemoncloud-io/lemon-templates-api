@@ -37,7 +37,20 @@ const $LUT = {
         /** channel model */
         channel: 'channel',
     },
+    /**
+     * ChannelStereo
+     */
+    ChannelStereo: {
+        '': '',
+        /** alias */
+        alias: 'alias',
+    },
 };
+
+/**
+ * type: `ChannelStereo`
+ */
+export type ChannelStereo = keyof typeof $LUT.ChannelStereo;
 
 /** must export $LUT as default */
 export default $LUT;

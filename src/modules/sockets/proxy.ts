@@ -10,11 +10,11 @@
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _inf, _log, _err, SearchQuery } from 'lemon-core';
+import { $U, $T, _inf, _log, _err, SearchQuery, NextContext, my_parrallel } from 'lemon-core';
 import { ListResult, MyCoreProxy, MyManagerProxy, onlyDefined, parsePaginateParam } from '../../cores';
 import { ChannelModel, ConnectionModel, ModelType, SocketModel } from './model';
 import { BackendService, ChannelModelManager, ConnectionModelManager, SocketModelManager } from './service';
-import { $trans, SocketTransformer } from './transformer';
+import { $trans, ChannelTransformer, SocketTransformer } from './transformer';
 import { SocketEvent } from '../../libs/wss/wss-types';
 import { parseBase64 } from '../../libs/wss/tools';
 const NS = $U.NS('sockets', 'blue'); // NAMESPACE TO BE PRINTED.
@@ -95,9 +95,10 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
         options?: { useSession?: boolean; errScope?: string; validate?: boolean },
     ): Promise<ConnectionModel> {
         const errScope = options?.errScope ?? `findModel(${this.$mgr.type}/${event?.id ?? ''})`;
+        _log(NS, `...${errScope}`);
         const validate = options?.validate ?? true;
-        const useSession = options?.useSession ?? false;
-        const $sess = useSession ? this.proxy.getCurrentSession({ useSession }) : null;
+        const useSession = options?.useSession ?? $U.env('USE_SESSION');
+        const $sess = useSession ? this.proxy.getCurrentSession(options) : null;
 
         /** STEP.0 validate paramters */
         if (validate) {
@@ -118,7 +119,6 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
             stage,
             domain,
             connectionId,
-            connected: 1,
             disConnectedAt: 0,
             connectedAt,
             origin: event?.origin,
@@ -133,47 +133,6 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
     }
 
     /**
-     * update connection model w/ disconnection info
-     */
-    public async updateDisconnection(
-        event?: SocketEvent,
-        options?: { errScope?: string; validate?: boolean; current?: number },
-    ): Promise<ConnectionModel> {
-        const errScope = options?.errScope ?? `updateDisconnection(${this.$mgr.type}/${event?.id ?? ''})`;
-        const validate = options?.validate ?? true;
-        const current = options?.current ?? this.storage.storage.getTime();
-
-        /** STEP.0 validate parameters */
-        if (validate) {
-            if (!event) throw new Error(`@event (socket-event) is required - ${errScope}`);
-            if (!event?.connectionId) throw new Error(`.connectionId (string) is required - ${errScope}`);
-        }
-
-        /** STEP.1 extract parameters */
-        const { connectionId, reason } = event;
-        const connId = parseBase64(connectionId);
-
-        // STEP.2 find a model
-        const $conn = await this.get(connId, false);
-        if ($conn?.id !== connId)
-            throw new Error(`.connId[${connId}] is invalid (expected as ${$conn?.id ?? ''}) - ${errScope}`);
-        if ($conn?.disConnectedAt > 0) return $conn; // bypass
-
-        /** STEP.3 decrease connected count */
-        const $dec = await this.inc($conn.id, { connected: -1 });
-        _log(NS, `> $conn[${$conn.id}].connected = `, $dec?.connected);
-
-        // STEP.4 prepare updates
-        const $ups = onlyDefined<ConnectionModel>({
-            disconnectCode: event?.disconnectCode,
-            disConnectedAt: current,
-            reason,
-        });
-        const $final = await this.set($conn.id, $ups);
-        return $final;
-    }
-
-    /**
      * update connection model
      */
     public async updateConnection<T extends ConnectionModel>(model: T, $ups: T): Promise<T> {
@@ -185,6 +144,19 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
 
         /** STEP.1 extract parameters */
         const $updates = onlyDefined<T>({ ...$ups });
+
+        // update `channels[] and populate channel$$`
+        if ($updates?.channels !== undefined) {
+            const ids = $updates?.channels?.map(id => ({ id }));
+            const list = await my_parrallel(ids, async (N, i) => {
+                if (!N?.id) throw new Error(`.id (string) is required (at channels[${i}]) - ${errScope}`);
+                const $chan = await this.proxy.channel.get(N.id, false);
+                if (!$chan) throw new Error(`.id[${N.id}] is invalid (not found) - ${errScope}`);
+                return $chan;
+            });
+            $updates.channels = list.map(N => N.id);
+            $updates.channel$$ = list.map(N => this.proxy.channel.trans.asHead(N));
+        }
 
         // STEP.2 validate and update model
         const $valid = await this.validateModel($updates, model.id);
@@ -252,6 +224,11 @@ export class ChannelManagerProxy extends MyManagerProxy<ChannelModel, ChannelMod
     /** default construction */
     public constructor(readonly proxy: BackendProxy, manager: ChannelModelManager) {
         super(proxy, manager);
+    }
+
+    /** get the transformer */
+    public get trans(): ChannelTransformer {
+        return $trans.channel;
     }
 
     /**

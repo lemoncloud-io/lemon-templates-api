@@ -85,7 +85,6 @@ describe('BackendProxy', () => {
             domain: $eventA.domain,
             remote: $eventA.remote,
             stage: $eventA.stage,
-            connected: 1,
             origin: '',
             reason: '',
             agent: '',
@@ -146,35 +145,48 @@ describe('BackendProxy', () => {
             '.domain (string) is required - findModel(connection/3a35d8e85096a04d047bf4)',
         );
 
-        //* validate a updateDisconnection
-        const $eventD = _loadEvent('wss-dis-event'); //
-        expect2(await $conn.updateDisconnection($eventD)).toEqual({
+        //* validate a updateConnection
+        expect2(await $conn.updateConnection($connA, {})).toEqual({
             ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
             ...expected,
-            connected: 0,
-            disConnectedAt: current,
-            reason: 'Client-side close frame status not set',
-            disconnectCode: 1005,
         });
-        expect2(await $conn.updateDisconnection($eventD)).toEqual({
+        expect2(await $conn.updateConnection({ id: $connA.id }, {})).toEqual({
             ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
             ...expected,
-            connected: 0,
-            disConnectedAt: current,
-            reason: 'Client-side close frame status not set',
+        });
+        expect2(await $conn.updateConnection($connA, { disconnectCode: 1005, disConnectedAt: current })).toEqual({
+            ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
+            ...expected,
             disconnectCode: 1005,
+            disConnectedAt: current,
+        });
+        expect2(await $conn.updateConnection($connA, { channels: [] })).toEqual({
+            ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
+            ...expected,
+            disconnectCode: 1005,
+            disConnectedAt: current,
+            channels: [],
+            channel$$: [],
         });
 
-        const $eventE = _loadEvent('wss-dis2-event'); // not saved connection
-        expect2(await $conn.updateDisconnection($eventE).catch(GETERR)).toEqual(
-            `.connId[3a6de38dd09e204d021558] is invalid (expected as ) - updateDisconnection(connection/${$eventE.id})`,
-        );
+        // link channel to connection
+        const $channA = await proxy.channel.makeModel({ id: 'A:B', service: 'B', modelType: 'B' });
+        expect2(() => $channA, 'id,service,modelType').toEqual({ id: 'A:B', service: 'B', modelType: 'B' });
 
-        expect2(await $conn.updateDisconnection(null).catch(GETERR)).toEqual(
-            '@event (socket-event) is required - updateDisconnection(connection/)',
+        expect2(await $conn.updateConnection($connA, { channels: [$channA.id] })).toEqual({
+            ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
+            ...expected,
+            disconnectCode: 1005,
+            disConnectedAt: current,
+            channels: [$channA.id],
+            channel$$: [proxy.channel.trans.asHead($channA)],
+        });
+
+        expect2(await $conn.updateConnection(null, null).catch(GETERR)).toEqual(
+            '@model (connection-model) is required - updateConnection(connection/)',
         );
-        expect2(await $conn.updateDisconnection({ ...$eventA, connectionId: null }).catch(GETERR)).toEqual(
-            '.connectionId (string) is required - updateDisconnection(connection/3a35d8e85096a04d047bf4)',
+        expect2(await $conn.updateConnection({}, null).catch(GETERR)).toEqual(
+            '@model.id (string) is required - updateConnection(connection/)',
         );
     });
 });

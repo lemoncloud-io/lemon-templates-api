@@ -11,11 +11,11 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import $cores, { $U, _log, _inf, _err, NextHandler, NextContext, $protocol } from 'lemon-core';
-import { $T, AbstractCRUDController } from '../../cores';
+import { $T, AbstractCRUDController, onlyDefined } from '../../cores';
 import { LambdaWSSHandler, WSSAgentRunner } from '../../libs/wss/wss-agent';
 import { SocketActionType, SocketEvent, SocketEventType } from '../../libs/wss/wss-types';
 import { buildSocketResponse, parseMessage } from '../../libs/wss/tools';
-import { SocketModel } from './model';
+import { ConnectionModel, SocketModel } from './model';
 import { SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
 import { SocketBody, SocketView } from './views';
@@ -144,8 +144,23 @@ export class SocketAPIController
         const throws = param?.throws !== undefined ? $T.S2(param?.throws) : undefined;
         if (throws) throw new Error(`${throws} - ${errScope}`);
 
-        // must returns some.
-        return '';
+        // STEP.0 extract parameters.
+        const channels = $T.SS(param?.channels);
+
+        return this.service.guardProxy($ctx, async proxy => {
+            // STEP.1 find connection model.
+            const $conn = await proxy.connection.findModel(event);
+
+            // STEP.2 retrieve channels in parrallel.
+            const $result = await proxy.connection.updateConnection($conn, { channels });
+            _inf(NS, `> $conn[${$conn?.id}].channels =`, $result?.channels ?? []);
+
+            // returns
+            return {
+                id: event?.id,
+                $conn: $result,
+            };
+        });
     };
 
     public doPostDisconnect: SocketHandler<any> = async (id, param, event, $ctx) => {
@@ -153,7 +168,31 @@ export class SocketAPIController
         event && _log(NS, `> event =`, $U.json(event));
         $ctx && _log(NS, `> context =`, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id).trim();
-        return;
+
+        return this.service.guardProxy($ctx, async proxy => {
+            // STEP.1 find connection model.
+            const $conn = await proxy.connection.findModel(event, { useSession: false });
+            if ($conn?.disConnectedAt > 0) {
+                _inf(NS, `> $conn[${$conn?.id}] already disconnectedAt`, $U.ts($conn?.disConnectedAt));
+                return { id: event?.id, $conn };
+            }
+
+            // STEP.2 disconnect the connection.
+            const now = proxy.connection.storage.storage.getTime();
+            const $ups = onlyDefined<ConnectionModel>({
+                disconnectCode: event?.disconnectCode,
+                reason: event?.reason,
+                disConnectedAt: now,
+            });
+            const $result = await proxy.connection.updateConnection($conn, $ups);
+            _inf(NS, `> $conn[${$conn?.id}].disconnectAt =`, $U.ts($result?.disConnectedAt));
+
+            // returns
+            return {
+                id: event?.id,
+                $conn: $result,
+            };
+        });
     };
 
     /**

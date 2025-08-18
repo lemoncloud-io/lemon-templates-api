@@ -270,12 +270,16 @@ export class WSSAgent {
         //* run in guard-proxy
         return this.service.guardProxy(this.context, async proxy => {
             // STEP.1 update disconnection info
-            // TODO - 리팩토링 예정 @aiden
-            const $conn = await proxy.connection.updateDisconnection(event);
+            const $conn = await proxy.connection.findModel(event);
+            const $ups = onlyDefined({
+                disconnectCode: event?.disconnectCode,
+                disconnectReason: event?.reason,
+            });
+            const $res = await proxy.connection.updateConnection($conn, $ups);
 
             return {
                 id: event?.id,
-                $conn,
+                $conn: $res,
             };
         });
     }
@@ -377,7 +381,7 @@ export class WSSAgent {
                 const connId = N?.id ? $T.S2(N.id) : null;
                 const $conn = connId ? await proxy.connection.get(connId) : null;
                 //* if valid, post msg...
-                if ($conn?.connected && $conn?.connectionId) {
+                if (!$conn?.disConnectedAt && $conn?.connectionId) {
                     return this.postClientMessage(data, $conn)
                         .then(() => {
                             return { id: N.id, error: null as string };
