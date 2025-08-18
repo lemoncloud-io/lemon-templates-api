@@ -61,7 +61,11 @@ export interface SocketResponse<T = any> {
     /**
      * timestamp in `YYYY-MM-DD HH:mm:ss`
      */
-    ts: string;
+    ts?: string;
+    /**
+     * timestamp in number
+     */
+    timestamp?: number;
 }
 
 /**
