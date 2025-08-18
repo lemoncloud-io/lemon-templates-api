@@ -20,6 +20,8 @@ import { ConnectionInfo, SocketActionType, SocketEvent, SocketEventType } from '
 export { SocketPayload, SocketResponse } from './wss-types';
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
 import { BackendService } from '../../service/backend-service';
+import { Context } from 'aws-lambda';
+import { MyHttpHeaderTool } from 'lemon-core/dist/cores/lambda/lambda-web-handler';
 const NS = $U.NS(`wss`, 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -45,6 +47,11 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
         if (!service) throw new Error(`@service is required - LambdaWSSHandler`);
         if (!runner) throw new Error(`@runner is required - LambdaWSSHandler`);
     }
+
+    /**
+     * say hello
+     */
+    public hello = () => `lambda-wss-handler:${this.service.hello()}`;
 
     /**
      * Default WSS Handler.
@@ -84,6 +91,56 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
     };
 
     /**
+     * builder of tools for http-headers
+     * - extracting header content, and parse.
+     */
+    public tools = (event: WSSEvent): WSSHeaderTool => new WSSHeaderTool(event?.headers);
+
+    /**
+     * (optional) pack the origin context to application context.
+     * - override this function if required!
+     *
+     * @param event     origin event
+     * @param context   origin context of lambda
+     * @override `@lemon-core/LambdaHandlerService.packContext`
+     */
+    public packContext = async (event?: WSSEvent, orgContext?: Context): Promise<NextContext> => {
+        _log(NS, `packContext(${event ? '' : 'null'})..`);
+        if (!event) return null;
+        //* prepare chain object.
+        const reqContext = event?.requestContext;
+        orgContext && _log(NS, `> orgContext =`, $U.S(orgContext, 256, 32));
+        reqContext && _log(NS, `> reqContext =`, $U.S(reqContext, 256, 32));
+
+        // STEP.1 extract the key headers.
+        const $tool = this.tools(event);
+        const identity = await $tool.parseIdentityHeader();
+        const _prepare = (): NextContext => {
+            const cookie = $tool.parseCookiesHeader();
+            const domain = $tool.getHeader('host');
+            const referer = $tool.getHeader('referer');
+            const origin = $tool.getHeader('origin');
+            const userAgent = $tool.getHeader('user-agent');
+            const authorization = $tool.getHeader('authorization');
+            return $tool.onlyDefined<NextContext>({
+                identity,
+                cookie,
+                domain,
+                referer,
+                origin,
+                userAgent,
+                authorization,
+            });
+        };
+
+        // STEP.3. prepare the final `next-context`.
+        const $ctx = await $tool.prepareContext(_prepare(), reqContext);
+
+        // FINIAL. returns
+        return $ctx;
+    };
+
+    /**
      * send message to client.
      */
     public async doSend(endpoint: string, connectionId: string, payload?: object | string) {
@@ -110,6 +167,11 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
         }
     }
 }
+
+/**
+ * WSS Header Tool
+ */
+export class WSSHeaderTool extends MyHttpHeaderTool {}
 
 /**
  * builder/factory for sockets per each event.
