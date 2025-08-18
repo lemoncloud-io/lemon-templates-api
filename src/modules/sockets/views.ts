@@ -13,6 +13,9 @@ import { View, Body } from 'lemon-model';
 import { ChannelModel, ConnectionModel, SocketModel } from './model';
 import $LUT from './types';
 
+import { SocketPayload, SocketResponse } from '../../libs/wss/wss-types';
+export { SocketPayload, SocketResponse };
+
 //! export all internal types
 export * from './types';
 export default $LUT;

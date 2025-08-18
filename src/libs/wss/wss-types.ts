@@ -42,6 +42,10 @@ export interface SocketPayload<T = any> {
      * message data
      */
     data: T;
+    /**
+     * timestamp in number
+     */
+    timestamp?: number;
 }
 
 /**
@@ -62,10 +66,6 @@ export interface SocketResponse<T = any> {
      * timestamp in `YYYY-MM-DD HH:mm:ss`
      */
     ts?: string;
-    /**
-     * timestamp in number
-     */
-    timestamp?: number;
 }
 
 /**
