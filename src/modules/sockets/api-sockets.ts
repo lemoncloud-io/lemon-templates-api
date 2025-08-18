@@ -180,7 +180,10 @@ export class SocketAPIController
         switch (action) {
             case 'ping':
                 const $pong = buildSocketResponse('pong', $msg?.data);
-                const conId = typeof $msg?.data === 'string' ? $msg.data : event.connectionId;
+                const conId =
+                    typeof $msg?.data === 'string' && $msg.data?.length == 'OjXY6chgoE0CIdw='.length
+                        ? $msg.data
+                        : event.connectionId;
                 await this.postClientMessage($pong, event, { conId, domain: event?.domain });
                 //WARN - should return `200` status.
                 //TODO [Steve] 각 status 에 따른 행동 패턴 정리하기!!
