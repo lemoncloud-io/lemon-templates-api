@@ -243,6 +243,17 @@ export class ChannelManagerProxy extends MyManagerProxy<ChannelModel, ChannelMod
         //* test case for api calling.
         const errScope = `validate(${this.$mgr.type}/${modelId ?? ''})`;
 
+        //* make sure of alias
+        const id = validated?.id || modelId;
+        if (id && (validated?.service !== undefined || validated?.modelType !== undefined)) {
+            const service = $T.S2(validated.service);
+            const modelType = $T.S2(validated.modelType);
+            const $res = await this.updateAlias(service, modelType, { ...validated, id }, { errScope });
+            _log(NS, `> final alias =`, $U.json($res));
+            validated.service = $res?.service ?? '';
+            validated.modelType = $res?.modelType ?? '';
+        }
+
         // returns.
         return validated as T;
     }
@@ -288,7 +299,7 @@ export class ChannelManagerProxy extends MyManagerProxy<ChannelModel, ChannelMod
         if (!service) return null;
         try {
             const id = this.asAliasId(service, modelType, { stereo });
-            const $def = onlyDefined<ChannelModel>({ stereo, id });
+            const $def = onlyDefined<ChannelModel>({ stereo, id, service, modelType });
             const $base = await this.proxy.makeModelBase($def, { useSession: true, throwable: false });
             const $alias = await this.get(id, $base);
             const isValid = $alias?.id && $alias.stereo === stereo;
@@ -324,11 +335,10 @@ export class ChannelManagerProxy extends MyManagerProxy<ChannelModel, ChannelMod
             throw new Error(`@channel.id[${$org?.id ?? ''}] is invalid (miss by ${modelId}) - ${errScope}`);
 
         //* `.service` 혹은 `.modelType`이 기존에서 변경된 경우 처리하기
-        const _hasChanged = (N: ChannelModel, field: keyof ChannelModel, next?: string) =>
-            N?.[field] && N[field] !== next;
-
-        if (_hasChanged($org, 'service', service) || _hasChanged($org, 'modelType', modelType)) {
-            const $alias = await this.getAlias$($org.service, $org.modelType);
+        const diff = $U.diff($org || {}, $valid || {});
+        const _changed = (key: keyof ChannelModel) => diff.includes(key) && $valid[key] !== undefined;
+        if (_changed('service') || _changed('modelType')) {
+            const $alias = await this.getAlias$($org?.service, $org?.modelType);
             if ($alias?.id) await this.set($alias?.id, { aliasId: '', alias$: null });
         }
 

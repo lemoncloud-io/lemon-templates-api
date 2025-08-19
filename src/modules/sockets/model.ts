@@ -146,6 +146,9 @@ export interface ChannelModel extends Model, ChannelHead {
 
     /** (internal) count of subscribers */
     subscribed?: number;
+
+    /** (internal) the linked alias for detailed */
+    readonly $alias?: ChannelModel;
 }
 
 /**

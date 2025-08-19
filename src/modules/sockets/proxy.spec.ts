@@ -12,7 +12,7 @@ import { loadProfile } from 'lemon-core/dist/environ';
 import { expect2, NextIdentityAccess, $info, loadJsonSync, GETERR } from 'lemon-core';
 import { SocketEvent } from '../../libs/wss/wss-types';
 import { convertWSSEvent } from '../../libs/wss/tools';
-import { ConnectionModel } from './model';
+import { ChannelModel, ConnectionModel } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';
@@ -233,5 +233,66 @@ describe('BackendProxy', () => {
         expect2(await _updateAlias('hello', 'test'), 'aliasId').toEqual({ aliasId: '' });
         expect2(await _updateAlias('Hello', 'test', 'b'), 'aliasId').toEqual({ aliasId: 'b' });
         expect2(await _updateAlias('Hello', '', ''), 'aliasId').toEqual({ aliasId: '' });
+
+        expect2(await $channel.get('', false).catch(GETERR)).toEqual('@id is required - retrieve(channel/)');
+        expect2(await $channel.get('0', false).catch(GETERR)).toEqual(null);
+
+        //* validate update linked model
+        const aliasA = {
+            ..._ts('@alias:hello:world', 'channel'),
+            stereo: 'alias',
+            service: 'hello',
+            modelType: 'world',
+            sid: '',
+            uid: '',
+        };
+        expect2(await $channel.getAlias$('hello', 'world')).toEqual({
+            ...aliasA,
+        });
+
+        const model0: ChannelModel = { service: 'hello', modelType: 'world' };
+        expect2(await $channel.findByAlias(model0.service, model0.modelType).catch(GETERR)).toEqual(
+            '404 NOT FOUND - channel by alias@findByAlias$(channel/hello@world)',
+        );
+        const $model0 = await $channel.makeModel({ ...model0 });
+        expect2(() => $model0, 'id,service,modelType').toEqual({ id: '1000001', modelType: 'world', service: 'hello' });
+        expect2(await $channel.getAlias$(model0.service, model0.modelType)).toEqual({
+            ...aliasA,
+            aliasId: $model0.id,
+            alias$: { id: $model0.id, service: model0.service, modelType: model0.modelType },
+        });
+        expect2(await $channel.makeModel({ ...model0 }).catch(GETERR)).toEqual(
+            '.alias[hello/world] is invalid (occupied by 1000001) - validate(channel/)',
+        );
+
+        //! test of `findByAlias()`
+        expect2(await $channel.findByAlias(model0.service, model0.modelType)).toEqual({
+            ...$model0,
+        });
+        expect2(await $channel.findByAlias('hello', 'world!', { throwable: true }).catch(GETERR)).toEqual(
+            '404 NOT FOUND - channel by alias@findByAlias$(channel/hello@world!)',
+        );
+
+        //* (1st) update `modelType`
+        const $model1 = await $channel
+            .validateModel({ ...model0, modelType: 'world2' }, $model0.id)
+            .then(N => $channel.set($model0.id, N));
+        expect2(() => $model1).toEqual({ ...$model0, modelType: 'world2' });
+        expect2(await $channel.findByAlias(model0.service, model0.modelType).catch(GETERR)).toEqual(
+            '404 NOT FOUND - channel by alias@findByAlias$(channel/hello@world)',
+        );
+        expect2(await $channel.findByAlias(model0.service, 'world2').catch(GETERR)).toEqual({
+            ...$model0,
+            modelType: 'world2',
+        });
+
+        //* (2nd) clear `modelType`
+        const $model2 = await $channel
+            .validateModel({ ...model0, modelType: '' }, $model0.id)
+            .then(N => $channel.set($model0.id, N));
+        expect2(() => $model2).toEqual({ ...$model0, modelType: '' });
+        expect2(await $channel.findByAlias(model0.service, 'world2').catch(GETERR)).toEqual(
+            '404 NOT FOUND - channel by alias@findByAlias$(channel/hello@world2)',
+        );
     });
 });

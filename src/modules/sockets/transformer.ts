@@ -98,6 +98,7 @@ export class ChannelTransformer extends AbstractTransformer<ChannelModel, Channe
 
             aliasId: model.aliasId,
             alias$: model.alias$ !== undefined ? this.modelAsView(model.alias$, hasCores) : undefined,
+            $alias: model?.$alias ? this.modelAsView(model.$alias, hasCores) : undefined,
         });
     }
     /**
