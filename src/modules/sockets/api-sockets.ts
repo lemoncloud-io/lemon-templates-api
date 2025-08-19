@@ -229,6 +229,8 @@ export class SocketAPIController
             // STEP.1 find channel and search connections.
             const $pack = await proxy.prepareBroadcast(payload);
             //TODO [Aiden] broadcast to all connections. via `execute-api`
+            //TODO 1. query all target connections in list.
+            //TODO 2. send message to all connections. (use direct or protocol)
         });
     };
 }
