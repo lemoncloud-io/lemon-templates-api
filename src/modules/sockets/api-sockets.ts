@@ -148,17 +148,10 @@ export class SocketAPIController
         const channels = $T.SS(param?.channels);
 
         return this.service.guardProxy($ctx, async proxy => {
-            // STEP.1 find connection model.
-            const $conn = await proxy.connection.findModel(event);
-
-            // STEP.2 retrieve channels in parrallel.
-            const $result = await proxy.connection.updateConnection($conn, { channels });
-            _inf(NS, `> $conn[${$conn?.id}].channels =`, $result?.channels ?? []);
-
-            // returns
+            const $conn = await proxy.doConnect(event, channels, { errScope });
             return {
                 id: event?.id,
-                $conn: $result,
+                $conn,
             };
         });
     };
@@ -170,27 +163,10 @@ export class SocketAPIController
         id = id === '0' ? '' : $T.S2(id).trim();
 
         return this.service.guardProxy($ctx, async proxy => {
-            // STEP.1 find connection model.
-            const $conn = await proxy.connection.findModel(event, { useSession: false });
-            if ($conn?.disConnectedAt > 0) {
-                _inf(NS, `> $conn[${$conn?.id}] already disconnectedAt`, $U.ts($conn?.disConnectedAt));
-                return { id: event?.id, $conn };
-            }
-
-            // STEP.2 disconnect the connection.
-            const now = proxy.connection.storage.storage.getTime();
-            const $ups = onlyDefined<ConnectionModel>({
-                disconnectCode: event?.disconnectCode,
-                reason: event?.reason,
-                disConnectedAt: now,
-            });
-            const $result = await proxy.connection.updateConnection($conn, $ups);
-            _inf(NS, `> $conn[${$conn?.id}].disconnectAt =`, $U.ts($result?.disConnectedAt));
-
-            // returns
+            const $conn = await proxy.doDisconnect(event, { errScope });
             return {
                 id: event?.id,
-                $conn: $result,
+                $conn,
             };
         });
     };

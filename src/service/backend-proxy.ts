@@ -9,14 +9,15 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, _inf, _log, _err, NextContext, my_parrallel } from 'lemon-core';
-import { $T } from '../cores/commons';
+import { $T, onlyDefined } from '../cores/commons';
 import { ModelType } from './backend-types';
 import { BackendService } from './backend-service';
 import { MyCoreProxy } from '../cores/abstract-services';
 import { CallbackManagerProxy } from '../modules/callback/proxy';
 import { MockManagerProxy, TestManagerProxy } from '../modules/mock/proxy';
 import { ConnectionManagerProxy, SocketManagerProxy, ChannelManagerProxy } from '../modules/sockets/proxy';
-import { ChannelModel } from '../modules/sockets/model';
+import { ChannelModel, ConnectionModel } from '../modules/sockets/model';
+import { SocketEvent } from '../libs/wss/wss-types';
 const NS = $U.NS('backend', 'blue'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -124,5 +125,73 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
         const $master = $models?.at(0);
         const $channel = $models?.at(1);
         return { $master, $channel };
+    }
+
+    /**
+     * 소켓 연결 이벤트 수신 시, 커넥션 정보 저장을 처리함.
+     * - find connection model by `event`
+     * - retrieve channels in parallel
+     * - link channels to connection model
+     */
+    public async doConnect(
+        event: SocketEvent,
+        channelIds?: string[],
+        options?: { errScope?: string },
+    ): Promise<ConnectionModel> {
+        const errScope = options?.errScope ?? `doConnect(${event?.id ?? ''})`;
+
+        // STEP.1 find connection model.
+        const $conn = await this.connection.findModel(event, { errScope });
+
+        // STEP.2 retrieve channels in parrallel.
+        const ids = channelIds?.map(id => ({ id })) || [];
+        const $list = await my_parrallel(ids, async (N, i) => {
+            if (!N?.id) throw new Error(`.id (string) is required (at channels[${i}]) - ${errScope}`);
+            const $chan = await this.channel.get(N.id, false);
+            if (!$chan) throw new Error(`.id[${N.id}] is invalid (not found) - ${errScope}`);
+            return $chan;
+        }).then(L => L.filter(N => N && !N?.error));
+
+        // update `channels[] and populate channel$$`
+        const $ups = onlyDefined<ConnectionModel>({
+            channels: $list.map(N => N.id),
+            channel$$: $list.map(N => this.channel.trans.asHead(N)),
+        });
+        // STEP.3 link channels to connection model.
+        const $result = await this.connection.updateConnection($conn, $ups, { errScope });
+        _inf(NS, `> $conn[${$conn?.id}].channels =`, $result?.channels ?? []);
+
+        // returns.
+        return $result;
+    }
+
+    /**
+     * 소켓 해제 이벤트 수신 시, 커넥션 해제 정보 저장을 처리함.
+     */
+    public async doDisconnect(
+        event: SocketEvent,
+        options?: { errScope?: string; current?: number },
+    ): Promise<ConnectionModel> {
+        const errScope = options?.errScope ?? `doDisconnect(${event?.id ?? ''})`;
+        const current = options?.current ?? this.connection.storage.storage.getTime();
+
+        // STEP.1 find connection model.
+        const $conn = await this.connection.findModel(event, { errScope, useSession: false });
+        if ($conn?.disConnectedAt > 0) {
+            _inf(NS, `> $conn[${$conn?.id}] already disconnectedAt`, $U.ts($conn?.disConnectedAt));
+            return $conn;
+        }
+
+        // STEP.2 update connection model w/ disconnected info.
+        const $ups = onlyDefined<ConnectionModel>({
+            disconnectCode: event?.disconnectCode,
+            reason: event?.reason,
+            disConnectedAt: current,
+        });
+        const $result = await this.connection.updateConnection($conn, $ups, { errScope });
+        _inf(NS, `> $conn[${$conn?.id}].disconnectAt =`, $U.ts($result?.disConnectedAt));
+
+        // returns.
+        return $result;
     }
 }

@@ -136,8 +136,12 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
     /**
      * update connection model
      */
-    public async updateConnection<T extends ConnectionModel>(model: T, $ups: T): Promise<T> {
-        const errScope = `updateConnection(${this.$mgr.type}/${model?.id ?? ''})`;
+    public async updateConnection<T extends ConnectionModel>(
+        model: T,
+        $ups: T,
+        options?: { errScope?: string },
+    ): Promise<T> {
+        const errScope = options?.errScope ?? `updateConnection(${this.$mgr.type}/${model?.id ?? ''})`;
 
         /** STEP.0 validate parameters */
         if (!model) throw new Error(`@model (connection-model) is required - ${errScope}`);
@@ -145,19 +149,6 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
 
         /** STEP.1 extract parameters */
         const $updates = onlyDefined<T>({ ...$ups });
-
-        // update `channels[] and populate channel$$`
-        if ($updates?.channels !== undefined) {
-            const ids = $updates?.channels?.map(id => ({ id }));
-            const list = await my_parrallel(ids, async (N, i) => {
-                if (!N?.id) throw new Error(`.id (string) is required (at channels[${i}]) - ${errScope}`);
-                const $chan = await this.proxy.channel.get(N.id, false);
-                if (!$chan) throw new Error(`.id[${N.id}] is invalid (not found) - ${errScope}`);
-                return $chan;
-            });
-            $updates.channels = list.map(N => N.id);
-            $updates.channel$$ = list.map(N => this.proxy.channel.trans.asHead(N));
-        }
 
         // STEP.2 validate and update model
         const $valid = await this.validateModel($updates, model.id);
