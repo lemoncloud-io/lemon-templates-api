@@ -8,8 +8,8 @@
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _inf, _log, _err, NextContext, my_parrallel } from 'lemon-core';
-import { $T, onlyDefined } from '../cores/commons';
+import { $U, _inf, _log, _err, NextContext, my_parrallel, SearchQuery } from 'lemon-core';
+import { $T, onlyDefined, parsePaginateParam } from '../cores/commons';
 import { ModelType } from './backend-types';
 import { BackendService } from './backend-service';
 import { MyCoreProxy } from '../cores/abstract-services';
@@ -17,7 +17,9 @@ import { CallbackManagerProxy } from '../modules/callback/proxy';
 import { MockManagerProxy, TestManagerProxy } from '../modules/mock/proxy';
 import { ConnectionManagerProxy, SocketManagerProxy, ChannelManagerProxy } from '../modules/sockets/proxy';
 import { ChannelModel, ConnectionModel } from '../modules/sockets/model';
-import { SocketEvent } from '../libs/wss/wss-types';
+import { SocketEvent, SocketMessagePayload, SocketModelMeta, SocketResponse } from '../libs/wss/wss-types';
+import { buildSocketResponse } from '../libs/wss/tools';
+import { ListResult } from '../cores';
 const NS = $U.NS('backend', 'blue'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -193,5 +195,89 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
 
         // returns.
         return $result;
+    }
+
+    /**
+     * 특정 채널에 메시지를 전송함.
+     */
+    public async prepareBroadcast(
+        payload: SocketMessagePayload,
+        options?: { errScope?: string },
+    ): Promise<{
+        $channel: ChannelModel;
+        $msg: SocketResponse<SocketModelMeta>;
+        list: ConnectionModel[];
+        connIds: string[];
+    }> {
+        const errScope = options?.errScope ?? `prepareBroadCast(${payload?.service ?? ''}/${payload?.modelType ?? ''})`;
+        _log(NS, `...${errScope}`);
+
+        // STEP.1 find channel by alias
+        const { service, modelType, data } = payload;
+        const $channel = await this.channel.findByAlias(service, modelType, { throwable: false });
+        if (!$channel) throw new Error(`.alias[${service}@${modelType}] is invalid (not found) - ${errScope}`);
+
+        // STEP.2 prepare message
+        const $msg = buildSocketResponse('message', data);
+
+        // STEP.3 search available connections by channel
+        const { list, total } = await this.listAvailableConnections($channel);
+        _log(NS, `> $channel[${$channel.id}].connections count = `, total);
+
+        // STEP.4 filter out connections
+        const connIds = list?.map(N => N?.id)?.filter(N => !!N) || [];
+
+        // returns.
+        return { $channel, $msg, list, connIds };
+    }
+
+    /**
+     * list the available connections by channel.
+     */
+    public async listAvailableConnections(
+        $channel: ChannelModel,
+        options?: { useSearch?: boolean; limit?: number; page?: number },
+    ): Promise<ListResult<ConnectionModel>> {
+        const errScope = `listAvailableConnections()`;
+        const $prf = $T.perf();
+        const useSearch = options?.useSearch ?? true;
+        const $page = parsePaginateParam(options);
+        if (!$channel?.id) throw new Error(`@channel.id (string) is required - ${errScope}`);
+
+        const $conn = this.connection.$mgr;
+        const channel = $T.S2($channel.id);
+        const _scan = async () => {
+            const $def = $conn.buildScanFilter();
+            const filter = $conn.asScanFilter($def, { channel, connected: 1 });
+            const $res = await $conn.doScan($page, filter);
+            return $res;
+        };
+        const _search = async (): Promise<ListResult<ConnectionModel, { key: string; count: number }>> => {
+            const body = $conn.buildQuery($page);
+            const $must: SearchQuery[] = [];
+            if (channel) {
+                $must.push({ terms: { channels: [channel] } });
+                $must.push({
+                    bool: {
+                        should: [
+                            { bool: { must_not: { exists: { field: 'disConnectedAt' } } } },
+                            { range: { disConnectedAt: { lte: 0 } } },
+                        ],
+                        minimum_should_match: 1,
+                    },
+                });
+            }
+            body.query.bool.must = $must;
+
+            const $res = await $conn.parent.doSearch<ConnectionModel>(body);
+            return { list: $res?.list, total: $res?.total, aggr: null };
+        };
+
+        const $res = useSearch ? await _search() : await _scan();
+        const { list, total, aggr } = $res;
+        const took = $prf.took();
+        _log(NS, `> search.took = `, took);
+
+        return { ...$page, list, total, aggr, took };
     }
 }

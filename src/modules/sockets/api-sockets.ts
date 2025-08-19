@@ -14,7 +14,7 @@ import $cores, { $U, _log, _inf, _err, NextHandler, NextContext, $protocol } fro
 import { $T, AbstractCRUDController, onlyDefined } from '../../cores';
 import { LambdaWSSHandler, WSSAgentRunner } from '../../libs/wss/wss-agent';
 import { SocketActionType, SocketEvent, SocketEventType } from '../../libs/wss/wss-types';
-import { buildSocketResponse, parseMessage } from '../../libs/wss/tools';
+import { asSocketMessage, buildSocketResponse, parseMessage } from '../../libs/wss/tools';
 import { ConnectionModel, SocketModel } from './model';
 import { SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
@@ -223,13 +223,13 @@ export class SocketAPIController
         body && _log(NS, `> body =`, $U.json(body));
         $ctx && _log(NS, `> context =`, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id).trim();
-        const [channel, stereo] = `${id || ''}`.split('.');
-
         // STEP.0 validate parameters.
-        if (!channel) throw new Error(`@channel (string) is required - ${errScope}`);
-        if (!stereo) throw new Error(`@stereo (string) is required - ${errScope}`);
-        // const $result = await $sockets(this.service, null, $ctx).broadcast(channel, stereo, body);
-        // return $result;
+        const payload = asSocketMessage(body);
+        return this.service.guardProxy($ctx, async proxy => {
+            // STEP.1 find channel and search connections.
+            const $pack = await proxy.prepareBroadcast(payload);
+            //TODO [Aiden] broadcast to all connections. via `execute-api`
+        });
     };
 }
 

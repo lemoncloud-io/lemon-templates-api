@@ -13,7 +13,14 @@
 
 import { $U, GETERR, WSSEvent } from 'lemon-core';
 import { $T, onlyDefined } from '../../cores';
-import $LUT, { SocketEvent, SocketPayload, SocketResponse, SocketActionType } from './wss-types';
+import $LUT, {
+    SocketEvent,
+    SocketPayload,
+    SocketResponse,
+    SocketActionType,
+    SocketModelMeta,
+    SocketMessagePayload,
+} from './wss-types';
 
 /**
  * base64 encoding/decoding for parsing `connection-id`
@@ -60,6 +67,37 @@ export const parseMessage = <T = any>(data: any): SocketPayload<T> => {
     const action = $cmd && $cmd?.action ? $T.asLut($cmd?.action, $LUT.ActionType, 'action') : '';
     return { ...$cmd, action };
 };
+
+/**
+ * convert the message to SocketMessageMeta
+ */
+export const asSocketMessage = (data: any, validate: boolean = true): SocketMessagePayload => {
+    const errScope = `asSocketMessage(${data?.service ?? ''}/${data?.modelType ?? ''})`;
+    if (validate) {
+        if (!data) throw new Error(`@data (message-payload) is required - ${errScope}`);
+        if (!data?.service) throw new Error(`@data.service (string) is required - ${errScope}`);
+        if (!data?.modelType) throw new Error(`@data.modelType (string) is required - ${errScope}`);
+    }
+    const service = $T.S2(data.service);
+    const modelType = $T.S2(data.modelType);
+    const event = $T.asLut(data?.event ?? '', $LUT.MessageActionType, 'event');
+    const ts = $T.S(data.ts, $U.ts());
+    const meta$ = asSocketModelMeta(data?.data);
+    return { service, modelType, event, ts, data: meta$ };
+};
+
+/**
+ * convert the message to SocketModelMeta
+ */
+export const asSocketModelMeta = (data: any): SocketModelMeta =>
+    onlyDefined<SocketModelMeta>({
+        ...data,
+        id: data?.id !== undefined ? $T.S2(data.id) : undefined,
+        type: data?.type !== undefined ? $T.S2(data.type) : undefined,
+        sid: data?.sid !== undefined ? $T.S2(data.sid) : undefined,
+        uid: data?.uid !== undefined ? $T.S2(data.uid) : undefined,
+        gid: data?.gid !== undefined ? $T.S2(data.gid) : undefined,
+    });
 
 /**
  * build WebSocket response message

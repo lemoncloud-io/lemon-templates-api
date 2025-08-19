@@ -1,0 +1,14 @@
+{
+    "!": "lemon-sandbox-api에서 수신한 소켓 메시지(요청) 샘플.",
+    "service": "lemon-sandbox-api",
+    "modelType": "test",
+    "event": "create",
+    "ts": "2025-08-19 12:00:00",
+    "data": {
+        "id": "1000001",
+        "type": "test",
+        "sid": "S100001",
+        "uid": "U100001",
+        "gid": "G100001"
+    }
+}

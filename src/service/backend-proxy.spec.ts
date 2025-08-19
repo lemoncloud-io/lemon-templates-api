@@ -9,13 +9,14 @@
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
 import { loadProfile } from 'lemon-core/dist/environ';
-import { expect2, NextIdentityAccess, _it, loadJsonSync, _log, GETERR } from 'lemon-core';
+import { expect2, NextIdentityAccess, _it, loadJsonSync, _log, GETERR, $U, $T } from 'lemon-core';
 import { BackendProxy } from './backend-proxy';
 import { AuthType, ServiceParams } from './backend-service.spec';
 import * as $service from './backend-service.spec';
 import { SocketEvent } from '../libs/wss/wss-types';
-import { convertWSSEvent } from '../libs/wss/tools';
+import { asSocketMessage, convertWSSEvent } from '../libs/wss/tools';
 import { ChannelModel, ConnectionModel } from '../modules/sockets/model';
+import { ListResult } from '../cores/types';
 export { AuthType, ServiceParams };
 
 /**
@@ -31,6 +32,16 @@ export const instance = (type: AuthType = 'authed', params?: ServiceParams) => {
             if (!identityId) throw new Error(`.identityId is required - fetchAccess()`);
             const $identity = data?.Access as NextIdentityAccess;
             return { identityId, $identity };
+        }
+        public async listAvailableConnections(
+            $channel: ChannelModel,
+            options?: { limit?: number | undefined },
+        ): Promise<ListResult<ConnectionModel, any>> {
+            const channel = $T.S2($channel.id);
+            const data = loadJsonSync('sample/wss-connection-list.json');
+            const $list = data?.list as ConnectionModel[];
+            const list = $list?.filter(N => N?.channels?.includes(channel) && !N?.disConnectedAt) ?? [];
+            return { list, total: list.length };
         }
     })();
     return { service, current, proxy, context, _ts };
@@ -202,6 +213,54 @@ describe('BackendProxy', () => {
         );
         expect2(await proxy.doDisconnect({ ...$eventA, domain: null } as any).catch(GETERR)).toEqual(
             `.domain (string) is required - doDisconnect(${$eventA.id})`,
+        );
+    });
+
+    it('should pass prepareBroadcast', async () => {
+        const { proxy, current, _ts } = instance();
+
+        const service = 'lemon-sandbox-api';
+        const modelType = 'test';
+        const $channelA = await proxy.channel.makeModel({ service, modelType });
+        expect2(() => $channelA, 'id,service,modelType').toEqual({ id: '1000001', modelType, service });
+
+        //! load sample message
+        const $msg = loadJsonSync('sample/wss-message-sample.json');
+        const $payload = asSocketMessage($msg);
+        expect2(() => $payload).toEqual({
+            service: 'lemon-sandbox-api',
+            modelType: 'test',
+            event: 'create',
+            ts: '2025-08-19 12:00:00',
+            data: { gid: 'G100001', id: '1000001', sid: 'S100001', type: 'test', uid: 'U100001' },
+        });
+        // Case.1 - 특정 채널의 커넥션 검색 및 메시지 준비.
+        const $res0 = await proxy.prepareBroadcast($payload);
+        expect2(() => $res0.$channel).toEqual({ ...$channelA });
+        expect2(() => $res0?.connIds).toEqual(['conn-001', 'conn-003']);
+        expect2(() => $res0?.list).toEqual(expect.any(Array));
+        expect2(() => $res0.$msg).toEqual({
+            action: 'message',
+            data: { gid: 'G100001', id: '1000001', sid: 'S100001', type: 'test', uid: 'U100001' },
+            ts: $U.ts(current),
+        });
+        // Case.2 - 특정 채널의 커넥션 검색 및 메시지 준비. (data 변경)
+        const $res1 = await proxy.prepareBroadcast({ ...$payload, data: { ...$payload.data, id: '1000002' } });
+        expect2(() => $res1.$msg).toEqual({
+            action: 'message',
+            data: { gid: 'G100001', id: '1000002', sid: 'S100001', type: 'test', uid: 'U100001' },
+            ts: $U.ts(current),
+        });
+
+        // Case.3 특정 채널의 커넥션 검색 및 메시지 준비. (커넥션 없음)
+        const $channelB = await proxy.channel.makeModel({ service, modelType: 'hello' });
+        const $res2 = await proxy.prepareBroadcast({ ...$payload, modelType: 'hello' });
+        expect2(() => $res2.$channel).toEqual({ ...$channelB });
+        expect2(() => $res2?.connIds).toEqual([]); // no connection
+        expect2(() => $res2?.list).toEqual([]);
+
+        expect2(await proxy.prepareBroadcast({ ...$payload, modelType: 'x' }).catch(GETERR)).toEqual(
+            '.alias[lemon-sandbox-api@x] is invalid (not found) - prepareBroadCast(lemon-sandbox-api/x)',
         );
     });
 });
