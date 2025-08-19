@@ -46,7 +46,7 @@ export class ChannelAPIController extends AbstractCRUDController<
     /**
      * name of this resource
      */
-    public hello = () => `callback-api-controller:${this.type()}`;
+    public hello = () => `channels-api-controller:${this.type()}`;
 
     /**
      * GET /channels/0/hello
@@ -86,6 +86,47 @@ export class ChannelAPIController extends AbstractCRUDController<
             const $model = await proxy.channel.get(id);
             const $alias = await proxy.channel.getAlias$($model.service, $model.modelType);
             return this.modelAsView({ ...$model, $alias });
+        });
+    };
+
+    /**
+     * create(or insert) a `ChannelModel`
+     * - `id` must be empty (or '0')
+     *
+     * ```sh
+     * $ http POST ':8832/channels/0'
+     * $ http POST ':8832/channels/0' service=lemon-cluster-api modelType=cluster
+     * $ http POST ':8832/channels/0' service=lemon-cluster-api modelType=hello
+     *
+     * @override
+     */
+    public doPost: NextHandler = async (id, param, body, $ctx) => {
+        const errScope = `doPost(${this.type()}/${id ?? ''})`;
+        _log(this.logNS, `${errScope}...`);
+        param && _log(this.logNS, `> param =`, $U.json(param));
+        body && _log(this.logNS, `> body =`, $U.json(body));
+        id = id === '0' ? '' : $T.S2(id).trim();
+        const isLocal = $ctx?.domain === 'localhost';
+
+        // STEP.0 validate paramters.
+        if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
+        if (body && Array.isArray(body)) return this.doPostBulk(id, param, body, $ctx) as any; //! route to `/bulk`
+
+        // STEP.1 (TODO) validate user, and transform to model.
+        const toCreate = this.bodyToModel(body, true);
+        if (!toCreate) throw new Error(`@body is required - ${errScope}`);
+        if (id) toCreate.id = id;
+
+        // STEP.2 run main
+        return this.service.guardProxy($ctx, async proxy => {
+            const $base = await this.makeModelBase(proxy);
+            const $prxy = proxy.getManagerProxy(this.modelType);
+            const $valid = await $prxy.validateModel(toCreate, null);
+            if (!proxy.canDo('create', { ...$valid, ...$base, type: this.modelType }, { errScope })) return null; // no permission to create.
+            const $saves = await $prxy.onBeforeSave($valid, null);
+            const $saved = await $prxy.makeModel({ ...$saves, ...$base }, true); //WARN! - muse be `true` for make alias.
+            const $final = await $prxy.onAfterSave($saved, null);
+            return this.modelAsView($final);
         });
     };
 }
