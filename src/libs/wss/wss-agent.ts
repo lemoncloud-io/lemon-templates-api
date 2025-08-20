@@ -166,6 +166,60 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
             throw e;
         }
     }
+
+    /**
+     * post to client
+     * @param payload   object or string
+     * @param $conn     connection-info
+     */
+    public async postClientMessage<T extends ConnectionInfo = ConnectionInfo>(payload: any, $event?: T) {
+        const { stage, domain, connectionId } = $event;
+        if (!domain) throw new Error(`@domain (string) is required!`);
+        const url = `https://${domain}/${stage ?? ''}`;
+        return this.doSend(url, connectionId, payload);
+    }
+
+    /**
+     * broadcast message to selected connections
+     * @param payload Message payload to send
+     * @param list array of connections
+     */
+    public async doBroadcast<T extends ConnectionInfo = ConnectionInfo>(
+        payload: any,
+        list: T[],
+        options?: { channel?: string },
+    ) {
+        const errScope = `doBroadcast(${options?.channel ?? ''})`;
+        list && _log(NS, `> list@${errScope}.len = `, list.length);
+
+        // STEP.1 prepare the connections
+        const $list = list?.map((N, i) => ({ ...N, id: N?.connectionId ?? $T.S2(i) }));
+
+        // STEP.2 send message to each connection
+        const $sent = await my_parrallel($list, async N => {
+            if (N?.connectionId && N?.stage && N?.domain) {
+                return this.postClientMessage(payload, N)
+                    .then(() => {
+                        return { id: N.id, error: null as string };
+                    })
+                    .catch(e => {
+                        const error = e instanceof Error ? GETERR(e) : e;
+                        if (error?.message === '410') return { id: N.id }; //* ignore if `GoneException`
+                        _err(NS, `>> conn[${N.id}].err =`, $U.json(error));
+                        return { error: e, id: N.id, $conn: N };
+                    });
+            }
+            return null;
+        });
+
+        // STEP.3 if on error. do something....
+        const errors = $sent.filter(N => N && N.error);
+        errors.length && _err(NS, `! errors.len =`, $U.json(errors.map(N => `${N.id}:${N.error}`)));
+        if (errors.length > 0) {
+            await doReportError(errors[0].error, null, null, { payload, $sent }).catch(GETERR);
+        }
+        return { $conns: list, $sent, count: $sent.length, errors };
+    }
 }
 
 /**

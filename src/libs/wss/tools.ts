@@ -82,7 +82,7 @@ export const asSocketMessage = (data: any, validate: boolean = true): SocketMess
     const modelType = $T.S2(data.modelType);
     const event = $T.asLut(data?.event ?? '', $LUT.MessageActionType, 'event');
     const ts = $T.S(data.ts, $U.ts());
-    const meta$ = asSocketModelMeta(data?.data);
+    const meta$ = typeof data?.data === 'object' ? asSocketModelMeta(data?.data) : data?.data;
     return { service, modelType, event, ts, data: meta$ };
 };
 

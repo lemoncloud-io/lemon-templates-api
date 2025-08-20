@@ -11,11 +11,11 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import $cores, { $U, _log, _inf, _err, NextHandler, NextContext, $protocol } from 'lemon-core';
-import { $T, AbstractCRUDController, onlyDefined } from '../../cores';
+import { $T, AbstractCRUDController } from '../../cores';
 import { LambdaWSSHandler, WSSAgentRunner } from '../../libs/wss/wss-agent';
 import { SocketActionType, SocketEvent, SocketEventType } from '../../libs/wss/wss-types';
 import { asSocketMessage, buildSocketResponse, parseMessage } from '../../libs/wss/tools';
-import { ConnectionModel, SocketModel } from './model';
+import { ChannelModel, ConnectionModel, SocketModel } from './model';
 import { SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
 import { SocketBody, SocketView } from './views';
@@ -106,6 +106,38 @@ export class SocketAPIController
         if (!domain) throw new Error(`@domain (string) is required -${errScope}`);
         const url = `https://${domain}/${stage ?? ''}`;
         return this.$wss.doSend(url, conId, payload);
+    };
+
+    /**
+     * post broadcast message to all connections in `list`
+     * @param payload the message payload to broadcast
+     * @param list list of connections to which the message will be broadcasted
+     */
+    public postBroadcastMessage = async (
+        payload: any,
+        list: ConnectionModel[],
+        options?: { context?: NextContext; $channel?: ChannelModel },
+    ) => {
+        const errScope = `postBroadcastMessage(${this.type()}/${options?.$channel?.id ?? ''})`;
+        const context = options?.context;
+        const $channel = options?.$channel;
+
+        const _end = (N: ConnectionModel) =>
+            N?.domain && N?.stage
+                ? `https://${N?.domain}/${N?.stage ?? ''}`
+                : `https://0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com/dev`;
+
+        //TODO [Steve] use env whether to use protocol.
+        if (list?.length > 0) {
+            const channel = `${$channel?.service ?? ''}.${$channel?.modelType ?? ''}`;
+            const $list = list.map(N => ({ id: N.connectionId, endpoint: _end(N) })); // for payload downsizing
+            const body = { payload, list: $list };
+            return $protocol({ ...context }, `//eureka-executes-api/connections/${channel}/broadcast`).execute(
+                null,
+                body,
+            );
+        }
+        return this.$wss.doBroadcast(payload, list);
     };
 
     /**
@@ -227,10 +259,8 @@ export class SocketAPIController
         const payload = asSocketMessage(body);
         return this.service.guardProxy($ctx, async proxy => {
             // STEP.1 find channel and search connections.
-            const $pack = await proxy.prepareBroadcast(payload);
-            //TODO [Aiden] broadcast to all connections. via `execute-api`
-            //TODO 1. query all target connections in list.
-            //TODO 2. send message to all connections. (use direct or protocol)
+            const { $msg, list } = await proxy.prepareBroadcast(payload);
+            return this.postBroadcastMessage($msg, list);
         });
     };
 }
