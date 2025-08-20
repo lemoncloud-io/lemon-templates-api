@@ -21,7 +21,7 @@ export { SocketPayload, SocketResponse } from './wss-types';
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
 import { BackendService } from '../../service/backend-service';
 import { Context } from 'aws-lambda';
-import { MyHttpHeaderTool } from 'lemon-core/dist/cores/lambda/lambda-web-handler';
+import { HttpHeaderSet, MyHttpHeaderTool } from 'lemon-core/dist/cores/lambda/lambda-web-handler';
 const NS = $U.NS(`wss`, 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -94,7 +94,7 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
      * builder of tools for http-headers
      * - extracting header content, and parse.
      */
-    public tools = (event: WSSEvent): WSSHeaderTool => new WSSHeaderTool(event?.headers);
+    public tools = (event: WSSEvent): WSSHeaderTool => new WSSHeaderTool(event?.headers, event?.queryStringParameters);
 
     /**
      * (optional) pack the origin context to application context.
@@ -171,7 +171,31 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
 /**
  * WSS Header Tool
  */
-export class WSSHeaderTool extends MyHttpHeaderTool {}
+export class WSSHeaderTool extends MyHttpHeaderTool {
+    private queryParams: { [key: string]: string } = {};
+
+    constructor(
+        headers?: HttpHeaderSet,
+        queryStringParameters?: { [key: string]: string },
+        options?: { isClone?: boolean },
+    ) {
+        super(headers, options);
+        this.queryParams = queryStringParameters || {};
+    }
+
+    /**
+     * get the last value in header by name
+     * - if not found in headers, fallback to query parameters.
+     * @override
+     */
+    public getHeader(name: string): string {
+        // (1st) check in headers
+        const headerValue = super.getHeader(name);
+        if (headerValue) return headerValue;
+        // (2nd) check in query parameters
+        return this.queryParams[name];
+    }
+}
 
 /**
  * builder/factory for sockets per each event.

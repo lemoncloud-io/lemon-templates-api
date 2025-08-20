@@ -108,7 +108,7 @@ export interface SocketEvent extends ConnectionInfo {
  * interface: `SocketMessage`
  * - Message structure used when external services send WebSocket requests
  */
-export interface SocketMessagePayload {
+export interface SocketMessagePayload<T extends SocketModelMeta = SocketModelMeta> {
     /**
      * Name of the service that sent the message
      * - ex) `lemon-orders-api`, `lemon-payments-api`
@@ -130,7 +130,7 @@ export interface SocketMessagePayload {
     /**
      * message data
      */
-    data?: SocketModelMeta;
+    data?: T;
 }
 
 /**

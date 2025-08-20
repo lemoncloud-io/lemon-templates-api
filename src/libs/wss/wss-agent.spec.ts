@@ -11,7 +11,7 @@
  * @origin      `@lemoncloud/lemon-cluster-api/cluster`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { expect2, _it, NextContext, NextIdentity, $U, WSSEvent } from 'lemon-core';
+import { $T, expect2, _it, NextContext, NextIdentity, $U, WSSEvent, loadJsonSync, _log } from 'lemon-core';
 import { LambdaWSSHandler, WSSAgentRunner } from './wss-agent';
 import * as $proxy from '../../service/backend-service.spec';
 import { AuthType } from '../../service/backend-service.spec';
@@ -92,10 +92,10 @@ describe('WSSAgent', () => {
 
         //* 3. test with identity
         const identity: NextIdentity = { sid: 'S1001', uid: 'U', gid: 'g', roles: ['user'] };
-        const current = $U.dt('2025-08-18 11:22:33').getTime();
+        const current = $U.dt('2099-08-18 11:22:33').getTime();
         const expToken =
-            'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzaWQiOiJTMTAwMSIsInVpZCI6IlUiLCJnaWQiOiJnIiwicm9sZXMiOlsidXNlciJdLCJpc3MiOm51bGwsImlhdCI6MTc1NTQ4Mzc1MywiZXhwIjoxNzU1NTcwMTUzfQ.';
-        expect2(() => current).toEqual(1755483753000);
+            'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzaWQiOiJTMTAwMSIsInVpZCI6IlUiLCJnaWQiOiJnIiwicm9sZXMiOlsidXNlciJdLCJpc3MiOm51bGwsImlhdCI6NDA5MDcwMjk1MywiZXhwIjo0MDkwNzg5MzUzfQ.';
+        expect2(() => current).toEqual(4090702953000);
 
         const _jwt = async (event: WSSEvent, identity: NextIdentity, alias?: string) =>
             agent.tools(event).encodeIdentityJWT(identity, { current, alias });
@@ -105,8 +105,8 @@ describe('WSSAgent', () => {
         });
         expect2(() => $U.jwt().decode(`${expToken}`)).toEqual({
             iss: null,
-            exp: 1755570153,
-            iat: 1755483753,
+            exp: 4090789353,
+            iat: 4090702953,
             ...identity,
         });
 
@@ -124,8 +124,8 @@ describe('WSSAgent', () => {
         const $enc = await _jwt(event, identity, alias);
         expect2(() => $U.jwt().decode($enc.token)).toEqual({
             iss: `kms/${alias}`,
-            exp: 1755570153,
-            iat: 1755483753,
+            exp: 4090789353,
+            iat: 4090702953,
             ...identity,
         });
 
@@ -133,10 +133,64 @@ describe('WSSAgent', () => {
         expect2(await agent.packContext(event), 'identity').toEqual({
             identity: {
                 iss: `kms/${alias}`,
-                exp: 1755570153,
-                iat: 1755483753,
+                exp: 4090789353,
+                iat: 4090702953,
                 ...identity,
             },
         });
+
+        // * 6. test with identity in query parameter (fallback when header is missing)
+        delete event.headers['x-lemon-identity']; // Remove header to test query param fallback
+        event.queryStringParameters = { 'x-lemon-identity': '5678' };
+        expect2(await agent.packContext(event), 'identity').toEqual({
+            identity: { meta: '5678' },
+        });
+
+        event.queryStringParameters = { 'x-lemon-identity': expToken };
+        expect2(await agent.packContext(event), 'identity').toEqual({
+            identity: {
+                error: '@iss[null] is invalid (unsupportable issuer) - verifyJWT(http)',
+                meta: expToken,
+            },
+        });
+
+        // * 7. test w/ header priority over query parameter
+        event.headers['x-lemon-identity'] = '9999';
+        event.queryStringParameters = { 'x-lemon-identity': '1111' };
+        expect2(await agent.packContext(event), 'identity').toEqual({
+            identity: { meta: '9999' },
+        });
+
+        //! test w/ real data.
+        if (1) {
+            const $data = loadJsonSync('sample/wss.lemon/wss-con4-event.json');
+            const $event = $data?.$connect as WSSEvent;
+            const { headers, queryStringParameters } = $event;
+
+            expect2(() => headers['x-lemon-identity']).toEqual(undefined);
+            expect2(() => headers['User-Agent']).toEqual(
+                'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36',
+            );
+            expect2(() => queryStringParameters['x-lemon-identity']).toEqual(
+                'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlcyI6WyJ1c2VyIl0sInNpZCI6IjEwMDAxIiwidWlkIjoiMTAwMDA1NyIsImlzcyI6Imttcy9sZW1vbi1pZGVudGl0eS1rZXkiLCJpYXQiOjQwOTA3MDI5NTMsImV4cCI6NDA5MDc4OTM1M30.0qDGz-6k9VhbA0cQoSTfcl_ghbnMo0IqAenUs3BpgxAPkSLJZbX6I1w_AbNt_fp_sC-Z2eqUKUa-bpHTyP69PGW6BP25gM2TTusf3z9uIMMZ0henmF5Ru2jzyvnLDIuXKsHlzgS32gH5b8GjzF_p6hzsFCUkVi7aEDfZ_HUECHJ6zCr7VyEOwLgWP_yduRTiIviC0ZGbOTRoGlA1Wc3a5LNGHr88pnihXw2oraxtGeWCkjLJlYuU_iKgFLq3Ql8AYCUd_6uC3oTD7ydqKmbFXb8Ei1jhPGXXFefm_yFqlJIyu9uNxFBZOh6AsRAw-pQVyAI4gIdeB8Ll5R9cVVoVOA',
+            );
+
+            const expToken = $T.S2(queryStringParameters['x-lemon-identity']);
+            const $identity: NextIdentity = $U.jwt().decode(expToken);
+            expect2(() => $identity).toEqual({
+                iss: `kms/${alias}`,
+                exp: 4090789353,
+                iat: 4090702953,
+                roles: ['user'],
+                sid: '10001',
+                uid: '1000057',
+            });
+
+            expect2(await agent.packContext($event), 'identity').toEqual({
+                identity: {
+                    ...$identity,
+                },
+            });
+        }
     });
 });
