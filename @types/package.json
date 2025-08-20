@@ -1,6 +1,6 @@
 {
   "name": "@lemoncloud/eureka-sockets-api",
-  "version": "0.25.819",
+  "version": "0.25.821",
   "description": "lemon sockets management api",
   "types": "dist/view/types.d.ts",
   "scripts": {},

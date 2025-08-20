@@ -10,7 +10,7 @@
  * Copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
 import { CoreModel } from 'lemon-model';
-import $LUT from './types';
+import $LUT, { ChannelStereo } from './types';
 /**
  * type: `ModelType`
  */
@@ -54,10 +54,6 @@ export interface ConnectionModel extends Model {
      * (required) The unique identifier for the WebSocket connection.
      */
     connectionId?: string;
-    /** (internal) count of connected items */
-    connected?: number;
-    /** (internal) count of granted items */
-    granted?: number;
     /** (internal) Timestamp when the connection was established. */
     connectedAt?: number;
     /** (internal) Timestamp when the connection was terminated. */
@@ -83,18 +79,22 @@ export interface ConnectionModel extends Model {
      */
     disconnectCode?: number;
     /**
-     * 현재 연결이 구독 중인 채널(토픽) 목록
+     * (linked) 현재 연결이 구독 중인 채널(토픽) ID 목록
      */
     channels?: string[];
+    /**
+     * (linked) 현재 연결이 구독 중인 채널(토픽) 목록
+     */
+    channel$$?: ChannelHead[];
 }
 /**
- * interface: `ChannelModel`
- * - 채널(토픽)을 기록함. MSA의 이벤트 토픽 등으로 사용.
+ * interface: `ChannelHead`
+ * - common head of `ChannelModel`
  */
-export interface ChannelModel extends Model {
+export interface ChannelHead {
     /**
      * id of channel
-     * - combined with `service` and model `type`
+     * - combined with `service` and `modelType`
      * - ex) `lemon-orders-api:order`
      */
     id?: string;
@@ -102,16 +102,36 @@ export interface ChannelModel extends Model {
      * the topic name of this channel
      * - ex) `lemon-orders-api`
      */
-    channel?: string;
+    service?: string;
     /**
      * the model type this channel belongs to
      * - ex) `orders`, `payments`, `notifications`
      */
-    stereo?: string;
+    modelType?: string;
+}
+/**
+ * interface: `ChannelModel`
+ * - 채널(토픽)을 기록함. MSA의 이벤트 토픽 등으로 사용.
+ */
+export interface ChannelModel extends Model, ChannelHead {
+    /** stereo */
+    stereo?: ChannelStereo;
+    /**
+     * the topic name of this channel
+     * - ex) `lemon-orders-api`
+     * @deprecated use `service` instead
+     */
+    channel?: string;
+    /** (internal) alised router-id if stereo=alias */
+    aliasId?: string;
+    /** (internal) the linked router */
+    alias$?: ChannelHead;
     /** (optional) description of this channel */
     desc?: string;
     /** (internal) count of subscribers */
     subscribed?: number;
+    /** (internal) the linked alias for detailed */
+    readonly $alias?: ChannelModel;
 }
 /**
  * extract field names from models
@@ -119,7 +139,9 @@ export interface ChannelModel extends Model {
  */
 export declare const filterFields: (fields: string[], base?: string[]) => string[];
 /** field names from head */
-export declare const $HEAD: {};
+export declare const $HEAD: {
+    channel: string[];
+};
 export declare const $FIELD: {
     socket: string[];
     connection: string[];
@@ -127,7 +149,9 @@ export declare const $FIELD: {
 };
 /** must export default as below */
 declare const _default: {
-    $HEAD: {};
+    $HEAD: {
+        channel: string[];
+    };
     $FIELD: {
         socket: string[];
         connection: string[];

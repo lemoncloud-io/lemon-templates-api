@@ -43,7 +43,9 @@ export interface ConnectionBody extends Body, Partial<ConnectionView> {
  * type: `ChannelView`
  * - usually same as post's body.
  */
-export interface ChannelView extends View, Partial<ChannelModel> {
+export interface ChannelView extends View, Omit<Partial<ChannelModel>, '$alias'> {
+    /** (optional) view of alias in detail */
+    readonly $alias?: ChannelView;
 }
 /**
  * Type `ChannelBody`
