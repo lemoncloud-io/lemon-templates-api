@@ -218,7 +218,8 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
         if (!$channel) throw new Error(`.alias[${service}@${modelType}] is invalid (not found) - ${errScope}`);
 
         // STEP.2 prepare message
-        const $msg = buildSocketResponse('message', data);
+        const channel = $T.S2($channel.id);
+        const $msg = buildSocketResponse('message', data, { channel });
 
         // STEP.3 search available connections by channel
         const { list, total } = await this.listAvailableConnections($channel);

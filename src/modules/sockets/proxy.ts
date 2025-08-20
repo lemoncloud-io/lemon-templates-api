@@ -286,10 +286,10 @@ export class ChannelManagerProxy extends MyManagerProxy<ChannelModel, ChannelMod
     ): Promise<ChannelModel> {
         const throwable = options?.throwable ?? true;
         const errScope = options?.errScope ?? `findAlias(${this.$mgr.type ?? ''}/${service ?? ''}@${modelType ?? ''})`;
-        const stereo = options?.stereo ?? 'alias';
+        const stereo = options?.stereo ?? '#alias';
         if (!service) return null;
         try {
-            const id = this.asAliasId(service, modelType, { stereo });
+            const id = this.asAliasId(service, modelType, { stereo, prefix: '' });
             const $def = onlyDefined<ChannelModel>({ stereo, id, service, modelType });
             const $base = await this.proxy.makeModelBase($def, { useSession: true, throwable: false });
             const $alias = await this.get(id, $base);

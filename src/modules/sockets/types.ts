@@ -43,7 +43,7 @@ const $LUT = {
     ChannelStereo: {
         '': '',
         /** alias */
-        alias: 'alias',
+        '#alias': 'alias',
     },
 };
 

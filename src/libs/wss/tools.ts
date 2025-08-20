@@ -108,11 +108,12 @@ export const asSocketModelMeta = (data: any): SocketModelMeta =>
 export const buildSocketResponse = <T = any>(
     action: SocketActionType,
     result?: T,
-    options?: { current?: number },
+    options?: { current?: number; channel?: string },
 ): SocketResponse<T> => {
     const current = options?.current ?? $U.current_time_ms();
     const ts = $U.ts(current);
-    return { action, ts, data: result };
+    const channel = options?.channel ?? '#default';
+    return { action, ts, data: result, channel };
 };
 
 /**

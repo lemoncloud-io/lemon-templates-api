@@ -166,7 +166,7 @@ describe('BackendProxy', () => {
             disconnectCode: 1005,
             disConnectedAt: current,
             channels: [],
-            channel$$: [],
+            // channel$$: [],
         });
 
         // link channel to connection
@@ -179,7 +179,7 @@ describe('BackendProxy', () => {
             disconnectCode: 1005,
             disConnectedAt: current,
             channels: [$channA.id],
-            channel$$: [proxy.channel.trans.asHead($channA)],
+            // channel$$: [proxy.channel.trans.asHead($channA)],
         });
 
         expect2(await $conn.updateConnection(null, null).catch(GETERR)).toEqual(
@@ -214,8 +214,8 @@ describe('BackendProxy', () => {
         );
         expect2(await $channel.getAlias$(null, null).catch(GETERR)).toEqual(null);
         expect2(await $channel.getAlias$(undefined, undefined).catch(GETERR)).toEqual(null);
-        expect2(await $channel.getAlias$('-', null).catch(GETERR), 'id').toEqual({ id: '@alias:-:-' });
-        expect2(await $channel.getAlias$('-', '-').catch(GETERR), 'id').toEqual({ id: '@alias:-:-' });
+        expect2(await $channel.getAlias$('-', null).catch(GETERR), 'id').toEqual({ id: '#alias:-:-' });
+        expect2(await $channel.getAlias$('-', '-').catch(GETERR), 'id').toEqual({ id: '#alias:-:-' });
 
         //! test of `updateAlias()`
         const _updateAlias = (service: string, type: string, id?: string) =>
@@ -239,8 +239,8 @@ describe('BackendProxy', () => {
 
         //* validate update linked model
         const aliasA = {
-            ..._ts('@alias:hello:world', 'channel'),
-            stereo: 'alias',
+            ..._ts('#alias:hello:world', 'channel'),
+            stereo: '#alias',
             service: 'hello',
             modelType: 'world',
             sid: '',

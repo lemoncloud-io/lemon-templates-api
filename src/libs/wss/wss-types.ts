@@ -66,6 +66,11 @@ export interface SocketResponse<T = any> {
      * timestamp in `YYYY-MM-DD HH:mm:ss`
      */
     ts?: string;
+    /**
+     * id of the channel
+     * - channel to which the message was sent.
+     */
+    channel?: string;
 }
 
 /**
@@ -148,6 +153,8 @@ export interface SocketModelMeta {
     uid?: string;
     /** gid of model */
     gid?: string;
+    /** oid of model (owner) */
+    oid?: string;
 }
 
 /**

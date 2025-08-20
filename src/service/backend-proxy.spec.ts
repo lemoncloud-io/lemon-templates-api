@@ -243,6 +243,7 @@ describe('BackendProxy', () => {
             action: 'message',
             data: { gid: 'G100001', id: '1000001', sid: 'S100001', type: 'test', uid: 'U100001' },
             ts: $U.ts(current),
+            channel: $channelA.id,
         });
         // Case.2 - 특정 채널의 커넥션 검색 및 메시지 준비. (data 변경)
         const $res1 = await proxy.prepareBroadcast({ ...$payload, data: { ...$payload.data, id: '1000002' } });
@@ -250,6 +251,7 @@ describe('BackendProxy', () => {
             action: 'message',
             data: { gid: 'G100001', id: '1000002', sid: 'S100001', type: 'test', uid: 'U100001' },
             ts: $U.ts(current),
+            channel: $channelA.id,
         });
 
         // Case.3 특정 채널의 커넥션 검색 및 메시지 준비. (커넥션 없음)

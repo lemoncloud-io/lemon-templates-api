@@ -88,6 +88,31 @@ export class ChannelAPIController extends AbstractCRUDController<
             return this.modelAsView({ ...$model, $alias });
         });
     };
+    /**
+     * get a model by alias.
+     *
+     * ```sh
+     * http ':8832/channels/1000001/alias'
+     * http ':8832/channels/0/alias' service=lemon-cluster-api modelType=cluster
+     * http ':8832/channels/0/alias?service=lemon-cluster-api&modelType=hello'
+     */
+    public doGetAlias: NextHandler = async (id, param, body, $ctx) => {
+        const errScope = `doGetDetail(${this.type()}/${id ?? ''})`;
+        _log(NS, `${errScope}..`);
+        $ctx && _log(NS, `> context =`, $U.json($ctx));
+
+        // STEP.0 extract parameters.
+        const service = $T.S2(param?.service || body?.service, '');
+        const type = $T.S2(param?.modelType || body?.modelType, '');
+        if (!service) throw new Error(`@service (string) is required - ${errScope}`);
+        if (!type) throw new Error(`@modelType (string) is required - ${errScope}`);
+
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        return this.service.guardProxy($ctx, async proxy => {
+            const $model = await proxy.channel.findByAlias(service, type);
+            return this.modelAsView($model);
+        });
+    };
 
     /**
      * create(or insert) a `ChannelModel`
