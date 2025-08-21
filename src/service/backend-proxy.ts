@@ -93,43 +93,6 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
     };
 
     /**
-     * establish a channel group
-     * @deprecated 미사용 제거예정.
-     */
-    public async establishChannel(
-        channel: string,
-        stereo: string,
-    ): Promise<{
-        $master: ChannelModel;
-        $channel: ChannelModel;
-    }> {
-        const errScope = `establishChannel(${channel ?? ''}/${stereo ?? ''})`;
-
-        // STEP.0 validate parameters
-        if (!channel) throw new Error(`@channel (string) is required - ${errScope}`);
-        if (!stereo) throw new Error(`@stereo (string) is required - ${errScope}`);
-
-        // STEP.1 prepare master & sub channel model.
-        const masterId = this.channel.asChannelId(channel);
-        const channelId = this.channel.asChannelId(channel, stereo);
-        const type = `${stereo}` as any;
-
-        // STEP.2 build channel models
-        const models: ChannelModel[] = [
-            { id: masterId, channel },
-            { id: channelId, stereo: type, channel },
-        ];
-
-        // STEP.3 get or create channel models in parallel
-        const $models = await my_parrallel(models, N => this.channel.get(N.id, N));
-
-        // STEP.4 prepare results
-        const $master = $models?.at(0);
-        const $channel = $models?.at(1);
-        return { $master, $channel };
-    }
-
-    /**
      * 소켓 연결 이벤트 수신 시, 커넥션 정보 저장을 처리함.
      * - find connection model by `event`
      * - retrieve channels in parallel

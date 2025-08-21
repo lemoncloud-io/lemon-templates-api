@@ -98,9 +98,8 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
         const errScope = options?.errScope ?? `findModel(${this.$mgr.type}/${event?.id ?? ''})`;
         _log(NS, `...${errScope}`);
         const validate = options?.validate ?? true;
-        //TODO - DO NOT USE `any` type.
-        const useSession = options?.useSession ?? $U.env('USE_SESSION');
-        const $sess = useSession ? this.proxy.getCurrentSession(options) : null;
+        const useSession = options?.useSession ?? this.proxy.service.isUseSssion();
+        const $sess = useSession ? this.proxy.getCurrentSession({ throwable: false }) : null;
 
         /** STEP.0 validate paramters */
         if (validate) {
@@ -155,57 +154,6 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
         const $valid = await this.validateModel($updates, model.id);
         const $final = await this.set(model.id, $valid);
         return $final as T;
-    }
-
-    /**
-     * list the available connections by channel.
-     * @param channel
-     * @param options
-     * @returns
-     */
-    public async listAvailableConns(
-        channel: string,
-        options?: { useSearch?: boolean },
-    ): Promise<ListResult<ConnectionModel>> {
-        const errScope = `listAvailableConns(${this.$mgr.type}/${channel ?? ''})`;
-        const $prf = $T.perf();
-        const useSearch = options?.useSearch ?? false;
-        const $page = parsePaginateParam({ limit: 30 });
-        if (!channel) throw new Error(`@channel (string) is required - ${errScope}`);
-
-        const _scan = async () => {
-            const $def = this.$mgr.buildScanFilter();
-            const filter = this.$mgr.asScanFilter($def, { channel, connected: 1 });
-            const $res = await this.$mgr.doScan($page, filter);
-            return $res;
-        };
-        const _search = async (): Promise<ListResult<ConnectionModel, { key: string; count: number }>> => {
-            const body = this.$mgr.buildQuery($page);
-            const $must: SearchQuery[] = [];
-            if (channel) {
-                $must.push({ terms: { channels: channel } });
-                $must.push({
-                    bool: {
-                        should: [
-                            { bool: { must_not: { exists: { field: 'disConnectedAt' } } } },
-                            { range: { disConnectedAt: { lte: 0 } } },
-                        ],
-                        minimum_should_match: 1,
-                    },
-                });
-            }
-            body.query.bool.must = $must;
-
-            const $res = await this.$mgr.parent.doSearch<ConnectionModel>(body);
-            return { list: $res?.list, total: $res?.total, aggr: null };
-        };
-
-        const $res = useSearch ? await _search() : await _scan();
-        const { list, total, aggr } = $res;
-        const took = $prf.took();
-        _log(NS, `> search.took = `, took);
-
-        return { ...$page, list, total, aggr, took };
     }
 }
 
