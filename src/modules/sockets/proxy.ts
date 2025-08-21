@@ -98,6 +98,7 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
         const errScope = options?.errScope ?? `findModel(${this.$mgr.type}/${event?.id ?? ''})`;
         _log(NS, `...${errScope}`);
         const validate = options?.validate ?? true;
+        //TODO - DO NOT USE `any` type.
         const useSession = options?.useSession ?? $U.env('USE_SESSION');
         const $sess = useSession ? this.proxy.getCurrentSession(options) : null;
 
