@@ -1,0 +1,128 @@
+{
+    "!": "wscat -c wss://wss.eureka.codes/wss-d1",
+    "context": {
+        "callbackWaitsForEmptyEventLoop": false,
+        "functionVersion": "$LATEST",
+        "functionName": "eureka-sockets-api-dev-socket",
+        "memoryLimitInMB": "512",
+        "logGroupName": "/aws/lambda/eureka-sockets-api-dev-socket",
+        "logStreamName": "2025/08/21/[$LATEST]ba04fd3231b047e882601...2e-e60c-43ef-a8ef-3acc2247842b"
+    },
+    "$connect": {
+        "headers": {
+            "Host": "wss.eureka.codes",
+            "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits",
+            "Sec-WebSocket-Key": "ZVT01wMBS5TJLBwYYQBLqQ==",
+            "Sec-WebSocket-Version": "13",
+            "X-Amzn-Trace-Id": "Root=1-68a7ceec-1d32f2ae5ccfcf162961082e",
+            "X-Forwarded-For": "124.5.141.70",
+            "X-Forwarded-Port": "443",
+            "X-Forwarded-Proto": "https"
+        },
+        "multiValueHeaders": {
+            "Host": [
+                "wss.eureka.codes"
+            ],
+            "Sec-WebSocket-Extensions": [
+                "permessage-deflate; client_max_window_bits"
+            ],
+            "Sec-WebSocket-Key": [
+                "ZVT01wMBS5TJLBwYYQBLqQ=="
+            ],
+            "Sec-WebSocket-Version": [
+                "13"
+            ],
+            "X-Amzn-Trace-Id": [
+                "Root=1-68a7ceec-1d32f2ae5ccfcf162961082e"
+            ],
+            "X-Forwarded-For": [
+                "124.5.141.70"
+            ],
+            "X-Forwarded-Port": [
+                "443"
+            ],
+            "X-Forwarded-Proto": [
+                "https"
+            ]
+        },
+        "requestContext": {
+            "routeKey": "$connect",
+            "eventType": "CONNECT",
+            "extendedRequestId": "Pr1FBHIuoE0ETCA=",
+            "requestTime": "22/Aug/2025:01:59:08 +0000",
+            "messageDirection": "IN",
+            "stage": "dev",
+            "connectedAt": 1755827948565,
+            "requestTimeEpoch": 1755827948565,
+            "identity": {
+                "sourceIp": "124.5.141.70"
+            },
+            "requestId": "Pr1FBHIuoE0ETCA=",
+            "domainName": "wss.eureka.codes",
+            "connectionId": "Pr1FBdnCoE0CIZg=",
+            "apiId": "qksfa5jxm1"
+        },
+        "isBase64Encoded": false
+    },
+    "$message": {
+        "id": "3ebd7a2c62cfa04d043538",
+        "type": "MESSAGE",
+        "route": "$default",
+        "origin": "",
+        "stage": "dev",
+        "remote": "124.5.141.70",
+        "agent": "",
+        "direction": "IN",
+        "reason": "",
+        "domain": "wss.eureka.codes",
+        "connectionId": "Pr1vbenzoE0CFYg=",
+        "messageId": "Pr16LeubIE0CFYg=",
+        "apiId": "qksfa5jxm1",
+        "connectedAt": 1755828219931,
+        "disconnectCode": 0,
+        "body": "{\"action\":\"ping\", \"data:\"hello\"}"
+    },
+    "$disconnect": {
+        "headers": {
+            "Host": "wss.eureka.codes",
+            "x-api-key": "",
+            "X-Forwarded-For": "",
+            "x-restapi": ""
+        },
+        "multiValueHeaders": {
+            "Host": [
+                "wss.eureka.codes"
+            ],
+            "x-api-key": [
+                ""
+            ],
+            "X-Forwarded-For": [
+                ""
+            ],
+            "x-restapi": [
+                ""
+            ]
+        },
+        "requestContext": {
+            "routeKey": "$disconnect",
+            "disconnectStatusCode": 1005,
+            "eventType": "DISCONNECT",
+            "extendedRequestId": "Pr2E2Hg8oE0EDqg=",
+            "requestTime": "22/Aug/2025:02:05:57 +0000",
+            "messageDirection": "IN",
+            "disconnectReason": "Client-side close frame status not set",
+            "stage": "dev",
+            "connectedAt": 1755828219931,
+            "requestTimeEpoch": 1755828357054,
+            "identity": {
+                "sourceIp": "124.5.141.70"
+            },
+            "requestId": "Pr2E2Hg8oE0EDqg=",
+            "domainName": "wss.eureka.codes",
+            "connectionId": "Pr1vbenzoE0CFYg=",
+            "apiId": "qksfa5jxm1"
+        },
+        "isBase64Encoded": false
+    }
+    
+}
