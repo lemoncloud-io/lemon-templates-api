@@ -1,0 +1,127 @@
+{
+    "!": "wscat -c wss://wss.slp-premier.com/wss-d1",
+    "context": {
+        "callbackWaitsForEmptyEventLoop": false,
+        "functionVersion": "$LATEST",
+        "functionName": "eureka-sockets-api-dev-socket",
+        "memoryLimitInMB": "512",
+        "logGroupName": "/aws/lambda/eureka-sockets-api-dev-socket",
+        "logStreamName": "2025/08/24/[$LATEST]56df93786de64b26ab7aa...96-8a9e-478c-96ee-34d0c4afd72e"
+    },
+    "$connect": {
+        "headers": {
+            "Host": "wss.slp-premier.com",
+            "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits",
+            "Sec-WebSocket-Key": "JJStLIuvyln2hquL2BwgQQ==",
+            "Sec-WebSocket-Version": "13",
+            "X-Amzn-Trace-Id": "Root=1-68abbd44-5576d7cb3caeac9139a25971",
+            "X-Forwarded-For": "221.149.250.13",
+            "X-Forwarded-Port": "443",
+            "X-Forwarded-Proto": "https"
+        },
+        "multiValueHeaders": {
+            "Host": [
+                "wss.slp-premier.com"
+            ],
+            "Sec-WebSocket-Extensions": [
+                "permessage-deflate; client_max_window_bits"
+            ],
+            "Sec-WebSocket-Key": [
+                "JJStLIuvyln2hquL2BwgQQ=="
+            ],
+            "Sec-WebSocket-Version": [
+                "13"
+            ],
+            "X-Amzn-Trace-Id": [
+                "Root=1-68abbd44-5576d7cb3caeac9139a25971"
+            ],
+            "X-Forwarded-For": [
+                "221.149.250.13"
+            ],
+            "X-Forwarded-Port": [
+                "443"
+            ],
+            "X-Forwarded-Proto": [
+                "https"
+            ]
+        },
+        "requestContext": {
+            "routeKey": "$connect",
+            "eventType": "CONNECT",
+            "extendedRequestId": "P1qC0Gj2oE0EaiQ=",
+            "requestTime": "25/Aug/2025:01:32:52 +0000",
+            "messageDirection": "IN",
+            "stage": "dev",
+            "connectedAt": 1756085572842,
+            "requestTimeEpoch": 1756085572854,
+            "identity": {
+                "sourceIp": "221.149.250.13"
+            },
+            "requestId": "P1qC0Gj2oE0EaiQ=",
+            "domainName": "wss.slp-premier.com",
+            "connectionId": "P1qC0chgIE0CJsQ=",
+            "apiId": "0z5quzjfdc"
+        },
+        "isBase64Encoded": false
+    },
+    "$message": {
+        "id": "3f5a8e244541a04d044e68",
+        "type": "MESSAGE",
+        "route": "$default",
+        "origin": "",
+        "stage": "dev",
+        "remote": "221.149.250.13",
+        "agent": "",
+        "direction": "IN",
+        "reason": "",
+        "domain": "wss.slp-premier.com",
+        "connectionId": "P1qC0chgIE0CJsQ=",
+        "messageId": "P1qOIcm0oE0CJsQ=",
+        "apiId": "0z5quzjfdc",
+        "connectedAt": 1756085572842,
+        "disconnectCode": 0,
+        "body": "{\"action\":\"ping\", \"data\":\"hello\"}"
+    },    
+    "$disconnect": {
+        "headers": {
+            "Host": "wss.slp-premier.com",
+            "x-api-key": "",
+            "X-Forwarded-For": "",
+            "x-restapi": ""
+        },
+        "multiValueHeaders": {
+            "Host": [
+                "wss.slp-premier.com"
+            ],
+            "x-api-key": [
+                ""
+            ],
+            "X-Forwarded-For": [
+                ""
+            ],
+            "x-restapi": [
+                ""
+            ]
+        },
+        "requestContext": {
+            "routeKey": "$disconnect",
+            "disconnectStatusCode": 1005,
+            "eventType": "DISCONNECT",
+            "extendedRequestId": "P1qP7FnFIE0EUqQ=",
+            "requestTime": "25/Aug/2025:01:34:16 +0000",
+            "messageDirection": "IN",
+            "disconnectReason": "Client-side close frame status not set",
+            "stage": "dev",
+            "connectedAt": 1756085572842,
+            "requestTimeEpoch": 1756085656705,
+            "identity": {
+                "sourceIp": "221.149.250.13"
+            },
+            "requestId": "P1qP7FnFIE0EUqQ=",
+            "domainName": "wss.slp-premier.com",
+            "connectionId": "P1qC0chgIE0CJsQ=",
+            "apiId": "0z5quzjfdc"
+        },
+        "isBase64Encoded": false
+    }
+}
