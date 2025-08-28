@@ -13,8 +13,8 @@ import { View, Body } from 'lemon-model';
 import { ChannelModel, ConnectionModel, SocketModel } from './model';
 import $LUT from './types';
 
-import { SocketPayload, SocketResponse } from '../../libs/wss/wss-types';
-export { SocketPayload, SocketResponse };
+import { SocketPayload, SocketResponse, SocketMessagePayload, SocketModelMeta } from '../../libs/wss/wss-types';
+export { SocketPayload, SocketResponse, SocketMessagePayload, SocketModelMeta };
 
 //! export all internal types
 export * from './types';
@@ -47,7 +47,10 @@ export interface ConnectionBody extends Body, Partial<ConnectionView> {}
  * type: `ChannelView`
  * - usually same as post's body.
  */
-export interface ChannelView extends View, Partial<ChannelModel> {}
+export interface ChannelView extends View, Omit<Partial<ChannelModel>, '$alias'> {
+    /** (optional) view of alias in detail */
+    readonly $alias?: ChannelView;
+}
 
 /**
  * Type `ChannelBody`

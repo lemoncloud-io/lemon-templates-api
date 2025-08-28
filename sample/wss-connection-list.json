@@ -1,0 +1,74 @@
+{
+  "list": [
+    {
+      "id": "conn-001",
+      "ns": "TT",
+      "type": "connection",
+      "stage": "dev",
+      "domain": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+      "connectionId": "abc123def456",
+      "connectedAt": 1692345600000,
+      "disConnectedAt": 0,
+      "remote": "192.168.1.100",
+      "agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      "channels": ["1000001"],
+      "createdAt": 1692345600000,
+      "updatedAt": 1692345600000,
+      "deletedAt": 0
+    },
+    {
+      "id": "conn-002",
+      "ns": "TT",
+      "type": "connection",
+      "stage": "dev",
+      "domain": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+      "connectionId": "xyz789uvw012",
+      "connectedAt": 1692345660000,
+      "disConnectedAt": 1792345660000,
+      "remote": "10.0.1.50",
+      "agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36",
+      "channels": ["1000001", "1000002"],
+      "createdAt": 1692345660000,
+      "updatedAt": 1692345660000,
+      "deletedAt": 0
+    },
+    {
+      "id": "conn-003",
+      "ns": "TT",
+      "type": "connection",
+      "stage": "prod",
+      "domain": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+      "connectionId": "mno345pqr678",
+      "connectedAt": 1692345720000,
+      "disConnectedAt": 0,
+      "remote": "203.0.113.45",
+      "agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15",
+      "channels": ["1000001", "1000003"],
+      "createdAt": 1692345720000,
+      "updatedAt": 1692345720000,
+      "deletedAt": 0
+    },
+    {
+      "id": "conn-004",
+      "ns": "TT",
+      "type": "connection",
+      "stage": "dev",
+      "domain": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+      "connectionId": "ghi901jkl234",
+      "connectedAt": 1692345780000,
+      "disConnectedAt": 1692349380000,
+      "remote": "198.51.100.23",
+      "agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36",
+      "reason": "Client disconnected",
+      "disconnectCode": 1000,
+      "channels": [],
+      "createdAt": 1692345780000,
+      "updatedAt": 1692349380000,
+      "deletedAt": 0
+    }
+
+  ],
+  "total": 4,
+  "size": 4,
+  "from": 0
+}

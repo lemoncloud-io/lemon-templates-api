@@ -1,0 +1,145 @@
+{
+    "!": "wscat -c 'qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com/dev?x-lemon-identity=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzaWQiOiIxMDAwMSIsImdpZCI6bnVsbCwidWlkIjoiMTAwMDA1NyIsImFpZCI6IjBjNjUwNGVmLTY5MjgtNGRkYi1iZTJlLTE4NTEwZWQ4NmE1OCIsInJvbGVzIjpbIm1lbWJlciJdLCJTaXRlIjp7Im5hbWUiOiIjZGVmYXVsdC8xMDAwMDAxIiwiY29kZSI6IiJ9LCJVc2VyIjp7Im5hbWUiOiJBaWRlbuuwsOuPmeykgCIsInN0ZXJlbyI6IiIsIm5pY2siOiJhaWRlbiIsImxvZ2luIjoiIn0sImlzcyI6Imttcy9sZW1vbi1pZGVudGl0eS1rZXkiLCJpYXQiOjE3NTU2NTY4MDYsImV4cCI6MTc1NTY2MDQwNn0.f8valu9LtxzKw2j10H3pzRhHx7dI936a6Xyz7huu6VeiS1oNmJT2IpHJ8-ChDFGlamaYF5dB5PzsdNFBP8sFUAKNuMyj5kATUecJ4QEokQU8-SWwZR9cYvZZY9-ddqzNyrjFG1Qhh6roi25oZY_wVf3fEq8NH1tEWzFtGBxKsc5p8lmnSpBZ9YUrdRDzNi6LY98sAmpkmOu1hoG9Y9T5JmeX9kppqxcxrTxqeuQqmdjHPOMfF0E8EJ6YNr7IaYPHm-wE6-kfdrDYxjhSseD7QQWu1EEhiq8vVKXLv_kjGrtzbAxXO8nuuDqivB2pAwAI6F4Vk51cv5DuHZ3GB1tbFg' ",
+    "context": {
+        "callbackWaitsForEmptyEventLoop": false,
+        "functionVersion": "$LATEST",
+        "functionName": "eureka-sockets-api-dev-socket",
+        "memoryLimitInMB": "512",
+        "logGroupName": "/aws/lambda/eureka-sockets-api-dev-socket",
+        "logStreamName": "2025/08/19/[$LATEST]10cbb73f2b1647bf8be54...40-8a54-4312-8704-81452def0bc3"
+    },
+    "$connect": {
+        "headers": {
+            "Accept-Encoding": "gzip, deflate, br, zstd",
+            "Accept-Language": "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cache-Control": "no-cache",
+            "Host": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "Origin": "chrome-extension://gobngblklhkgmjhbpbdlkglbhhlafjnh",
+            "Pragma": "no-cache",
+            "Sec-WebSocket-Extensions": "permessage-deflate; client_max_window_bits",
+            "Sec-WebSocket-Key": "dRHhU0OEdr9GZY5Frsowyg==",
+            "Sec-WebSocket-Version": "13",
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+            "X-Amzn-Trace-Id": "Root=1-68a532f6-0f03e39a47ed968275d1f717",
+            "X-Forwarded-For": "221.149.250.13",
+            "X-Forwarded-Port": "443",
+            "X-Forwarded-Proto": "https"
+        },
+        "multiValueHeaders": {
+            "Accept-Encoding": [
+                "gzip, deflate, br, zstd"
+            ],
+            "Accept-Language": [
+                "ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7"
+            ],
+            "Cache-Control": [
+                "no-cache"
+            ],
+            "Host": [
+                "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com"
+            ],
+            "Origin": [
+                "chrome-extension://gobngblklhkgmjhbpbdlkglbhhlafjnh"
+            ],
+            "Pragma": [
+                "no-cache"
+            ],
+            "Sec-WebSocket-Extensions": [
+                "permessage-deflate; client_max_window_bits"
+            ],
+            "Sec-WebSocket-Key": [
+                "dRHhU0OEdr9GZY5Frsowyg=="
+            ],
+            "Sec-WebSocket-Version": [
+                "13"
+            ],
+            "User-Agent": [
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36"
+            ],
+            "X-Amzn-Trace-Id": [
+                "Root=1-68a532f6-0f03e39a47ed968275d1f717"
+            ],
+            "X-Forwarded-For": [
+                "221.149.250.13"
+            ],
+            "X-Forwarded-Port": [
+                "443"
+            ],
+            "X-Forwarded-Proto": [
+                "https"
+            ]
+        },
+        "queryStringParameters": {
+            "x-lemon-identity": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlcyI6WyJ1c2VyIl0sInNpZCI6IjEwMDAxIiwidWlkIjoiMTAwMDA1NyIsImlzcyI6Imttcy9sZW1vbi1pZGVudGl0eS1rZXkiLCJpYXQiOjQwOTA3MDI5NTMsImV4cCI6NDA5MDc4OTM1M30.0qDGz-6k9VhbA0cQoSTfcl_ghbnMo0IqAenUs3BpgxAPkSLJZbX6I1w_AbNt_fp_sC-Z2eqUKUa-bpHTyP69PGW6BP25gM2TTusf3z9uIMMZ0henmF5Ru2jzyvnLDIuXKsHlzgS32gH5b8GjzF_p6hzsFCUkVi7aEDfZ_HUECHJ6zCr7VyEOwLgWP_yduRTiIviC0ZGbOTRoGlA1Wc3a5LNGHr88pnihXw2oraxtGeWCkjLJlYuU_iKgFLq3Ql8AYCUd_6uC3oTD7ydqKmbFXb8Ei1jhPGXXFefm_yFqlJIyu9uNxFBZOh6AsRAw-pQVyAI4gIdeB8Ll5R9cVVoVOA"
+        },
+        "multiValueQueryStringParameters": {
+            "x-lemon-identity": [
+                "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlcyI6WyJ1c2VyIl0sInNpZCI6IjEwMDAxIiwidWlkIjoiMTAwMDA1NyIsImlzcyI6Imttcy9sZW1vbi1pZGVudGl0eS1rZXkiLCJpYXQiOjQwOTA3MDI5NTMsImV4cCI6NDA5MDc4OTM1M30.0qDGz-6k9VhbA0cQoSTfcl_ghbnMo0IqAenUs3BpgxAPkSLJZbX6I1w_AbNt_fp_sC-Z2eqUKUa-bpHTyP69PGW6BP25gM2TTusf3z9uIMMZ0henmF5Ru2jzyvnLDIuXKsHlzgS32gH5b8GjzF_p6hzsFCUkVi7aEDfZ_HUECHJ6zCr7VyEOwLgWP_yduRTiIviC0ZGbOTRoGlA1Wc3a5LNGHr88pnihXw2oraxtGeWCkjLJlYuU_iKgFLq3Ql8AYCUd_6uC3oTD7ydqKmbFXb8Ei1jhPGXXFefm_yFqlJIyu9uNxFBZOh6AsRAw-pQVyAI4gIdeB8Ll5R9cVVoVOA"
+            ]
+        },
+        "requestContext": {
+            "routeKey": "$connect",
+            "eventType": "CONNECT",
+            "extendedRequestId": "PlTmpHGvIE0EW_Q=",
+            "requestTime": "20/Aug/2025:02:29:10 +0000",
+            "messageDirection": "IN",
+            "stage": "dev",
+            "connectedAt": 1755656950992,
+            "requestTimeEpoch": 1755656950993,
+            "identity": {
+                "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+                "sourceIp": "221.149.250.13"
+            },
+            "requestId": "PlTmpHGvIE0EW_Q=",
+            "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "PlTmpdLRoE0CJhA=",
+            "apiId": "qksfa5jxm1"
+        },
+        "isBase64Encoded": false
+    },
+    "$message": {
+        "requestContext": {
+            "routeKey": "$default",
+            "messageId": "PlTp5dMuIE0CJhA=",
+            "eventType": "MESSAGE",
+            "extendedRequestId": "PlTp5HLKoE0ESgQ=",
+            "requestTime": "20/Aug/2025:02:29:31 +0000",
+            "messageDirection": "IN",
+            "stage": "dev",
+            "connectedAt": 1755656950992,
+            "requestTimeEpoch": 1755656971719,
+            "identity": {
+                "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+                "sourceIp": "221.149.250.13"
+            },
+            "requestId": "PlTp5HLKoE0ESgQ=",
+            "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "PlTmpdLRoE0CJhA=",
+            "apiId": "qksfa5jxm1"
+        },
+        "body": "{\"action\":\"ping\": \"data\":\"hello\"}",
+        "isBase64Encoded": false
+    },
+    "$disconnect": {
+        "requestContext": {
+            "routeKey": "$disconnect",
+            "disconnectStatusCode": 1005,
+            "eventType": "DISCONNECT",
+            "extendedRequestId": "PlTsEFWJoE0EQjw=",
+            "requestTime": "20/Aug/2025:02:29:45 +0000",
+            "messageDirection": "IN",
+            "disconnectReason": "Client-side close frame status not set",
+            "stage": "dev",
+            "connectedAt": 1755656950992,
+            "requestTimeEpoch": 1755656985682,
+            "identity": {
+                "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/139.0.0.0 Safari/537.36",
+                "sourceIp": "221.149.250.13"
+            },
+            "requestId": "PlTsEFWJoE0EQjw=",
+            "domainName": "qksfa5jxm1.execute-api.ap-northeast-2.amazonaws.com",
+            "connectionId": "PlTmpdLRoE0CJhA=",
+            "apiId": "qksfa5jxm1"
+        }
+    }
+}

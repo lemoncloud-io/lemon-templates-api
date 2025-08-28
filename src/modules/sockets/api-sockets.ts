@@ -14,8 +14,8 @@ import $cores, { $U, _log, _inf, _err, NextHandler, NextContext, $protocol } fro
 import { $T, AbstractCRUDController } from '../../cores';
 import { LambdaWSSHandler, WSSAgentRunner } from '../../libs/wss/wss-agent';
 import { SocketActionType, SocketEvent, SocketEventType } from '../../libs/wss/wss-types';
-import { buildSocketResponse, parseMessage } from '../../libs/wss/tools';
-import { SocketModel } from './model';
+import { asSocketMessage, buildSocketResponse, parseMessage } from '../../libs/wss/tools';
+import { ChannelModel, ConnectionModel, SocketModel } from './model';
 import { SocketModelManager } from './service';
 import { $trans, SocketTransformer } from './transformer';
 import { SocketBody, SocketView } from './views';
@@ -109,6 +109,38 @@ export class SocketAPIController
     };
 
     /**
+     * post broadcast message to all connections in `list`
+     * @param payload the message payload to broadcast
+     * @param list list of connections to which the message will be broadcasted
+     */
+    public postBroadcastMessage = async (
+        payload: any,
+        list: ConnectionModel[],
+        options?: { context?: NextContext; $channel?: ChannelModel },
+    ) => {
+        const errScope = `postBroadcastMessage(${this.type()}/${options?.$channel?.id ?? ''})`;
+        const context = options?.context;
+        const $channel = options?.$channel;
+
+        const _end = (N: ConnectionModel) =>
+            N?.domain && N?.stage
+                ? `https://${N?.domain}/${N?.stage ?? ''}`
+                : `https://0z5quzjfdc.execute-api.ap-northeast-2.amazonaws.com/dev`;
+
+        //TODO [Steve] use env whether to use protocol.
+        if (list?.length > 0) {
+            const channel = `${$channel?.service ?? ''}.${$channel?.modelType ?? ''}`;
+            const $list = list.map(N => ({ id: N.connectionId, endpoint: _end(N) })); // for payload downsizing
+            const body = { payload, list: $list };
+            return $protocol({ ...context }, `//eureka-executes-api/connections/${channel}/broadcast`).execute(
+                null,
+                body,
+            );
+        }
+        return this.$wss.doBroadcast(payload, list);
+    };
+
+    /**
      * GET /sockets/0/hello
      *
      * ```sh
@@ -144,8 +176,16 @@ export class SocketAPIController
         const throws = param?.throws !== undefined ? $T.S2(param?.throws) : undefined;
         if (throws) throw new Error(`${throws} - ${errScope}`);
 
-        // must returns some.
-        return '';
+        // STEP.0 extract parameters.
+        const channels = $T.SS(param?.channels);
+
+        return this.service.guardProxy($ctx, async proxy => {
+            const $conn = await proxy.doConnect(event, channels, { errScope });
+            return {
+                id: event?.id,
+                $conn,
+            };
+        });
     };
 
     public doPostDisconnect: SocketHandler<any> = async (id, param, event, $ctx) => {
@@ -153,7 +193,14 @@ export class SocketAPIController
         event && _log(NS, `> event =`, $U.json(event));
         $ctx && _log(NS, `> context =`, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id).trim();
-        return;
+
+        return this.service.guardProxy($ctx, async proxy => {
+            const $conn = await proxy.doDisconnect(event, { errScope });
+            return {
+                id: event?.id,
+                $conn,
+            };
+        });
     };
 
     /**
@@ -208,13 +255,13 @@ export class SocketAPIController
         body && _log(NS, `> body =`, $U.json(body));
         $ctx && _log(NS, `> context =`, $U.json($ctx));
         id = id === '0' ? '' : $T.S2(id).trim();
-        const [channel, stereo] = `${id || ''}`.split('.');
-
         // STEP.0 validate parameters.
-        if (!channel) throw new Error(`@channel (string) is required - ${errScope}`);
-        if (!stereo) throw new Error(`@stereo (string) is required - ${errScope}`);
-        // const $result = await $sockets(this.service, null, $ctx).broadcast(channel, stereo, body);
-        // return $result;
+        const payload = asSocketMessage(body);
+        return this.service.guardProxy($ctx, async proxy => {
+            // STEP.1 find channel and search connections.
+            const { $msg, list } = await proxy.prepareBroadcast(payload);
+            return this.postBroadcastMessage($msg, list);
+        });
     };
 }
 

@@ -63,6 +63,11 @@ export interface SocketResponse<T = any> {
      * timestamp in `YYYY-MM-DD HH:mm:ss`
      */
     ts?: string;
+    /**
+     * id of the channel
+     * - channel to which the message was sent.
+     */
+    channel?: string;
 }
 /**
  * socket event content
@@ -100,6 +105,52 @@ export interface SocketEvent extends ConnectionInfo {
      * body
      */
     body?: string;
+}
+/**
+ * interface: `SocketMessage`
+ * - Message structure used when external services send WebSocket requests
+ */
+export interface SocketMessagePayload<T extends SocketModelMeta = SocketModelMeta> {
+    /**
+     * Name of the service that sent the message
+     * - ex) `lemon-orders-api`, `lemon-payments-api`
+     */
+    service: string;
+    /**
+     * Resource (modelType) name of the channel that sent the message
+     * - ex) `order`, `payment`, `user`
+     */
+    modelType: string;
+    /**
+     * event type
+     */
+    event?: MessageActionType;
+    /**
+     * timestamp in `YYYY-MM-DD HH:mm:ss`
+     */
+    ts?: string;
+    /**
+     * message data
+     */
+    data?: T;
+}
+/**
+ * interface: `SocketModelMeta`
+ * - 외부 서비스의 모델 메타데이터.
+ */
+export interface SocketModelMeta {
+    /** id of model */
+    id?: string;
+    /** type of model */
+    type?: string;
+    /** sid of model */
+    sid?: string;
+    /** uid of model */
+    uid?: string;
+    /** gid of model */
+    gid?: string;
+    /** oid of model (owner) */
+    oid?: string;
 }
 /**
  * lookup table
@@ -170,32 +221,44 @@ declare const $LUT: {
      * DisconnectStatusCode
      */
     DisconnectStatusCode: {
-        /** 1000 - 정상 종료 */
+        /** 1000 - Normal closure */
         1000: string;
-        /** 1001 - 서버 종료/페이지 이동 */
+        /** 1001 - Server shutdown/page navigation */
         1001: string;
-        /** 1002 - 프로토콜 오류 */
+        /** 1002 - Protocol error */
         1002: string;
-        /** 1003 - 지원하지 않는 데이터 */
+        /** 1003 - Unsupported data */
         1003: string;
-        /** 1005 - 상태 코드 없음 */
+        /** 1005 - No status code received */
         1005: string;
-        /** 1006 - 비정상 종료 */
+        /** 1006 - Abnormal closure */
         1006: string;
-        /** 1007 - 잘못된 프레임 */
+        /** 1007 - Invalid frame payload */
         1007: string;
-        /** 1008 - 정책 위반 */
+        /** 1008 - Policy violation */
         1008: string;
-        /** 1009 - 메시지 크기 초과 */
+        /** 1009 - Message too big */
         1009: string;
-        /** 1011 - 서버 내부 오류 */
+        /** 1011 - Internal server error */
         1011: string;
-        /** 1012 - 서비스 재시작 */
+        /** 1012 - Service restart */
         1012: string;
-        /** 1013 - 나중에 다시 시도 */
+        /** 1013 - Try again later */
         1013: string;
-        /** 1015 - TLS 핸드셰이크 실패 */
+        /** 1015 - TLS handshake failure */
         1015: string;
+    };
+    /**
+     * MessageActionType
+     */
+    MessageActionType: {
+        '': string;
+        /** create */
+        create: string;
+        /** update */
+        update: string;
+        /** delete */
+        delete: string;
     };
 };
 /**
@@ -222,4 +285,8 @@ export declare type SocketDirectionType = keyof typeof $LUT.DirectionType;
  * type: `DisconnectStatusCode`
  */
 export declare type DisconnectStatusCode = keyof typeof $LUT.DisconnectStatusCode;
+/**
+ * type: `MessageActionType`
+ */
+export declare type MessageActionType = keyof typeof $LUT.MessageActionType;
 export default $LUT;

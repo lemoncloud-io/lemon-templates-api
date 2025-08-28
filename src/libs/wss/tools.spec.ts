@@ -125,21 +125,34 @@ describe('WebSocketTools', () => {
     it('should pass tools spec', async () => {
         //* test buildSocketResponse()
         const now = 1704067200000;
-        expect2(() => buildSocketResponse('ping')).toEqual({ action: 'ping', ts: expect.any(String) });
+        expect2(() => buildSocketResponse('ping')).toEqual({
+            action: 'ping',
+            ts: expect.any(String),
+            channel: '#default',
+        });
         expect2(() => buildSocketResponse('pong', { message: 'hello' })).toEqual({
             action: 'pong',
             data: { message: 'hello' },
             ts: expect.any(String),
+            channel: '#default',
         });
         expect2(() => buildSocketResponse('echo', 'test data', { current: now })).toEqual({
             action: 'echo',
             data: 'test data',
             ts: $U.ts(now),
+            channel: '#default',
         });
         expect2(() => buildSocketResponse('', null)).toEqual({
             action: '',
             data: null,
             ts: expect.any(String),
+            channel: '#default',
+        });
+        expect2(() => buildSocketResponse('', 'hello', { channel: 'x' })).toEqual({
+            action: '',
+            data: 'hello',
+            ts: expect.any(String),
+            channel: 'x',
         });
 
         const complexData = {
@@ -153,6 +166,7 @@ describe('WebSocketTools', () => {
             action: 'message',
             data: complexData,
             ts: expect.any(String),
+            channel: '#default',
         });
     });
 });

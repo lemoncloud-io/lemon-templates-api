@@ -20,6 +20,8 @@ import { ConnectionInfo, SocketActionType, SocketEvent, SocketEventType } from '
 export { SocketPayload, SocketResponse } from './wss-types';
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
 import { BackendService } from '../../service/backend-service';
+import { Context } from 'aws-lambda';
+import { HttpHeaderSet, MyHttpHeaderTool } from 'lemon-core/dist/cores/lambda/lambda-web-handler';
 const NS = $U.NS(`wss`, 'green'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -45,6 +47,11 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
         if (!service) throw new Error(`@service is required - LambdaWSSHandler`);
         if (!runner) throw new Error(`@runner is required - LambdaWSSHandler`);
     }
+
+    /**
+     * say hello
+     */
+    public hello = () => `lambda-wss-handler:${this.service.hello()}`;
 
     /**
      * Default WSS Handler.
@@ -84,6 +91,56 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
     };
 
     /**
+     * builder of tools for http-headers
+     * - extracting header content, and parse.
+     */
+    public tools = (event: WSSEvent): WSSHeaderTool => new WSSHeaderTool(event?.headers, event?.queryStringParameters);
+
+    /**
+     * (optional) pack the origin context to application context.
+     * - override this function if required!
+     *
+     * @param event     origin event
+     * @param context   origin context of lambda
+     * @override `@lemon-core/LambdaHandlerService.packContext`
+     */
+    public packContext = async (event?: WSSEvent, orgContext?: Context): Promise<NextContext> => {
+        _log(NS, `packContext(${event ? '' : 'null'})..`);
+        if (!event) return null;
+        //* prepare chain object.
+        const reqContext = event?.requestContext;
+        orgContext && _log(NS, `> orgContext =`, $U.S(orgContext, 256, 32));
+        reqContext && _log(NS, `> reqContext =`, $U.S(reqContext, 256, 32));
+
+        // STEP.1 extract the key headers.
+        const $tool = this.tools(event);
+        const identity = await $tool.parseIdentityHeader();
+        const _prepare = (): NextContext => {
+            const cookie = $tool.parseCookiesHeader();
+            const domain = $tool.getHeader('host');
+            const referer = $tool.getHeader('referer');
+            const origin = $tool.getHeader('origin');
+            const userAgent = $tool.getHeader('user-agent');
+            const authorization = $tool.getHeader('authorization');
+            return $tool.onlyDefined<NextContext>({
+                identity,
+                cookie,
+                domain,
+                referer,
+                origin,
+                userAgent,
+                authorization,
+            });
+        };
+
+        // STEP.3. prepare the final `next-context`.
+        const $ctx = await $tool.prepareContext(_prepare(), reqContext);
+
+        // FINIAL. returns
+        return $ctx;
+    };
+
+    /**
      * send message to client.
      */
     public async doSend(endpoint: string, connectionId: string, payload?: object | string) {
@@ -109,229 +166,87 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
             throw e;
         }
     }
-}
-
-/**
- * builder/factory for sockets per each event.
- *
- * @deprecated use `WSSAgentRunner` instead.
- */
-export const $sockets = (service: BackendService, event?: WSSEvent, context?: NextContext) => {
-    const $evt = convertWSSEvent(event);
-    return new WSSAgent(service, $evt, context);
-};
-
-/**
- * class: `WSSAgent`
- * - support class for WebSocket events.
- *
- * @deprecated use `WSSAgentRunner` instead.
- */
-export class WSSAgent {
-    /**
-     * default constructor
-     */
-    public constructor(readonly service: BackendService, readonly event: SocketEvent, readonly context: NextContext) {
-        _log(NS, `WSSAgent(${event?.type || ''}/${event?.connectionId || ''})...`);
-    }
-
-    /** say hello */
-    public hello = () => `wss:${this.event?.type || ''}:${this.event?.connectionId || ''}`;
-
-    /**
-     * run and return response.
-     */
-    public $run = async (): Promise<void> => {
-        const event = this.event;
-        const errScope = `$run(${event?.direction ?? '-'}/${event?.id ?? ''})`;
-        if (!event || !event.id) throw new Error(`@event is required - ${errScope}`);
-        const _run = async (type: SocketEventType) => {
-            if (!type) {
-                throw new Error(`@type (string) is required - ${errScope}`);
-            } else if (type == 'CONNECT') {
-                return this.onConnect(event);
-            } else if (type == 'DISCONNECT') {
-                return this.onDisconnect(event);
-            } else if (type == 'MESSAGE') {
-                return this.onMessage(event);
-            } else {
-                throw new Error(`@type[${type}] is invalid! - ${errScope}`);
-            }
-        };
-        //* return must be void (200);
-        await _run(event?.type);
-    };
-
-    /**
-     * handle for connection event.
-     */
-    public async onConnect(event?: SocketEvent): Promise<any> {
-        const errScope = `doConnect(${event?.id ?? ''})`;
-        event = event ?? this.event;
-
-        // STEP.0 extract parameters
-        const { param } = event;
-        const channel = $T.S2(param?.channel, 'lemon');
-        const stereo = $T.S2(param?.stereo, 'none');
-        _log(NS, `> ${channel}:${stereo}@${errScope}`);
-
-        //* run in guard-proxy
-        return this.service.guardProxy(this.context, async proxy => {
-            // STEP.1 find or create channel model
-            const { $channel } = await proxy.establishChannel(channel, stereo);
-            _log(NS, `> $channel[${$channel?.id}] = `, $U.json($channel));
-
-            // STEP.2 find or create connection model
-            const $conn = await proxy.connection.findModel(event);
-            _log(NS, `> $conn[${$conn?.id}] = `, $U.json($conn));
-
-            // STEP.3 update connection model with channel
-            //TODO - 테스트를 위한 단일 채널 연결! @aiden
-            const $res = await proxy.connection.updateConnection($conn, { channels: [$channel.id] });
-            return {
-                id: event?.id,
-                $conn: $res,
-                $channel,
-            };
-        });
-    }
-
-    /**
-     * handle for disconnection event.
-     * - 연결 해제 시 끊기는 이유와 끊긴 시각을 기록한다.
-     */
-    public async onDisconnect(event?: SocketEvent): Promise<any> {
-        const errScope = `onDisconnect(${event?.id ?? ''})`;
-        event = event ?? this.event;
-        _log(NS, `${errScope}...`);
-
-        //* run in guard-proxy
-        return this.service.guardProxy(this.context, async proxy => {
-            // STEP.1 update disconnection info
-            // TODO - 리팩토링 예정 @aiden
-            const $conn = await proxy.connection.updateDisconnection(event);
-
-            return {
-                id: event?.id,
-                $conn,
-            };
-        });
-    }
-
-    /**
-     * handle for message event.
-     */
-    public async onMessage(event?: SocketEvent): Promise<any> {
-        const errScope = `onMessage(${event?.direction}/${event?.id ?? ''})`;
-        event = event ?? this.event;
-        const { body, param, connectionId } = event;
-
-        // STEP.0 validate body, and parse payload
-        const $msg = parseMessage(body);
-        const action = $msg.action as SocketActionType;
-        _inf(NS, `> action @${errScope} =`, action);
-
-        // STEP.1 route to handler
-        switch (action) {
-            case 'echo':
-                const $echo = buildSocketResponse('echo', onlyDefined({ param, body, connectionId }));
-                await this.postClientMessage($echo, event);
-                return $echo;
-            case 'ping':
-                const $pong = buildSocketResponse('pong', $msg?.data);
-                await this.postClientMessage($pong, event);
-                return $pong;
-            default:
-                const message = `@action[${action}] is invalid (not supported) - ${errScope}`;
-                throw new Error(message);
-        }
-    }
 
     /**
      * post to client
      * @param payload   object or string
      * @param $conn     connection-info
      */
-    public postClientMessage = async (payload: any, $conn?: ConnectionInfo) => {
-        $conn = $conn || this.event;
-        const { stage, domain, connectionId } = $conn;
+    public async postClientMessage<T extends ConnectionInfo = ConnectionInfo>(payload: any, $event?: T) {
+        const { stage, domain, connectionId } = $event;
         if (!domain) throw new Error(`@domain (string) is required!`);
-        const url = `https://${domain}/${stage || ''}`;
+        const url = `https://${domain}/${stage ?? ''}`;
         return this.doSend(url, connectionId, payload);
-    };
-
-    /**
-     * send message to client.
-     */
-    public async doSend(endpoint: string, connectionId: string, payload?: any) {
-        const errScope = `doSend(${endpoint ?? ''}/${connectionId ?? ''})`;
-        const region = $U.env('DEFAULT_REGION', 'ap-northeast-2');
-        const $client = new ApiGatewayManagementApiClient({ region, endpoint });
-        const command = new PostToConnectionCommand({
-            ConnectionId: connectionId,
-            Data: payload && typeof payload === 'object' ? JSON.stringify(payload) : `${payload ?? ''}`,
-        });
-        _inf(NS, `> command =`, $U.json(command));
-
-        // ignore internal error
-        try {
-            const $res = await $client.send(command);
-            //TODO [Steve] `Forbidden` occured in ssocio/VPC configuration @250808
-            //NOTE - 다만 lemon에서는 잘 작동하는듯함. (VPC 구성 없음!)
-            // $res := {"$metadata":{"httpStatusCode":200,"requestId":"b86aec0a-85aa-4ab3-bbf4-30c52c808970","attempts":1,"totalRetryDelay":0}}
-            _log(NS, `> $res@${errScope} =`, $U.json($res));
-        } catch (e) {
-            //TODO [Steve] need to report error @250808
-            _err(NS, `> error@${errScope} =`, GETERR(e), e);
-            throw e;
-        }
-
-        // returns -> any purpose ??
-        return { connectionId };
     }
 
     /**
-     * broadcast message to all nodes in the channel/stereo.
-     *
-     * @param channel
-     * @param stereo
-     * @param data
-     * @param type
-     * @returns
+     * broadcast message to selected connections
+     * @param payload Message payload to send
+     * @param list array of connections
      */
-    public async broadcast(channel: string, stereo: string, data?: any) {
-        const errScope = `broadcast(${channel ?? ''}/${stereo ?? ''})`;
-        _log(NS, `${errScope}...`);
+    public async doBroadcast<T extends ConnectionInfo = ConnectionInfo>(
+        payload: any,
+        list: T[],
+        options?: { channel?: string },
+    ) {
+        const errScope = `doBroadcast(${options?.channel ?? ''})`;
+        list && _log(NS, `> list@${errScope}.len = `, list.length);
 
-        // STEP.1 prepare messasge to be sent
-        return this.service.guardProxy(this.context, async proxy => {
-            const { $channel } = await proxy.establishChannel(channel, stereo);
-            _log(NS, `> $channel[${$channel?.id}] =`, $U.json($channel));
+        // STEP.1 prepare the connections
+        const $list = list?.map((N, i) => ({ ...N, id: N?.connectionId ?? $T.S2(i) }));
 
-            const { list: $conns } = await proxy.connection.listAvailableConns($channel.id, { useSearch: false });
-            if (!$conns || !$conns?.length) return 0;
-
-            const $sent = await my_parrallel($conns, async N => {
-                const connId = N?.id ? $T.S2(N.id) : null;
-                const $conn = connId ? await proxy.connection.get(connId) : null;
-                //* if valid, post msg...
-                if ($conn?.connected && $conn?.connectionId) {
-                    return this.postClientMessage(data, $conn)
-                        .then(() => {
-                            return { id: N.id, error: null as string };
-                        })
-                        .catch(e => {
-                            const error = e instanceof Error ? GETERR(e) : e;
-                            if (error?.message === '410') return { id: N.id }; //* ignore if `GoneException`
-                            _err(NS, `>> conn[${connId}].err =`, $U.json(error));
-                            return { error: e, id: N.id, $conn };
-                        });
-                }
-                return null;
-            });
-
-            const errors = $sent.filter(N => N && N.error);
-            return { $conns, $sent, count: $sent.length, errors };
+        // STEP.2 send message to each connection
+        const $sent = await my_parrallel($list, async N => {
+            if (N?.connectionId && N?.stage && N?.domain) {
+                return this.postClientMessage(payload, N)
+                    .then(() => {
+                        return { id: N.id, error: null as string };
+                    })
+                    .catch(e => {
+                        const error = e instanceof Error ? GETERR(e) : e;
+                        if (error?.message === '410') return { id: N.id }; //* ignore if `GoneException`
+                        _err(NS, `>> conn[${N.id}].err =`, $U.json(error));
+                        return { error: e, id: N.id, $conn: N };
+                    });
+            }
+            return null;
         });
+
+        // STEP.3 if on error. do something....
+        const errors = $sent.filter(N => N && N.error);
+        errors.length && _err(NS, `! errors.len =`, $U.json(errors.map(N => `${N.id}:${N.error}`)));
+        if (errors.length > 0) {
+            await doReportError(errors[0].error, null, null, { payload, $sent }).catch(GETERR);
+        }
+        return { $conns: list, $sent, count: $sent.length, errors };
+    }
+}
+
+/**
+ * WSS Header Tool
+ */
+export class WSSHeaderTool extends MyHttpHeaderTool {
+    private queryParams: { [key: string]: string } = {};
+
+    constructor(
+        headers?: HttpHeaderSet,
+        queryStringParameters?: { [key: string]: string },
+        options?: { isClone?: boolean },
+    ) {
+        super(headers, options);
+        this.queryParams = queryStringParameters || {};
+    }
+
+    /**
+     * get the last value in header by name
+     * - if not found in headers, fallback to query parameters.
+     * @override
+     */
+    public getHeader(name: string): string {
+        // (1st) check in headers
+        const headerValue = super.getHeader(name);
+        if (headerValue) return headerValue;
+        // (2nd) check in query parameters
+        return this.queryParams[name];
     }
 }

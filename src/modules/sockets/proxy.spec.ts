@@ -12,7 +12,7 @@ import { loadProfile } from 'lemon-core/dist/environ';
 import { expect2, NextIdentityAccess, $info, loadJsonSync, GETERR } from 'lemon-core';
 import { SocketEvent } from '../../libs/wss/wss-types';
 import { convertWSSEvent } from '../../libs/wss/tools';
-import { ConnectionModel } from './model';
+import { ChannelModel, ConnectionModel } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';
@@ -85,7 +85,6 @@ describe('BackendProxy', () => {
             domain: $eventA.domain,
             remote: $eventA.remote,
             stage: $eventA.stage,
-            connected: 1,
             origin: '',
             reason: '',
             agent: '',
@@ -146,35 +145,154 @@ describe('BackendProxy', () => {
             '.domain (string) is required - findModel(connection/3a35d8e85096a04d047bf4)',
         );
 
-        //* validate a updateDisconnection
-        const $eventD = _loadEvent('wss-dis-event'); //
-        expect2(await $conn.updateDisconnection($eventD)).toEqual({
+        //* validate a updateConnection
+        expect2(await $conn.updateConnection($connA, {})).toEqual({
             ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
             ...expected,
-            connected: 0,
-            disConnectedAt: current,
-            reason: 'Client-side close frame status not set',
-            disconnectCode: 1005,
         });
-        expect2(await $conn.updateDisconnection($eventD)).toEqual({
+        expect2(await $conn.updateConnection({ id: $connA.id }, {})).toEqual({
             ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
             ...expected,
-            connected: 0,
-            disConnectedAt: current,
-            reason: 'Client-side close frame status not set',
+        });
+        expect2(await $conn.updateConnection($connA, { disconnectCode: 1005, disConnectedAt: current })).toEqual({
+            ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
+            ...expected,
             disconnectCode: 1005,
+            disConnectedAt: current,
+        });
+        expect2(await $conn.updateConnection($connA, { channels: [] })).toEqual({
+            ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
+            ...expected,
+            disconnectCode: 1005,
+            disConnectedAt: current,
+            channels: [],
+            // channel$$: [],
         });
 
-        const $eventE = _loadEvent('wss-dis2-event'); // not saved connection
-        expect2(await $conn.updateDisconnection($eventE).catch(GETERR)).toEqual(
-            `.connId[3a6de38dd09e204d021558] is invalid (expected as ) - updateDisconnection(connection/${$eventE.id})`,
+        // link channel to connection
+        const $channA = await proxy.channel.makeModel({ id: 'A:B', service: 'B', modelType: 'B' });
+        expect2(() => $channA, 'id,service,modelType').toEqual({ id: 'A:B', service: 'B', modelType: 'B' });
+
+        expect2(await $conn.updateConnection($connA, { channels: [$channA.id] })).toEqual({
+            ..._ts('3a35d8e9c860a04d0221dc', 'connection'),
+            ...expected,
+            disconnectCode: 1005,
+            disConnectedAt: current,
+            channels: [$channA.id],
+            // channel$$: [proxy.channel.trans.asHead($channA)],
+        });
+
+        expect2(await $conn.updateConnection(null, null).catch(GETERR)).toEqual(
+            '@model (connection-model) is required - updateConnection(connection/)',
+        );
+        expect2(await $conn.updateConnection({}, null).catch(GETERR)).toEqual(
+            '@model.id (string) is required - updateConnection(connection/)',
+        );
+    });
+
+    it('should pass ChannelManagerProxy', async () => {
+        const { service, proxy, _ts } = instance();
+        expect2(() => service.hello()).toEqual('backend-service:TT/dummy-data.yml');
+
+        const $channel = proxy.channel;
+        expect2(() => $channel.$mgr.hello()).toEqual(
+            'typed-storage-service:channel/proxy-storage-service:dummy-storage-service:dummy-data/_id',
         );
 
-        expect2(await $conn.updateDisconnection(null).catch(GETERR)).toEqual(
-            '@event (socket-event) is required - updateDisconnection(connection/)',
+        //! test of `asAliasId()`
+        expect2(() => $channel.asAliasId(null, null)).toEqual('@alias:-:-');
+        expect2(() => $channel.asAliasId(undefined, undefined)).toEqual('@alias:-:-');
+        expect2(() => $channel.asAliasId('', '')).toEqual('@alias::');
+        expect2(() => $channel.asAliasId('aaa', 'bbb')).toEqual('@alias:aaa:bbb');
+        expect2(() => $channel.asAliasId('AAA', 'BBB', { prefix: '#' })).toEqual('#alias:aaa:bbb');
+        expect2(() => $channel.asAliasId('lemon-hello-api', 'hello')).toEqual('@alias:lemon-hello-api:hello');
+        expect2(() => $channel.asAliasId('test-api', 'test-model', { delim: '|' })).toEqual(
+            '@alias|test-api|test-model',
         );
-        expect2(await $conn.updateDisconnection({ ...$eventA, connectionId: null }).catch(GETERR)).toEqual(
-            '.connectionId (string) is required - updateDisconnection(connection/3a35d8e85096a04d047bf4)',
+        expect2(() => $channel.asAliasId('test-api', 'test-model', { prefix: '$', stereo: '', delim: '/' })).toEqual(
+            '$/test-api/test-model',
+        );
+        expect2(await $channel.getAlias$(null, null).catch(GETERR)).toEqual(null);
+        expect2(await $channel.getAlias$(undefined, undefined).catch(GETERR)).toEqual(null);
+        expect2(await $channel.getAlias$('-', null).catch(GETERR), 'id').toEqual({ id: '#alias:-:-' });
+        expect2(await $channel.getAlias$('-', '-').catch(GETERR), 'id').toEqual({ id: '#alias:-:-' });
+
+        //! test of `updateAlias()`
+        const _updateAlias = (service: string, type: string, id?: string) =>
+            $channel.updateAlias(service, type, { id }).catch(GETERR);
+
+        expect2(await _updateAlias('hello', 'test'), 'service,modelType,aliasId').toEqual({
+            aliasId: '',
+            service: 'hello',
+            modelType: 'test',
+        });
+        expect2(await _updateAlias('hello', 'test', 'a'), 'aliasId').toEqual({ aliasId: 'a' });
+        expect2(await _updateAlias('hello', 'test', 'b'), 'aliasId').toEqual(
+            '.alias[hello/test] is invalid (occupied by a) - updateAlias(channel/hello@test)',
+        );
+        expect2(await _updateAlias('hello', 'test'), 'aliasId').toEqual({ aliasId: '' });
+        expect2(await _updateAlias('Hello', 'test', 'b'), 'aliasId').toEqual({ aliasId: 'b' });
+        expect2(await _updateAlias('Hello', '', ''), 'aliasId').toEqual({ aliasId: '' });
+
+        expect2(await $channel.get('', false).catch(GETERR)).toEqual('@id is required - retrieve(channel/)');
+        expect2(await $channel.get('0', false).catch(GETERR)).toEqual(null);
+
+        //* validate update linked model
+        const aliasA = {
+            ..._ts('#alias:hello:world', 'channel'),
+            stereo: '#alias',
+            service: 'hello',
+            modelType: 'world',
+            sid: '',
+            uid: '',
+        };
+        expect2(await $channel.getAlias$('hello', 'world')).toEqual({
+            ...aliasA,
+        });
+
+        const model0: ChannelModel = { service: 'hello', modelType: 'world' };
+        expect2(await $channel.findByAlias(model0.service, model0.modelType).catch(GETERR)).toEqual(
+            '404 NOT FOUND - channel by alias@findByAlias$(channel/hello@world)',
+        );
+        const $model0 = await $channel.makeModel({ ...model0 });
+        expect2(() => $model0, 'id,service,modelType').toEqual({ id: '1000001', modelType: 'world', service: 'hello' });
+        expect2(await $channel.getAlias$(model0.service, model0.modelType)).toEqual({
+            ...aliasA,
+            aliasId: $model0.id,
+            alias$: { id: $model0.id, service: model0.service, modelType: model0.modelType },
+        });
+        expect2(await $channel.makeModel({ ...model0 }).catch(GETERR)).toEqual(
+            '.alias[hello/world] is invalid (occupied by 1000001) - validate(channel/)',
+        );
+
+        //! test of `findByAlias()`
+        expect2(await $channel.findByAlias(model0.service, model0.modelType)).toEqual({
+            ...$model0,
+        });
+        expect2(await $channel.findByAlias('hello', 'world!', { throwable: true }).catch(GETERR)).toEqual(
+            '404 NOT FOUND - channel by alias@findByAlias$(channel/hello@world!)',
+        );
+
+        //* (1st) update `modelType`
+        const $model1 = await $channel
+            .validateModel({ ...model0, modelType: 'world2' }, $model0.id)
+            .then(N => $channel.set($model0.id, N));
+        expect2(() => $model1).toEqual({ ...$model0, modelType: 'world2' });
+        expect2(await $channel.findByAlias(model0.service, model0.modelType).catch(GETERR)).toEqual(
+            '404 NOT FOUND - channel by alias@findByAlias$(channel/hello@world)',
+        );
+        expect2(await $channel.findByAlias(model0.service, 'world2').catch(GETERR)).toEqual({
+            ...$model0,
+            modelType: 'world2',
+        });
+
+        //* (2nd) clear `modelType`
+        const $model2 = await $channel
+            .validateModel({ ...model0, modelType: '' }, $model0.id)
+            .then(N => $channel.set($model0.id, N));
+        expect2(() => $model2).toEqual({ ...$model0, modelType: '' });
+        expect2(await $channel.findByAlias(model0.service, 'world2').catch(GETERR)).toEqual(
+            '404 NOT FOUND - channel by alias@findByAlias$(channel/hello@world2)',
         );
     });
 });

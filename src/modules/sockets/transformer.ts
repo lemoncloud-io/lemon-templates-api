@@ -10,8 +10,8 @@
  */
 import { AbstractTransformer } from 'lemon-core';
 import { $T } from '../../cores/commons';
-import { ConnectionModel, SocketModel } from './model';
-import { ConnectionBody, ConnectionView, SocketBody, SocketView } from './views';
+import { $HEAD, ChannelHead, ChannelModel, ConnectionModel, SocketModel } from './model';
+import $LUT, { ChannelBody, ChannelView, ConnectionBody, ConnectionView, SocketBody, SocketView } from './views';
 
 /**
  * class: `SocketTransformer`
@@ -56,8 +56,6 @@ export class ConnectionTransformer extends AbstractTransformer<ConnectionModel, 
             domain: model.domain,
             connectionId: model.connectionId,
 
-            connected: model.connected,
-            granted: model.granted,
             connectedAt: model.connectedAt,
             disConnectedAt: model.disConnectedAt,
 
@@ -67,6 +65,7 @@ export class ConnectionTransformer extends AbstractTransformer<ConnectionModel, 
             reason: model.reason,
             disconnectCode: model.disconnectCode,
             channels: model.channels,
+            channel$$: model?.channel$$ ? model.channel$$.map(c => $trans.channel.asHead(c)) : undefined,
         });
     }
     /**
@@ -81,9 +80,62 @@ export class ConnectionTransformer extends AbstractTransformer<ConnectionModel, 
 }
 
 /**
+ * class: `ChannelTransformer`
+ */
+export class ChannelTransformer extends AbstractTransformer<ChannelModel, ChannelView, ChannelBody> {
+    /**
+     * @override
+     */
+    public modelAsView(model: ChannelModel, hasCores?: boolean): ChannelView {
+        const view = super.modelAsView(model, hasCores);
+        return this.onlyDefined<ChannelView>({
+            ...view,
+            stereo: model.stereo,
+            service: model.service,
+            modelType: model.modelType,
+            desc: model.desc,
+            subscribed: model.subscribed,
+
+            aliasId: model.aliasId,
+            alias$: model.alias$ !== undefined ? this.modelAsView(model.alias$, hasCores) : undefined,
+            $alias: model?.$alias ? this.modelAsView(model.$alias, hasCores) : undefined,
+        });
+    }
+    /**
+     * @override
+     */
+    public bodyToModel(body: ChannelBody, isCreate?: boolean): ChannelModel {
+        const model = super.bodyToModel(body, isCreate);
+        if (!model) return model;
+
+        if (isCreate) {
+            if (body?.stereo !== undefined) model.stereo = $T.asLut(body.stereo, $LUT.ChannelStereo, 'stereo');
+            if (body?.service !== undefined) model.service = $T.S2(body.service);
+            if (body?.modelType !== undefined) model.modelType = $T.S2(body.modelType);
+        }
+        if (body?.desc !== undefined) model.desc = $T.S(body.desc);
+
+        return model;
+    }
+
+    /**
+     * extract only for head
+     */
+    public asHead = (model: ChannelModel): ChannelHead =>
+        !model
+            ? null
+            : $HEAD.channel.reduce<ChannelHead>((M, key) => {
+                  const val = model && model[key as keyof ChannelModel];
+                  if (val !== undefined) (M as any)[key] = val;
+                  return M;
+              }, {} as any);
+}
+
+/**
  * defualt export w/ instance
  */
 export const $trans = {
     socket: new SocketTransformer(),
     conns: new ConnectionTransformer(),
+    channel: new ChannelTransformer(),
 };

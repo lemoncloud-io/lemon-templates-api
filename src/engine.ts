@@ -31,6 +31,7 @@ import search from './modules/search/api-search';
 import mocks from './modules/mock/api-mocks';
 import tests from './modules/mock/api-tests';
 import sockets from './modules/sockets/api-sockets';
+import channels from './modules/sockets/api-channels';
 
 //! register sub handlers, and listeners.
 $web.addController(hello);
@@ -40,6 +41,7 @@ $web.addController(crons);
 $web.addController(tests);
 $web.addController(mocks);
 $web.addController(sockets);
+$web.addController(channels);
 
 //! register cron listener
 $cron.addListener((id, param, body, ctx) => crons.handleEvent(id, param, body, ctx));

@@ -94,7 +94,7 @@ export class ConnectionModelManager extends MyCoreManager<ConnectionModel, Model
  */
 export class ChannelModelManager extends MyCoreManager<ChannelModel, ModelType, BackendService> {
     public constructor(parent: BackendService) {
-        super('channel', parent, $FIELD.channel, { enableSync: false });
+        super('channel', parent, $FIELD.channel);
     }
 
     /**
