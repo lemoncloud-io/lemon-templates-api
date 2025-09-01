@@ -1914,7 +1914,7 @@ export class OS2Service<T extends Elastic6Item = any> extends Elastic6Service<an
 export class OS2FGACManager {
     private _fgacProxy: ApiHttpProxy;
 
-    public constructor(options: Elastic6Option, accessKey: string, secretKey: string) {
+    public constructor(options: Elastic6Option, accessKey?: string, secretKey?: string) {
         const errScope = `OS2FGACManager(${options?.indexName ?? ''})`;
         const endpoint = options.endpoint;
         const host = endpoint.split('://')[1];
@@ -1922,8 +1922,8 @@ export class OS2FGACManager {
         if (!jwtToken) throw new Error(`env.OS2_JWT_TOKEN is required - ${errScope}`);
 
         const sigConfig = {
-            accessKey,
-            secretKey,
+            accessKey: accessKey ?? '**',
+            secretKey: secretKey ?? '**',
             region: 'ap-northeast-2',
             serviceName: 'es',
             host,
@@ -2114,8 +2114,6 @@ export class OS2Instance extends Elastic6Instance {
         esDocType,
         tableName,
         autocompleteFields,
-        accessKey,
-        secretKey,
         roleName,
         userName,
     }: {
@@ -2126,8 +2124,6 @@ export class OS2Instance extends Elastic6Instance {
         esDocType: string;
         tableName: string;
         autocompleteFields: string[];
-        accessKey: string;
-        secretKey: string;
         roleName?: string;
         userName?: string;
     }) {
@@ -2144,7 +2140,7 @@ export class OS2Instance extends Elastic6Instance {
         if (endpoint && indexName) {
             if (esDocType) options.docType = esDocType;
 
-            this.fgac = new OS2FGACManager(options, accessKey, secretKey);
+            this.fgac = new OS2FGACManager(options);
             this.elastic = new OS2Service(options, this.fgac);
             this.client = this.elastic.client;
             this.query = new Elastic6QueryService<any>(this.elastic);
@@ -2403,8 +2399,6 @@ export const _OS2 = (options?: OS2Option): OS2Instance => {
             const esDocType = options?.docType ?? $U.env('OS2_DOCTYPE', '');
             const tableName = $U.env('MY_DYNAMO_TABLE', '');
             const autocompleteFields = options?.autocompleteFields ?? $T.SS($U.env('OS2_AUTOCOMPLETE_FIELDS', ''));
-            const accessKey = $U.env('OS2_ACCESS_KEY', '');
-            const secretKey = $U.env('OS2_SECRET_KEY', '');
 
             const roleName = options?.roleName;
             const userName = options?.userName;
@@ -2417,8 +2411,6 @@ export const _OS2 = (options?: OS2Option): OS2Instance => {
                 esDocType,
                 tableName,
                 autocompleteFields,
-                accessKey,
-                secretKey,
                 roleName,
                 userName,
             });
