@@ -1928,13 +1928,12 @@ export class OS2FGACManager {
             const endpoint = this.options.endpoint;
             const host = endpoint.split('://')[1];
             const $config = $engine.module('config');
+
+            const OS2_JWT_TOKEN = $U.env('OS2_JWT_TOKEN', '');
             const payload = $U.env('OS2_PAYLOAD', '');
             const signature = ($config as ConfigModule)?.config?.get('OS2_SIGNATURE') as string;
 
-            if (!payload) throw new Error(`env.OS2_PAYLOAD is required - ${errScope}`);
-            if (!signature) throw new Error(`env.OS2_SIGNATURE is required - ${errScope}`);
-
-            const jwtToken = `${payload}.${signature}`;
+            const jwtToken = OS2_JWT_TOKEN !== '' ? OS2_JWT_TOKEN : `${payload}.${signature}`; // if OS2_JWT_TOKEN is provided, use it
 
             const sigConfig = {
                 accessKey: '**',
