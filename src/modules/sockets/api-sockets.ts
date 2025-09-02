@@ -226,6 +226,7 @@ export class SocketAPIController
         // STEP.1 route to handler
         switch (action) {
             case 'ping':
+                //TODO [Steve] ping.count 를 지원하기 + timestamp 확인하기.
                 const $pong = buildSocketResponse('pong', $msg?.data);
                 const conId =
                     typeof $msg?.data === 'string' && $msg.data?.length == 'OjXY6chgoE0CIdw='.length
