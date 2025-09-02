@@ -11,12 +11,12 @@
  * @origin      `@lemoncloud/lemon-cluster-api/cluster`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _log, _inf, _err, GETERR, NextContext, $slack, my_parrallel, doReportError } from 'lemon-core';
-import { WSSEvent, LambdaHandlerService, WSSHandler } from 'lemon-core';
-import { $T, onlyDefined } from '../../cores';
+import { $U, _log, _inf, _err, GETERR, NextContext, my_parrallel, doReportError } from 'lemon-core';
+import { WSSEvent, LambdaHandlerService, WSSHandler, $slack, $info } from 'lemon-core';
+import { $T } from '../../cores';
 import { failure, notfound, success } from 'lemon-core/dist/cores/lambda/lambda-wss-handler';
-import { convertWSSEvent, buildSocketResponse, parseMessage } from './tools';
-import { ConnectionInfo, SocketActionType, SocketEvent, SocketEventType } from './wss-types';
+import { convertWSSEvent, parseMessage } from './tools';
+import { ConnectionInfo, SocketActionType, SocketEvent } from './wss-types';
 export { SocketPayload, SocketResponse } from './wss-types';
 import { ApiGatewayManagementApiClient, PostToConnectionCommand } from '@aws-sdk/client-apigatewaymanagementapi';
 import { BackendService } from '../../service/backend-service';
@@ -72,7 +72,9 @@ export class LambdaWSSHandler implements LambdaHandlerService<WSSHandler> {
         const _slack = async () => {
             const $msg = parseMessage(event.body);
             const action = $msg?.action as SocketActionType;
-            const title = !action ? `#socket/${ROUTE}` : `#socket/${ROUTE}/${action}`;
+            const { stage } = $info();
+            const head = stage?.startsWith('prod') ? `#socket` : `#socket-${stage}`;
+            const title = !action ? `${head}/${ROUTE}` : `${head}/${ROUTE}/${action}`;
             await $slack(title, { context, event }, null, { context });
         };
         await _slack().catch(e => _err(NS, `! error@slack =`, GETERR(e), e));
