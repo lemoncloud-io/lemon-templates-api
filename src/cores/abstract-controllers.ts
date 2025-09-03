@@ -24,12 +24,13 @@
  * @date        2023-11-06 optimized `onAfterSave()` for post-processing.
  * @date        2025-04-10 optimized `errScope` per each handler.
  * @date        2025-08-01 optimized `canDo()` for better security.
+ * @date        2025-09-03 optimized `makeModelBase()` to have `type` default.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $T, $U, _log, _inf, _err, loadDataYml, NextContext, my_sequence } from 'lemon-core';
+import { $T, $U, _log, _inf, _err, loadDataYml, NextContext, my_sequence, onlyDefined } from 'lemon-core';
 import { GeneralWEBController, NextHandler, my_parrallel, SimpleSet } from 'lemon-core';
 import { CoreModel, AbstractTransformer, View, Body } from 'lemon-model';
 import { BulkBody, ListResult, PaginatedListResult, PaginateParam } from './types';
@@ -181,9 +182,13 @@ export abstract class AbstractCRUDController<
             throwable?: boolean;
         },
     ): Promise<MyModel> {
+        const parent = options?.parent ?? null;
         const useSession = options?.useSession ?? this.confUseSession;
         const throwable = options?.throwable ?? this.confThrowable;
-        return proxy.makeModelBase<MyModel>({} as any, { useSession, throwable });
+        const $model = onlyDefined<CoreModel<ModelType>>({
+            type: this.manager.type,
+        });
+        return proxy.makeModelBase<MyModel>($model as MyModel, { parent, useSession, throwable });
     }
 
     /** load yml as model list */
@@ -410,7 +415,7 @@ export abstract class AbstractCRUDController<
         // STEP.2 run main
         return this.service.guardProxy($ctx, async proxy => {
             const $base = await this.makeModelBase(proxy);
-            $base.type = this.modelType; // set type explicitly.
+            if (!$base.type) throw new Error(`.type (ModelType) is missing - ${errScope}`); // confirm type explicitly.
             const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
             const $valid = await $prxy.validateModel(toCreate, null);
             if (!proxy.canDo('create', { ...$valid, ...$base }, { errScope })) return null; // no permission to create.
@@ -449,7 +454,7 @@ export abstract class AbstractCRUDController<
         // STEP.2 run main...
         return this.service.guardProxy($ctx, async proxy => {
             const $base = await this.makeModelBase(proxy);
-            $base.type = this.modelType; // set type explicitly.
+            if (!$base.type) throw new Error(`.type (ModelType) is missing - ${errScope}`); // confirm type explicitly.
             const $prxy = proxy.getManagerProxy<MyModel, MyManager>(this.modelType);
             const _can = (model: MyModel) => proxy.canDo('create', { ...model, ...$base }, { errScope });
             const $valid = await Promise.all(
