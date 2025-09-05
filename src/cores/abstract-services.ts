@@ -35,7 +35,7 @@
  * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import $cores, { $U, _log, _inf, _err, NUL404, GETERR, asyncCredentials } from 'lemon-core';
+import $cores, { $U, _log, _inf, _err, NUL404, GETERR, asyncCredentials, ConfigModule, $engine } from 'lemon-core';
 import { my_parrallel, SearchType, _ES6, createSigV4Proxy, my_sequence } from 'lemon-core';
 import { Elastic6Service, Elastic6Option, Elastic6QueryService, Elastic6Synchronizer } from 'lemon-core';
 import { $ERROR, Incrementable, GETERR$, CoreManager, CoreModel, CoreService } from 'lemon-core';
@@ -1913,35 +1913,45 @@ export class OS2Service<T extends Elastic6Item = any> extends Elastic6Service<an
  */
 export class OS2FGACManager {
     private _fgacProxy: ApiHttpProxy;
+    public readonly options: Elastic6Option;
 
-    public constructor(options: Elastic6Option, accessKey: string, secretKey: string) {
-        const errScope = `OS2FGACManager(${options?.indexName ?? ''})`;
-        const endpoint = options.endpoint;
-        const host = endpoint.split('://')[1];
-        const jwtToken = $U.env('OS2_JWT_TOKEN', '');
-        if (!jwtToken) throw new Error(`env.OS2_JWT_TOKEN is required - ${errScope}`);
-
-        const sigConfig = {
-            accessKey,
-            secretKey,
-            region: 'ap-northeast-2',
-            serviceName: 'es',
-            host,
-        };
-        _log(NS, `> sigConfig =`, $U.json({ ...sigConfig, secretKey: `${sigConfig?.secretKey ? '***' : ''}` }));
-
-        const headers: APIHeaders = {
-            Authorization: `Bearer ${jwtToken}`,
-            'Content-Type': 'application/json',
-        };
-
-        this._fgacProxy = createSigV4Proxy('fgac', endpoint, sigConfig, { headers });
+    public constructor(options: Elastic6Option) {
+        this.options = options;
     }
 
     public hello = () => `FGACService`;
 
     public get proxy(): ApiHttpProxy {
-        if (!this._fgacProxy) throw new Error('FGAC Proxy not initialized.');
+        const errScope = `OS2FGACManager(${this.options?.indexName ?? ''})`;
+
+        if (!this._fgacProxy) {
+            const endpoint = this.options.endpoint;
+            const host = endpoint.split('://')[1];
+            const $config = $engine.module('config');
+
+            const OS2_JWT_TOKEN = $U.env('OS2_JWT_TOKEN', '');
+            const payload = $U.env('OS2_PAYLOAD', '');
+            const signature = ($config as ConfigModule)?.config?.get('OS2_SIGNATURE') as string;
+
+            const jwtToken = OS2_JWT_TOKEN !== '' ? OS2_JWT_TOKEN : `${payload}.${signature}`; // if OS2_JWT_TOKEN is provided, use it
+
+            const sigConfig = {
+                accessKey: '**',
+                secretKey: '**',
+                region: 'ap-northeast-2',
+                serviceName: 'es',
+                host,
+            };
+            _log(NS, `> sigConfig =`, $U.json({ ...sigConfig, secretKey: `${sigConfig?.secretKey ? '***' : ''}` }));
+
+            const headers: APIHeaders = {
+                Authorization: `Bearer ${jwtToken}`,
+                'Content-Type': 'application/json',
+            };
+
+            this._fgacProxy = createSigV4Proxy('fgac', endpoint, sigConfig, { headers });
+        }
+
         return this._fgacProxy;
     }
 
@@ -2114,8 +2124,6 @@ export class OS2Instance extends Elastic6Instance {
         esDocType,
         tableName,
         autocompleteFields,
-        accessKey,
-        secretKey,
         roleName,
         userName,
     }: {
@@ -2126,8 +2134,6 @@ export class OS2Instance extends Elastic6Instance {
         esDocType: string;
         tableName: string;
         autocompleteFields: string[];
-        accessKey: string;
-        secretKey: string;
         roleName?: string;
         userName?: string;
     }) {
@@ -2144,7 +2150,7 @@ export class OS2Instance extends Elastic6Instance {
         if (endpoint && indexName) {
             if (esDocType) options.docType = esDocType;
 
-            this.fgac = new OS2FGACManager(options, accessKey, secretKey);
+            this.fgac = new OS2FGACManager(options);
             this.elastic = new OS2Service(options, this.fgac);
             this.client = this.elastic.client;
             this.query = new Elastic6QueryService<any>(this.elastic);
@@ -2403,8 +2409,6 @@ export const _OS2 = (options?: OS2Option): OS2Instance => {
             const esDocType = options?.docType ?? $U.env('OS2_DOCTYPE', '');
             const tableName = $U.env('MY_DYNAMO_TABLE', '');
             const autocompleteFields = options?.autocompleteFields ?? $T.SS($U.env('OS2_AUTOCOMPLETE_FIELDS', ''));
-            const accessKey = $U.env('OS2_ACCESS_KEY', '');
-            const secretKey = $U.env('OS2_SECRET_KEY', '');
 
             const roleName = options?.roleName;
             const userName = options?.userName;
@@ -2417,8 +2421,6 @@ export const _OS2 = (options?: OS2Option): OS2Instance => {
                 esDocType,
                 tableName,
                 autocompleteFields,
-                accessKey,
-                secretKey,
                 roleName,
                 userName,
             });
