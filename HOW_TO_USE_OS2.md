@@ -20,6 +20,7 @@ OpenSearch(OS2)를 FGAC(Fine-Grained Access Control) JWT를 통해 접근하는 
 {
   "id": "25035776",
   "indexName": "lemon-templates-v1",
+  "jwt": "<header>.<payload>.<signature>",
   "message": "<헤더.페이로드 (서명 제외)>",
   "signature": "*<AWS KMS로 암호화된 signature(CiphertextBlob)>", // '*'이 꼭 포함되어야함.
 }
@@ -44,8 +45,13 @@ npm i
 - 필수 키
   - `OS2_ENDPOINT`: OS2(Managed OpenSearch) 엔드포인트 URL
   - `OS2_INDEX`: 실제 접근할 인덱스 이름(접미사 포함, 예: `lemon-templates-v1-25035776`)
-  - `OS2_MESSAGE`: eureka-codes-api에서 발급된 `message` (서명 제외)
-  - `OS2_SIGNATURE`: `signature`를 AWS KMS로 암호화한 CiphertextBlob.
+
+- 아래 두 옵션 중 선택 가능
+  - jwt
+    - `OS2_JWT_TOKEN`: eureka-codes-api에서 발급된 `jwt`
+  - message와 암호화된 signature
+    - `OS2_MESSAGE`: eureka-codes-api에서 발급된 `message` (서명 제외)
+    - `OS2_SIGNATURE`: `signature`를 AWS KMS로 암호화한 CiphertextBlob.
 
 예시 설정:
 
@@ -56,7 +62,7 @@ OS2_ENDPOINT: 'https://search-<lemon-os2-domain>.<region>.es.amazonaws.com'
 OS2_INDEX: 'lemon-templates-v1-25035776'
 OS2_MESSAGE: '<eureka-codes-api에서 받은 message>'
 OS2_SIGNATURE: '<aws kms encrypt로 얻은 CiphertextBlob>'
-# OS2_JWT_TOKEN: '<옵션: 전체 JWT(헤더.페이로드.서명)>'
+OS2_JWT_TOKEN: '<옵션: 전체 JWT(헤더.페이로드.서명)>'
 ```
 
 ---
@@ -68,15 +74,25 @@ OS2_SIGNATURE: '<aws kms encrypt로 얻은 CiphertextBlob>'
 - 실제 헤더 구성 코드 (참고):
 
 ```1932:1953:src/cores/abstract-services.ts
-const message = $U.env('OS2_MESSAGE', '');
-const signature = ($config as ConfigModule)?.config?.get('OS2_SIGNATURE') as string;
+            const OS2_JWT_TOKEN = $U.env('OS2_JWT_TOKEN', '');
+            const message = $U.env('OS2_MESSAGE', '');
+            const signature = ($config as ConfigModule)?.config?.get('OS2_SIGNATURE') as string;
 
-const jwtToken = `${message}.${signature}`;
+            const jwtToken = OS2_JWT_TOKEN !== '' ? OS2_JWT_TOKEN : `${message}.${signature}`; // if OS2_JWT_TOKEN is provided, use it
 
-const headers: APIHeaders = {
-    Authorization: `Bearer ${jwtToken}`,
-    'Content-Type': 'application/json',
-};
+            const sigConfig = {
+                accessKey: '**',
+                secretKey: '**',
+                region: 'ap-northeast-2',
+                serviceName: 'es',
+                host,
+            };
+            _log(NS, `> sigConfig =`, $U.json({ ...sigConfig, secretKey: `${sigConfig?.secretKey ? '***' : ''}` }));
+
+            const headers: APIHeaders = {
+                Authorization: `Bearer ${jwtToken}`,
+                'Content-Type': 'application/json',
+            };
 ```
 
 - FGAC로 위임되는 API (일부): `search`, `read`, `save(index)`, `bulk`, `update`, `delete`, `indices.*(describe/get/put/close/open/delete)`
