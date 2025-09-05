@@ -30,6 +30,7 @@
  * @date        2025-08-01 optimized `canDo()` for better security w/ session.
  * @date        2025-08-11 optimized `OS2FGACManager` for latest features.
  * @date        2025-08-14 optimized `OS2.deleteIndex()` for latest features.
+ * @date        2025-09-05 optimized `OS2FGACManager` environment variables.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
