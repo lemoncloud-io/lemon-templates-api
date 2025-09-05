@@ -30,6 +30,7 @@
  * @date        2025-08-01 optimized `canDo()` for better security w/ session.
  * @date        2025-08-11 optimized `OS2FGACManager` for latest features.
  * @date        2025-08-14 optimized `OS2.deleteIndex()` for latest features.
+ * @date        2025-09-05 optimized `OS2FGACManager` environment variables.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
@@ -1930,10 +1931,10 @@ export class OS2FGACManager {
             const $config = $engine.module('config');
 
             const OS2_JWT_TOKEN = $U.env('OS2_JWT_TOKEN', '');
-            const payload = $U.env('OS2_PAYLOAD', '');
+            const message = $U.env('OS2_MESSAGE', '');
             const signature = ($config as ConfigModule)?.config?.get('OS2_SIGNATURE') as string;
 
-            const jwtToken = OS2_JWT_TOKEN !== '' ? OS2_JWT_TOKEN : `${payload}.${signature}`; // if OS2_JWT_TOKEN is provided, use it
+            const jwtToken = OS2_JWT_TOKEN !== '' ? OS2_JWT_TOKEN : `${message}.${signature}`; // if OS2_JWT_TOKEN is provided, use it
 
             const sigConfig = {
                 accessKey: '**',
