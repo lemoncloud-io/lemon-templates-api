@@ -10,8 +10,8 @@
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, $T, _inf, _log, _err, SearchQuery, my_parrallel, NUL404 } from 'lemon-core';
-import { ListResult, MyCoreProxy, MyManagerProxy, onlyDefined, parsePaginateParam } from '../../cores';
+import { $U, $T, _inf, _log, _err, NUL404 } from 'lemon-core';
+import { MyCoreProxy, MyManagerProxy, onlyDefined } from '../../cores';
 import { ChannelModel, ConnectionModel, ModelType, SocketModel } from './model';
 import { BackendService, ChannelModelManager, ConnectionModelManager, SocketModelManager } from './service';
 import { $trans, ChannelTransformer, SocketTransformer } from './transformer';
@@ -99,7 +99,7 @@ export class ConnectionManagerProxy extends MyManagerProxy<ConnectionModel, Conn
         _log(NS, `...${errScope}`);
         const validate = options?.validate ?? true;
         const useSession = options?.useSession ?? this.proxy.service.isUseSssion();
-        const $sess = useSession ? this.proxy.getCurrentSession({ throwable: false }) : null;
+        const $sess = useSession ? this.proxy.getCurrentSession() : null;
 
         /** STEP.0 validate paramters */
         if (validate) {

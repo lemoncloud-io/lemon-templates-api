@@ -189,6 +189,7 @@ describe('WSSAgent', () => {
             expect2(await agent.packContext($event), 'identity').toEqual({
                 identity: {
                     ...$identity,
+                    userAgent: headers['User-Agent'], // copy
                 },
             });
         }

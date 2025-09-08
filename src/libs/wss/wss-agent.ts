@@ -251,4 +251,21 @@ export class WSSHeaderTool extends MyHttpHeaderTool {
         // (2nd) check in query parameters
         return this.queryParams[name];
     }
+    /**
+     * override with AWS request-context for WebSocket
+     * @override
+     */
+    public async prepareContext($org: NextContext, reqContext: any): Promise<NextContext> {
+        const context = await super.prepareContext($org, reqContext);
+
+        // WebSocket 토큰 인증을 위해 identity에 userAgent 설정
+        if (context?.identity && typeof context.identity === 'object') {
+            const userAgent = reqContext?.identity?.userAgent || context.userAgent;
+            if (userAgent && !(context.identity as any).userAgent) {
+                (context.identity as any).userAgent = userAgent;
+            }
+        }
+
+        return context;
+    }
 }
