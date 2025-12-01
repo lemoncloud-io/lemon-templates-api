@@ -31,6 +31,7 @@
  * @date        2025-08-11 optimized `OS2FGACManager` for latest features.
  * @date        2025-08-14 optimized `OS2.deleteIndex()` for latest features.
  * @date        2025-09-05 optimized `OS2FGACManager` environment variables.
+ * @date        2025-12-01 optimized `makeModel()` w/ T.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
@@ -1331,7 +1332,7 @@ export class MyManagerProxy<
      * @param model creation model
      * @param validate (optional) flag to validate (default is true)
      */
-    public async makeModel<T extends MyModel>(model: MyModel, validate?: boolean): Promise<T> {
+    public async makeModel<T extends MyModel>(model: T, validate?: boolean): Promise<T> {
         const errScope = `makeModel(${this.$mgr.type}/${model?.id ?? ''})`;
         if (!model) throw new Error(`@model (${this.$mgr.type}-model) is required - ${errScope}`);
         validate = validate ?? true;
