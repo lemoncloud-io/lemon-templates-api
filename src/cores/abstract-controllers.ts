@@ -545,7 +545,8 @@ export abstract class AbstractCRUDController<
                 if (!model?.id) throw new Error(`404 NOT FOUND - not found @${errScope}`);
                 if (model?.deletedAt) throw new Error(`404 NOT FOUND - deleted @${errScope}`);
                 if (!proxy.canDo('update', model, { errScope })) return null; // no permission to update.
-                return model;
+                // return model;
+                return N; // 업데이트할 새 데이터를 반환 (기존 model이 아님)
             };
             const list = await Promise.all(models.map(N => _can(N)));
 

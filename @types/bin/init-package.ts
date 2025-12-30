@@ -8,11 +8,12 @@
  * @date        2022-06-21 optimized w/ `abstract-services`
  * @date        2023-01-19 optimized package.dependencies
  * @date        2025-07-01 optimized w/ `lemon-core#4.0.4`
+ * @date        2025-12-30 optimized w/ `lemon-core#4.1.5`
  *
  * @copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
 //! override environment.
-const MODEL_VERSION = '1.0.5';
+const MODEL_VERSION = '1.1.1';
 
 //! import statements
 import path from 'path';
