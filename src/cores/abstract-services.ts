@@ -1411,6 +1411,92 @@ export class MyManagerProxy<
         if (throwable) throw new Error(`403 NOT ALLOWED - action[${_act}] is invalid @${errScope}`);
         return false;
     }
+
+    /**
+     * read multiple nodes.
+     * @param ids list of object-ids
+     * @param throwable (optional) flag to throw error if not found
+     */
+    public async mget<T extends MyModel = MyModel>(ids: string[], throwable = true): Promise<T[]> {
+        if (!ids || ids.length === 0) return [];
+
+        const result: (T | null)[] = [];
+        const toFetch: string[] = [];
+        const indexMap: { [key: string]: number[] } = {};
+
+        //* STEP.1 check cached items
+        ids.forEach((id, index) => {
+            const err404 = `404 NOT FOUND - proxy/${this.$mgr.type}/id:${id}`;
+            //* already marked as null (404)
+            if (this._org[id] === null) {
+                if (throwable) throw new Error(err404);
+                result[index] = null;
+                return;
+            }
+            //* found in _new
+            const N = this._new[id];
+            if (N !== undefined) {
+                (result as any)[index] = N;
+                return;
+            }
+            //* need to fetch
+            if (!indexMap[id]) {
+                indexMap[id] = [];
+                toFetch.push(id);
+            }
+            indexMap[id].push(index);
+        });
+
+        //* STEP.2 batch read from storage
+        if (toFetch.length > 0) {
+            const res = await this.$mgr.storage.storage.doReadMulti(this.$mgr.type, toFetch);
+            const successMap: { [key: string]: T } = {};
+            (res.success || []).forEach((model: T) => {
+                const id = (model as any).id;
+                if (id) successMap[id] = model;
+            });
+
+            //* STEP.3 save to cache and build result
+            toFetch.forEach(id => {
+                const M = successMap[id];
+                if (M) {
+                    const M2 = this.normal(M);
+                    this._org[id] = M2;
+                    const M3 = JSON.parse($U.json(M2)) as T;
+                    this._new[id] = M3;
+                    indexMap[id].forEach(index => {
+                        result[index] = M3;
+                    });
+                } else {
+                    this._org[id] = null;
+                    const err404 = `404 NOT FOUND - proxy/${this.$mgr.type}/id:${id}`;
+                    indexMap[id].forEach(index => {
+                        if (throwable) throw new Error(err404);
+                        result[index] = null;
+                    });
+                }
+            });
+        }
+
+        return result;
+    }
+
+    /**
+     * update multiple nodes.
+     * @param updates list of models (should include id)
+     */
+    public async mset<T extends MyModel>(updates: Array<T>): Promise<T[]> {
+        if (!updates || updates.length === 0) return [];
+
+        const result: T[] = [];
+        for (const model of updates) {
+            const id = model.id;
+            if (!id) throw new Error(`@id is required - proxy/${this.$mgr.type}/mset()!`);
+            const O = await this.get(id);
+            result.push(this.override(O, model) as T);
+        }
+        return result;
+    }
 }
 
 /**
