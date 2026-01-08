@@ -973,4 +973,213 @@ describe('abstract-services', () => {
         // expect2(() => checkLast.took).toEqual(0.1);
         expect2(() => checkLast.list[0], '!_version').toEqual();
     });
+
+    it('should pass mget() - batch get', async () => {
+        const { service, current, context } = instance('session');
+
+        const _base = <T extends Model>(type: ModelType, N?: T): Model => ({
+            ns: 'TT',
+            updatedAt: current,
+            createdAt: current,
+            deletedAt: 0,
+            type,
+            ...N,
+        });
+
+        //* STEP.1 empty list
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mget([]);
+            }),
+        ).toEqual([]);
+
+        //* STEP.2 single id - not found (throwable)
+        expect2(
+            await service
+                .guardProxy(context, async proxy => {
+                    return proxy.tests.mget(['3001']);
+                })
+                .catch(GETERR),
+        ).toEqual('404 NOT FOUND - proxy/test/id:3001');
+
+        //* STEP.3 single id - not found (non-throwable)
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mget(['3001'], false);
+            }),
+        ).toEqual([null]);
+
+        //* STEP.4 create test data
+        const $a = await service.guardProxy(context, async proxy => {
+            const a = await proxy.tests.get('a', {});
+            a.name = 'test-a';
+            return a;
+        });
+        const $b = await service.guardProxy(context, async proxy => {
+            const b = await proxy.tests.get('b', {});
+            b.name = 'test-b';
+            return b;
+        });
+
+        //* STEP.5 batch get - found
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mget(['a', 'b']);
+            }),
+        ).toEqual([
+            { ..._base('test'), id: 'a', name: 'test-a' },
+            { ..._base('test'), id: 'b', name: 'test-b' },
+        ]);
+
+        //* STEP.6 batch get - mixed (found + not found)
+        expect2(
+            await service
+                .guardProxy(context, async proxy => {
+                    return proxy.tests.mget(['a', '3002', 'b']);
+                })
+                .catch(GETERR),
+        ).toEqual('404 NOT FOUND - proxy/test/id:3002');
+
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mget(['a', '3002', 'b'], false);
+            }),
+        ).toEqual([{ ..._base('test'), id: 'a', name: 'test-a' }, null, { ..._base('test'), id: 'b', name: 'test-b' }]);
+
+        //* STEP.7 duplicate ids
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mget(['a', 'a', 'b']);
+            }),
+        ).toEqual([
+            { ..._base('test'), id: 'a', name: 'test-a' },
+            { ..._base('test'), id: 'a', name: 'test-a' },
+            { ..._base('test'), id: 'b', name: 'test-b' },
+        ]);
+
+        //* STEP.8 cache test - modify and get again
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                const [a1] = await proxy.tests.mget(['a']);
+                a1.name = 'modified-a';
+                const [a2] = await proxy.tests.mget(['a']);
+                return { a1: a1.name, a2: a2.name };
+            }),
+        ).toEqual({ a1: 'modified-a', a2: 'modified-a' });
+    });
+
+    it('should pass mset() - batch update', async () => {
+        const { service, current, context } = instance('session');
+
+        const _base = <T extends Model>(type: ModelType, N?: T): Model => ({
+            ns: 'TT',
+            updatedAt: current,
+            createdAt: current,
+            deletedAt: 0,
+            type,
+            ...N,
+        });
+
+        //* STEP.1 empty list
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mset([]);
+            }),
+        ).toEqual([]);
+
+        //* STEP.2 create test data
+        const $a = await service.guardProxy(context, async proxy => {
+            const a = await proxy.tests.get('a', {});
+            a.name = 'test-a';
+            a.test = 10;
+            return a;
+        });
+
+        const $b = await service.guardProxy(context, async proxy => {
+            const b = await proxy.tests.get('b', {});
+            b.name = 'test-b';
+            b.test = 20;
+            return b;
+        });
+
+        //* STEP.3 single update
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mset([{ id: 'a', name: 'updated-a' }]);
+            }),
+        ).toEqual([{ ..._base('test'), id: 'a', name: 'updated-a', test: 10 }]);
+
+        //* STEP.4 batch update - multiple models
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mset([
+                    { id: 'a', name: 'batch-a', test: 15 },
+                    { id: 'b', name: 'batch-b', test: 25 },
+                ]);
+            }),
+        ).toEqual([
+            { ..._base('test'), id: 'a', name: 'batch-a', test: 15 },
+            { ..._base('test'), id: 'b', name: 'batch-b', test: 25 },
+        ]);
+
+        //* STEP.5 update without id - should throw error
+        expect2(
+            await service
+                .guardProxy(context, async proxy => {
+                    return proxy.tests.mset([{ name: 'no-id' } as any]);
+                })
+                .catch(GETERR),
+        ).toEqual('@id is required - proxy/test/mset()!');
+
+        //* STEP.6 update with non-existent id - should throw error
+        expect2(
+            await service
+                .guardProxy(context, async proxy => {
+                    return proxy.tests.mset([{ id: 'non-existent', name: 'test' }]);
+                })
+                .catch(GETERR),
+        ).toEqual('404 NOT FOUND - proxy/test/id:non-existent');
+
+        //* STEP.7 batch update - mixed (valid + invalid)
+        expect2(
+            await service
+                .guardProxy(context, async proxy => {
+                    return proxy.tests.mset([
+                        { id: 'a', name: 'valid-a' },
+                        { id: 'invalid-id', name: 'invalid' },
+                    ]);
+                })
+                .catch(GETERR),
+        ).toEqual('404 NOT FOUND - proxy/test/id:invalid-id');
+
+        //* STEP.8 verify final state after updates
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mget(['a', 'b']);
+            }),
+        ).toEqual([
+            { ..._base('test'), id: 'a', name: 'valid-a', test: 15 },
+            { ..._base('test'), id: 'b', name: 'batch-b', test: 25 },
+        ]);
+
+        //* STEP.9 partial update - only specified fields
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mset([{ id: 'a', test: 100 }]);
+            }),
+        ).toEqual([{ ..._base('test'), id: 'a', name: 'valid-a', test: 100 }]);
+
+        //* STEP.10 duplicate ids in updates
+        expect2(
+            await service.guardProxy(context, async proxy => {
+                return proxy.tests.mset([
+                    { id: 'a', name: 'first-update' },
+                    { id: 'a', name: 'second-update' },
+                ]);
+            }),
+        ).toEqual([
+            { ..._base('test'), id: 'a', name: 'second-update', test: 100 },
+            { ..._base('test'), id: 'a', name: 'second-update', test: 100 },
+        ]);
+    });
 });

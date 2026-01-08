@@ -82,6 +82,18 @@ export class RestAPI<View extends object = any, Body = View, Model = View> {
         return this.asProtocol(id, cmd).enqueue(params?.param, params?.body, mode, callback, delay);
     };
 
+    /** notify vis SNS */
+    public notify = (
+        params: { id?: string; cmd?: string; mode?: string; param?: any; body?: any; callback?: string },
+        delay?: number,
+    ) => {
+        const id = params?.id ?? '';
+        const cmd = params?.cmd ?? null;
+        const mode = params?.mode || 'POST';
+        const callback = params?.callback;
+        return this.asProtocol(id, cmd).notify(params?.param, params?.body, mode, callback);
+    };
+
     /** execute vis API */
     public execute = <T = any>(params: { id?: string; cmd?: string; mode?: string; param?: any; body?: any }) => {
         const id = params?.id ?? '';

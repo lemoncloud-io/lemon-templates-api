@@ -163,6 +163,8 @@ provider:
         - dynamodb:DescribeTable
         - dynamodb:DescribeStream
         - dynamodb:ListStreams
+        - dynamodb:BatchWriteItem
+        - dynamodb:BatchGetItem
       Resource: "arn:aws:dynamodb:${opt:region, self:provider.region}:*:table/${self:custom.tableName.${self:custom.CORE.stage}}"
 
   # -------------------------------------------------------
