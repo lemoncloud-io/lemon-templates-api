@@ -31,6 +31,7 @@
  * @date        2025-08-11 optimized `OS2FGACManager` for latest features.
  * @date        2025-08-14 optimized `OS2.deleteIndex()` for latest features.
  * @date        2025-09-05 optimized `OS2FGACManager` environment variables.
+ * @date        2025-10-31 optimized `session` with `lemon-devkit@0.0.8`.
  * @date        2025-12-01 optimized `makeModel()` w/ T.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
@@ -954,23 +955,33 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
             if (data?.context?.identity) return data?.context?.identity as IdentityToken;
             return data;
         };
-        // load the `identity-token` with req or env.
+        //* load the `identity-token` from context or local json file.
         const _session = (): IdentityToken => {
             //INFO - `userAgent`가 있다면, identity 생성 프로세스가 제대로 실행된것으로 판단해도됨! @240620.
-            if (typeof (context?.identity as any)?.userAgent == 'string') return context?.identity;
+            const $idt = context?.identity as unknown as NextIdentityCognito;
+            if (typeof $idt?.userAgent == 'string') {
+                //NOTE - `express` 에서 넘어온 경우 `identityPoolId=null`으로 가능함. (but apiKey should be empty) @251031
+                const fromExpress = typeof $idt?.identityPoolId === 'undefined' || $idt?.identityPoolId === null;
+                if (!fromExpress || typeof $idt?.apiKey === 'string') {
+                    return context?.identity;
+                }
+            }
+
             //TODO - 아래 코드는 개선의 여지가 있음(문제점???) @241210
-            // if (typeof (context?.identity as any)?.identityId == 'string') return context?.identity;
             if (LOCAL_ACCOUNT) return null;
             if (useSession) {
                 // _inf(this.service.NS, `> use-session =`, useSession, USE_SESSION);
                 if (useSession === true || useSession === 'true' || useSession === '1') {
-                    if (USE_SESSION.endsWith('.json')) return _load(USE_SESSION);
+                    if (USE_SESSION.endsWith('.json')) {
+                        const $sess = _load(USE_SESSION);
+                        _inf(this.service.NS, `> use-session-json =`, $U.json($sess));
+                        return $sess;
+                    }
                     return null;
                 } else if (typeof useSession === 'string' || useSession) {
                     return _load(useSession);
                 }
-            } else if (useSession === false) {
-                return null;
+                return context?.identity;
             }
             return null;
         };
@@ -1108,12 +1119,14 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
             userAgent?: string;
             /** (optional) identity(object) to override */
             identity?: T;
+            /** (optional) session(object) to override */
+            session?: IdentityToken;
         },
     ) {
         const $ctx = this.context;
         identityId = identityId ?? this.asCurrentIdentityId($ctx);
         const identity = options?.identity ?? ($ctx.identity as T);
-        const session = this.getCurrentSession({ throwable: false });
+        const session = options?.session ?? this.getCurrentSession({ throwable: false });
         const $ctx2: NextContext<any> = {
             ...$ctx,
             domain: options?.domain ?? $ctx.domain,
@@ -1276,7 +1289,7 @@ export class MyManagerProxy<
             if (_has('uid')) $param['uid'] = _val('uid') === '0' ? session?.uid : _val('uid');
         } else {
             if (_has('sid')) $param['sid'] = _val('sid');
-            if (_has('uid')) $param['uid'] = _val('uid');
+            if (_has('uid')) $param['uid'] = _val('uid') === '0' ? session?.uid : _val('uid');
         }
 
         //* returns params.

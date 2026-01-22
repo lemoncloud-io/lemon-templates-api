@@ -228,6 +228,35 @@ const $context: {
             },
         },
     },
+    /**
+     * http request w/ api-key (API Gateway)
+     */
+    apiKey: {
+        context: {
+            identity: {
+                identityProvider: null,
+                identityPoolId: null,
+                identityId: null,
+                accountId: null,
+                userAgent: 'HTTPie/3.2.1',
+                apiKey: 'gW0xFMF5bO9JnMVPCCcst3eCxVrHI5mO2ODW9h94',
+            },
+            domain: 'xyoisk1ceb.execute-api.ap-northeast-2.amazonaws.com',
+            userAgent: 'HTTPie/3.2.1',
+            clientIp: '211.208.162.142',
+            requestId: '0e1d0d82-a703-41ec-bbe2-22b7c721b4e2',
+            accountId: '085403634746',
+            source: 'api://085403634746@codes-openapi-api-dev#0.25.1029',
+        },
+        headers: {
+            accept: '*/*',
+            Host: 'xyoisk1ceb.execute-api.ap-northeast-2.amazonaws.com',
+            'X-Forwarded-For': '211.208.162.142, 3.172.65.212',
+            'X-Forwarded-Port': '443',
+            'X-Forwarded-Proto': 'https',
+            'x-api-key': 'gW0xFMF5bO9JnMVPCCcst3eCxVrHI5mO2ODW9h94',
+        },
+    },
 };
 
 //* main test body.
