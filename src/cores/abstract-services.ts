@@ -33,6 +33,8 @@
  * @date        2025-09-05 optimized `OS2FGACManager` environment variables.
  * @date        2025-10-31 optimized `session` with `lemon-devkit@0.0.8`.
  * @date        2025-12-01 optimized `makeModel()` w/ T.
+ * @date        2025-12-15 optimized `getCurrentSession()` with local meta info.
+ * @date        2026-01-05 optimized `hasAdminRole()` and `getCurrentSession()`.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
@@ -353,7 +355,7 @@ export abstract class MyCoreManager<
     public buildQuery<T extends Model>(
         param: PaginateParam,
         model?: SearchParam<T>,
-        options?: { errScope?: string; hidden?: boolean | number; aggregation?: string },
+        options?: { errScope?: string; hidden?: boolean | number; aggregation?: string; aggrLimit?: number },
     ): SearchBody {
         const errScope = options?.errScope ?? `buildQuery(${this.type})`;
         if (typeof param?.limit !== 'number') throw new Error(`.limit(number) is required - ${errScope}`);
@@ -361,6 +363,7 @@ export abstract class MyCoreManager<
         if (param?.offset && typeof param?.offset !== 'number')
             throw new Error(`.offset(number) is required - ${errScope}`);
         const aggregation = options?.aggregation ?? 'stereo'; // default aggregation
+        const aggrLimit = options?.aggrLimit ?? 12; // default aggregation limit
 
         // STEP.0 validate parameters.
         const { limit } = param;
@@ -390,7 +393,7 @@ export abstract class MyCoreManager<
                         field: `${aggregation}.keyword`,
                         missing: 'N/A',
                         order: { _key: 'asc' },
-                        size: 12,
+                        size: aggrLimit,
                     },
                 },
             };
@@ -955,10 +958,23 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
             if (data?.context?.identity) return data?.context?.identity as IdentityToken;
             return data;
         };
+        const _default = (): IdentityToken | null => {
+            //INFO - `userAgent`가 있다면, identity 생성 프로세스가 제대로 실행된것으로 판단해도됨! @240620.
+            if (typeof (context?.identity as any)?.userAgent == 'string') return context?.identity;
+            //TODO - 아래 코드는 개선의 여지가 있음(문제점???) @241210
+            // if (typeof (context?.identity as any)?.identityId == 'string') return context?.identity;
+            return null;
+        };
+
         //* load the `identity-token` from context or local json file.
         const _session = (): IdentityToken => {
             //INFO - `userAgent`가 있다면, identity 생성 프로세스가 제대로 실행된것으로 판단해도됨! @240620.
             const $idt = context?.identity as unknown as NextIdentityCognito;
+            //* Local 이면서 meta 정보가 있다면, 그걸로 identity 재구성함 @251212.
+            if (isLocal && typeof $idt?.meta === 'string' && $idt?.meta.length > 0) {
+                const $jwt = $U.jwt('');
+                return $jwt.decode(context?.identity?.meta, { complete: false }) as IdentityToken;
+            }
             if (typeof $idt?.userAgent == 'string') {
                 //NOTE - `express` 에서 넘어온 경우 `identityPoolId=null`으로 가능함. (but apiKey should be empty) @251031
                 const fromExpress = typeof $idt?.identityPoolId === 'undefined' || $idt?.identityPoolId === null;
@@ -968,22 +984,22 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
             }
 
             //TODO - 아래 코드는 개선의 여지가 있음(문제점???) @241210
-            if (LOCAL_ACCOUNT) return null;
+            if (LOCAL_ACCOUNT) return _default();
             if (useSession) {
                 // _inf(this.service.NS, `> use-session =`, useSession, USE_SESSION);
                 if (useSession === true || useSession === 'true' || useSession === '1') {
-                    if (USE_SESSION.endsWith('.json')) {
+                    if (USE_SESSION?.endsWith('.json')) {
                         const $sess = _load(USE_SESSION);
                         _inf(this.service.NS, `> use-session-json =`, $U.json($sess));
                         return $sess;
                     }
-                    return null;
+                    return _default();
                 } else if (typeof useSession === 'string' || useSession) {
                     return _load(useSession);
                 }
-                return context?.identity;
+                return _default();
             }
-            return null;
+            return _default();
         };
         const $sess = _session();
         // _inf(this.service.NS, `> use-session =`, $U.json($ses));
@@ -1097,10 +1113,13 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
      */
     public hasAdminRole(role?: string, options?: { errScope?: string; context?: NextContext }) {
         role = $T.S2(role, 'admin');
+        const context: NextContext<IdentityToken> = (options?.context ?? this.context) as any;
         const $option = { ...options, throwable: false };
         if (this.assertContext({ isLocal: true }, $option)) return true;
         if (this.assertContext({ isSigned: true, isAuthed: false }, $option)) return true;
         if (this.assertContext({ isAuthed: true, hasRole: role }, $option)) return true;
+        //TODO 아래는 임시로 role에서 바로 체크하도록함! @251212/steve (샘픔의 session-dev.json를 이용할경우 admin 체크가 잘 안됨)
+        if (context?.identity?.roles?.includes(role)) return true;
         return false;
     }
 
