@@ -25,6 +25,7 @@
  * @date        2025-04-10 optimized `errScope` per each handler.
  * @date        2025-08-01 optimized `canDo()` for better security.
  * @date        2025-09-03 optimized `makeModelBase()` to have `type` default.
+ * @date        2026-02-03 optimized `modelAsView()` to show cores in local.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
@@ -152,8 +153,9 @@ export abstract class AbstractCRUDController<
      * model transformer from model to view
      */
     public modelAsView(model: MyModel, options?: { useOnlyDefined?: boolean; hasCores?: boolean }): MyView {
+        const isLocal = $U.env('STAGE') === 'local';
         const useOnlyDefined = options?.useOnlyDefined ?? true;
-        const hasCores = options?.hasCores ?? this.confUseSession;
+        const hasCores = options?.hasCores ?? (isLocal ? true : this.confUseSession); // show cores in local always.
 
         // show `cores` model { sid, gid uid } if using session.
         const view = this.transformer.modelAsView(model, hasCores);
