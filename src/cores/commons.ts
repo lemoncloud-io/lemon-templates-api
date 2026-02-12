@@ -8,6 +8,7 @@
  * @date        2025-01-03 optimized `parseListParam()` w/ `offset`
  * @date        2025-05-25 optimized `$T.N()` + `parsePaginateParam()` w/ `noLimit` option
  * @date        2025-07-31 optimized `$T.B()` for boolean conversion.
+ * @date        2026-02-09 optimized `$T.F()` to keep the original function.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
@@ -102,8 +103,8 @@ export const $T = {
     /** convert to `number` */
     N: (v: boolean | number | string, def?: number): number =>
         typeof v === 'boolean' ? (v ? 1 : 0) : typeof v === 'number' || typeof v === 'string' ? _T.N(v, def) : def,
-    /** convert to `float` w/ fixed(3) */
-    F: (n: number, def?: number) => _T.F3(n, def),
+    // /** convert to `float` w/ fixed(3) */
+    // F: (n: number, def?: number) => _T.F3(n, def),
     /** cleanup if in undefined */
     clear: <T extends object>(N: T): T =>
         Object.entries(N).reduce((N, [k, v]) => {

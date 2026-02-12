@@ -35,6 +35,7 @@
  * @date        2025-12-01 optimized `makeModel()` w/ T.
  * @date        2025-12-15 optimized `getCurrentSession()` with local meta info.
  * @date        2026-01-05 optimized `hasAdminRole()` and `getCurrentSession()`.
+ * @date        2026-02-11 optimized `proxy.mget()` with `throwable` options.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
@@ -1449,7 +1450,11 @@ export class MyManagerProxy<
      * @param ids list of object-ids
      * @param throwable (optional) flag to throw error if not found
      */
-    public async mget<T extends MyModel = MyModel>(ids: string[], throwable = true): Promise<T[]> {
+    public async mget<T extends MyModel = MyModel>(
+        ids: string[],
+        options?: { throwable?: boolean } | boolean,
+    ): Promise<T[]> {
+        const throwable = typeof options === 'boolean' ? options : options?.throwable ?? true;
         if (!ids || ids.length === 0) return [];
 
         const result: (T | null)[] = [];
@@ -1481,10 +1486,11 @@ export class MyManagerProxy<
 
         //* STEP.2 batch read from storage
         if (toFetch.length > 0) {
-            const res = await this.$mgr.storage.storage.doReadMulti(this.$mgr.type, toFetch);
+            const context = this.proxy.asNextContext();
+            const $res = await this.$mgr.storage.storage.doReadMulti(this.$mgr.type, toFetch, { throwable, context });
             const successMap: { [key: string]: T } = {};
-            (res.success || []).forEach((model: T) => {
-                const id = (model as any).id;
+            ($res?.success || []).forEach((model: T) => {
+                const id = (model as CoreModel).id;
                 if (id) successMap[id] = model;
             });
 
