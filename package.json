@@ -1,6 +1,6 @@
 {
   "name": "lemon-templates-api",
-  "version": "0.26.205",
+  "version": "0.26.215",
   "description": "lemon-templates management api",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -45,9 +45,6 @@
     "test:dev": "LS=1 jest --config=jest.config.json --watchAll",
     "test:watch": "LS=1 AWS_SDK_JS_SUPPRESS_MAINTENANCE_MODE_MESSAGE=1 jest --config=jest.config.json --watchAll",
     "test:watch.lemon": "ENV=lemon npm run test:watch",
-    "!docs": "------- documentaion -----",
-    "docs": "typedoc --plugin typedoc-plugin-rename-defaults",
-    "docs.md": "typedoc",
     "!types": "------- make types package -----",
     "prepretypes": "LS=1 ts-node @types/bin/init-package.ts",
     "pretypes": "rm -rf ./@types/dist && npm run prepretypes",
@@ -57,7 +54,7 @@
   "author": "Steve Jung (steve@lemoncloud.io)",
   "license": "MIT",
   "dependencies": {
-    "lemon-core": "^4.1.13"
+    "lemon-core": "^4.1.15"
   },
   "devDependencies": {
     "@cruglobal/serverless-merge-config": "^1.1.0",
@@ -88,9 +85,6 @@
     "ts-node": "^8.1.0",
     "tsconfig-paths": "^4.1.2",
     "ttypescript": "^1.5.15",
-    "typedoc": "^0.22.17",
-    "typedoc-plugin-markdown": "^3.12.1",
-    "typedoc-plugin-rename-defaults": "^0.5.1",
     "typescript": "^4.7.4"
   },
   "private": true,
