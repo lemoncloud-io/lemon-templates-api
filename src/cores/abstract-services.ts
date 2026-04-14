@@ -36,6 +36,7 @@
  * @date        2025-12-15 optimized `getCurrentSession()` with local meta info.
  * @date        2026-01-05 optimized `hasAdminRole()` and `getCurrentSession()`.
  * @date        2026-02-11 optimized `proxy.mget()` with `throwable` options.
+ * @date        2026-04-09 optimized `types` to fix `ModelType` cast error.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
@@ -869,13 +870,23 @@ export abstract class MyCoreManager<
  * class: `MyCoreProxy`
  * - common parent of proxy.
  */
-export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreModel<U>, U, any>> extends AbstractProxy<
-    U,
-    MyService
-> {
+export class MyCoreProxy<
+    U extends string,
+    MyService extends MyCoreService<CoreModel<any>, any, any>,
+> extends AbstractProxy<any, MyService> {
     public readonly managerProxies: { [propKey: string]: MyManagerProxy<any, any, MyService> } = {};
     public constructor(context: NextContext, service: MyService, cacheScope?: string) {
         super(context, service, 2, cacheScope ?? `${NAME}:${service.NS}:`); //! use `env.NAME` as default cache scope.
+    }
+
+    /**
+     * check if in mocks mode.
+     * - override this to set mocks.
+     *
+     * @returns boolean
+     */
+    public isMocks(): boolean {
+        return false;
     }
 
     /**
@@ -902,7 +913,7 @@ export class MyCoreProxy<U extends string, MyService extends MyCoreService<CoreM
     /**
      * get from lookup table.
      */
-    public getManagerProxy<Model, ModelManager extends MyCoreManager<Model, U, MyService>>(
+    public getManagerProxy<Model, ModelManager extends MyCoreManager<Model, any, MyService>>(
         modelType: U,
     ): MyManagerProxy<Model, ModelManager, MyService> {
         return this.managerProxies[modelType];
@@ -1489,9 +1500,9 @@ export class MyManagerProxy<
             const context = this.proxy.asNextContext();
             const $res = await this.$mgr.storage.storage.doReadMulti(this.$mgr.type, toFetch, { throwable, context });
             const successMap: { [key: string]: T } = {};
-            ($res?.success || []).forEach((model: T) => {
+            ($res?.success || []).forEach(model => {
                 const id = (model as CoreModel).id;
-                if (id) successMap[id] = model;
+                if (id) successMap[id] = model as T;
             });
 
             //* STEP.3 save to cache and build result

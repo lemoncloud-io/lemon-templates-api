@@ -26,6 +26,7 @@
  * @date        2025-08-01 optimized `canDo()` for better security.
  * @date        2025-09-03 optimized `makeModelBase()` to have `type` default.
  * @date        2026-02-03 optimized `modelAsView()` to show cores in local.
+ * @date        2026-04-09 optimized `types` to fix `ModelType` cast error.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
@@ -73,8 +74,8 @@ export abstract class AbstractCRUDController<
     MyModel extends CoreModel<ModelType>,
     MyView extends View,
     MyBody extends Body,
-    MyService extends MyCoreService<MyModel, ModelType, MyCoreProxy<ModelType, any>>,
-    MyManager extends MyCoreManager<MyModel, ModelType, MyCoreService<MyModel, ModelType, any>>,
+    MyService extends MyCoreService<MyModel, any, MyCoreProxy<any, any>>,
+    MyManager extends MyCoreManager<MyModel, any, MyCoreService<MyModel, any, any>>,
     MyTransformer extends AbstractTransformer<MyModel, MyView, MyBody>,
 > extends GeneralWEBController {
     /**

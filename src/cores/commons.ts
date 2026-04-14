@@ -9,6 +9,7 @@
  * @date        2025-05-25 optimized `$T.N()` + `parsePaginateParam()` w/ `noLimit` option
  * @date        2025-07-31 optimized `$T.B()` for boolean conversion.
  * @date        2026-02-09 optimized `$T.F()` to keep the original function.
+ * @date        2026-04-10 optimized `types` to fix ts warning.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
@@ -34,15 +35,15 @@ export const onlyDefined = <T>(N: T) =>
               if (v !== undefined) N[k as keyof T] = v;
               return N;
           }, {} as T)
-        : null;
+        : (null as T);
 
 /**
  * list param parser
  * @param param
  */
 export function parseListParam(param?: ListParam, $def?: { limit?: number }): Required<ListParam> {
-    return onlyDefined({
-        sort: param?.sort !== undefined ? _T.S2(param?.sort, '') : undefined,
+    return onlyDefined<Required<ListParam>>({
+        sort: param?.sort !== undefined ? _T.S2(param?.sort, '') : '',
         limit: _T.N(param?.limit, $def?.limit ?? 10),
     });
 }
@@ -68,7 +69,8 @@ export function parsePaginateParam(
 
     //WARN! - limit the max result to 2000.
     if (!noLimit) {
-        const { limit, page } = res;
+        const limit = $T.N(res?.limit ?? 0, 0);
+        const page = $T.N(res?.page ?? 0, 0);
         const maxPage = limit > 0 ? Math.floor(Math.min(limit * page, MAX_LIMIT) / limit) : MAX_LIMIT;
         res.page = Math.min(page, maxPage);
     } else {
@@ -92,7 +94,7 @@ export const $T = {
     SS: <T extends string = string>(v?: any): T[] =>
         (v && Array.isArray(v) ? v : _T.SS(v)).map(v => _T.S2(v, '', ' ').trim() as T),
     /** convert to `boolean`. */
-    B: (v: number | string | boolean, def?: 0 | 1 | boolean): boolean =>
+    B: (v?: number | string | boolean, def?: 0 | 1 | boolean): boolean =>
         typeof v === 'boolean'
             ? v
             : typeof v === 'number' || typeof v === 'string'
@@ -101,7 +103,7 @@ export const $T = {
     /** convert to boolean style number. */
     BN: <T extends number = BoolFlag>(v: any, def?: 0 | 1): T => (v === undefined ? (def as T) : (_T.B(v, def) as T)),
     /** convert to `number` */
-    N: (v: boolean | number | string, def?: number): number =>
+    N: (v: boolean | number | string, def: number = 0): number =>
         typeof v === 'boolean' ? (v ? 1 : 0) : typeof v === 'number' || typeof v === 'string' ? _T.N(v, def) : def,
     // /** convert to `float` w/ fixed(3) */
     // F: (n: number, def?: number) => _T.F3(n, def),
@@ -112,7 +114,7 @@ export const $T = {
             return N;
         }, {} as any),
     /** null to string */
-    nul2str: <T extends string>(v: T | any): T => {
+    nul2str: <T extends string>(v: T | any): T | undefined => {
         if (v === undefined) return undefined;
         return _T.S(v ?? '') as T;
     },
@@ -130,17 +132,14 @@ export const $T = {
         const _def = $opts?.default ?? null;
         const errScope = $opts?.errScope ?? `asLut(${name ?? ''})`;
         //* check of empty.
-        if (key === undefined) return undefined as keyof T;
+        if (key === undefined) return undefined as unknown as keyof T;
         if (key === null) return _def as keyof T;
 
         //* check if key is defined.
         if (typeof $map[key as keyof T] === 'undefined') {
             //* lookup by value.
-            const found = Object.entries($map).reduce((R, [k, v]) => {
-                if (v === key) return k;
-                return R;
-            }, null);
-            if (found !== null) return found as keyof T;
+            const foundEntry = Object.entries($map).find(([k, v]) => v === key);
+            if (foundEntry) return foundEntry[0] as keyof T;
 
             //! throw or default
             if (!throwable) return _def as keyof T;
@@ -177,7 +176,7 @@ export const $T = {
             }
             M[key] = Object.keys(N).reduce<{ [key: string]: number }>((M, x) => {
                 const Y = N[x];
-                if (x == 'doc_count') M['total'] = $T.N(Y, 0);
+                if (x == 'doc_count') M['total'] = $T.N(Y, 0) as number;
                 if (x == 'buckets' && Array.isArray(Y))
                     return Y.reduce((M, N) => {
                         if (typeof N?.key === 'string' && typeof N?.doc_count === 'number') {
