@@ -10,7 +10,6 @@
 //NOTE - must use `lemon-model` to publish w/o `lemon-core`.
 import { CoreModel } from 'lemon-model';
 import { ModelType } from './backend-types';
-// import { keys } from 'ts-transformer-keys';
 
 /**
  * type: `Model`: common model
@@ -40,11 +39,11 @@ export const filterFields = (fields: string[], base: string[] = []) =>
 /** field names from head */
 export const $HEAD = {
     /** common data */
-    // test: filterFields(keys<TestHead>()),
+    // add generated field registry entries here when needed.
 };
 
 // extract field names from models
 export const $FIELD = {
     /** common data */
-    // test: filterFields(keys<TestModel>()),
+    // add generated field registry entries here when needed.
 };

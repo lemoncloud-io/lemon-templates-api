@@ -52,14 +52,15 @@ import { DynamoScanService, DynamoScanFilter, DynamoScanResult, GeneralItem, Ela
 import { ApiHttpProxy, APIHeaders, elasticsearch, SearchResponse, DynamoOption, Elastic6Item } from 'lemon-core';
 import { BulkItemsResult, IdentityToken, ListResult, PaginateParam } from './types';
 import { $T, onlyDefined, parsePaginateParam } from './commons';
-import { keys } from 'ts-transformer-keys';
 import { CrendentialForAWS } from 'lemon-core/dist/environ';
+import { fieldKeys } from '../generated/field-registry';
+
 const NAME = $U.env('NAME', 'lemon');
 const NS = $U.NS('HDBS', 'green');
 /**
  * fields in core model.
  */
-const CORE_FIELDS: string[] = keys<CoreModel>();
+const CORE_FIELDS: string[] = fieldKeys.coreModel<CoreModel>();
 
 export type SearchParam<T> = T & { [key: string]: string | number };
 

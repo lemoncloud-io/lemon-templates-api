@@ -11,9 +11,9 @@
 import { AbstractTransformer, expect2 } from 'lemon-core';
 import { $FIELD, Model, MockModel, filterFields, TestModel } from './model';
 import { $Y, $trans } from './transformer';
-import { keys } from 'ts-transformer-keys';
+import { fieldKeys } from '../../generated/field-registry';
 
-const $mock = filterFields(keys<Model>(), ['meta']);
+const $mock = filterFields(fieldKeys.mockTransformerModel<Model>(), ['meta']);
 
 //! main test body.
 describe('transformer', () => {

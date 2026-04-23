@@ -16,9 +16,9 @@ import { loadProfile } from 'lemon-core/dist/environ';
 import { $T, $U, expect2, GETERR, NextContext, NextIdentity, SearchBody, SearchResult } from 'lemon-core';
 import { SimpleSet, CoreModel, filterFields, loadJsonSync } from 'lemon-core';
 import { CanDoActionType, MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
-import { keys } from 'ts-transformer-keys';
 import { PaginateParam } from './types';
 import { loadSample } from './contexts.spec';
+import { fieldKeys } from '../generated/field-registry';
 
 export type ModelType = 'test';
 export type Model = CoreModel<ModelType>;
@@ -47,7 +47,7 @@ export interface TestModel extends Model {
 }
 
 export const $FIELD = {
-    test: filterFields(keys<TestModel>()),
+    test: filterFields(fieldKeys.testModel<TestModel>()),
 };
 
 /**
@@ -149,17 +149,12 @@ describe('abstract-services', () => {
         const { service } = instance();
         expect2(() => true).toEqual(true);
 
-        const isKeys = true;
-        if (isKeys) {
-            expect2(() => filterFields($FIELD.test).join(',')).toEqual(
-                'name,test,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id',
-            );
-            expect2(() => filterFields($FIELD.test, ['test']).join(',')).toEqual(
-                'test,name,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id',
-            );
-        } else {
-            console.warn('check ts-transformer-keys!');
-        }
+        expect2(() => filterFields($FIELD.test).join(',')).toEqual(
+            'name,test,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id',
+        );
+        expect2(() => filterFields($FIELD.test, ['test']).join(',')).toEqual(
+            'test,name,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id',
+        );
         // test CoreService
         expect2(() => service.dynamoOptions).toEqual({ idName: '_id', tableName: 'dummy-data.yml' });
 

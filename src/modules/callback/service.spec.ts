@@ -13,10 +13,10 @@ import { expect2, _it, $info } from 'lemon-core';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';
-
-import { keys } from 'ts-transformer-keys';
 import { filterFields, Model } from './model';
-const $temp = filterFields(keys<Model>(), ['meta']);
+import { fieldKeys } from '../../generated/field-registry';
+
+const $temp = filterFields(fieldKeys.callbackServiceModel<Model>(), ['meta']);
 
 /**
  * make service and proxy

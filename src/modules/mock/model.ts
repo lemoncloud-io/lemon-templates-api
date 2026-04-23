@@ -11,7 +11,7 @@ import { CoreModel, NextIdentityAccess, SimpleSet } from 'lemon-model';
 //WARN - DO NOT IMPORT FROM `../../service/backend-model`
 // import { ModelType } from '../../service/backend-types';
 import $LUT from './types';
-import { keys } from 'ts-transformer-keys';
+import { fieldKeys } from '../../generated/field-registry';
 
 /**
  * type: `ModelType`
@@ -102,14 +102,14 @@ export const filterFields = (fields: string[], base: string[] = []) =>
 
 /** field names from head */
 export const $HEAD = {
-    mock: filterFields(keys<MockHead>()),
-    test: filterFields(keys<TestHead>()),
+    mock: filterFields(fieldKeys.mockHead<MockHead>()),
+    test: filterFields(fieldKeys.testHead<TestHead>()),
 };
 
 // extract field names from models
 export const $FIELD = {
-    mock: filterFields(keys<MockModel>(), ['meta']),
-    test: filterFields(keys<TestModel>()),
+    mock: filterFields(fieldKeys.mockModel<MockModel>(), ['meta']),
+    test: filterFields(fieldKeys.mockTestModel<TestModel>()),
 };
 
 /** must export default as below */

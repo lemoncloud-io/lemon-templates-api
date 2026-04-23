@@ -12,7 +12,7 @@ import { CoreModel } from 'lemon-model';
 //WARN - DO NOT IMPORT FROM `../../service/backend-model`
 // import { ModelType } from '../../service/backend-types';
 import $LUT, { CallbackState, CallbackStereo } from './types';
-import { keys } from 'ts-transformer-keys';
+import { fieldKeys } from '../../generated/field-registry';
 
 /**
  * type: `ModelType`
@@ -135,12 +135,12 @@ export const filterFields = (fields: string[], base: string[] = []) =>
 
 /** field names from head */
 export const $HEAD = {
-    callback: filterFields(keys<CallbackHead>()),
+    callback: filterFields(fieldKeys.callbackHead<CallbackHead>()),
 };
 
 // extract field names from models
 export const $FIELD = {
-    callback: filterFields(keys<CallbackModel>()),
+    callback: filterFields(fieldKeys.callbackModel<CallbackModel>()),
 };
 
 /** must export default as below */

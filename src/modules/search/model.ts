@@ -29,8 +29,7 @@ export type SearchModelType = '#query' | '#batch';
  * class: `SearchModel`
  *  - simple search-model to manage query.
  *
- * see https://github.com/kimamula/ts-transformer-keys
- *  - keys() 실행 에러 해결을 위해서 `$ npm install --save-dev typescript ttypescript`, 후 tsc -> ttsc로 변경함!.
+ * field list는 generated registry(`src/generated/field-registry.ts`)를 사용한다.
  */
 export interface SearchModel extends CoreModel<SearchModelType> {
     /**
@@ -116,12 +115,13 @@ export interface SearchBatchModel extends SearchModel {
 }
 
 //! extract properties out of Model...
-import { keys } from 'ts-transformer-keys';
-export const FIELDS: string[] = keys<SearchModel>().filter(_ => !_.startsWith('_'));
+import { fieldKeys } from '../../generated/field-registry';
+
+export const FIELDS: string[] = fieldKeys.searchModel<SearchModel>().filter(_ => !_.startsWith('_'));
 
 /**
  * extends fields of model.
- * @param fields list of `keys<model>`
+ * @param fields list of model fields
  * @param bases (optional) shared list.
  * @returns the final list of fields.
  */
@@ -136,7 +136,7 @@ const extendsFields = (fields: string[], bases: string[] = FIELDS): string[] =>
 
 //! extended fields set of sub-class.
 export const $FIELD = {
-    // search: extendsFields(keys<SearchModel>()),
-    $query: extendsFields(keys<SearchQueryModel>()),
-    $batch: extendsFields(keys<SearchBatchModel>()),
+    // search: extendsFields(fieldKeys.searchModel<SearchModel>()),
+    $query: extendsFields(fieldKeys.searchQueryModel<SearchQueryModel>()),
+    $batch: extendsFields(fieldKeys.searchBatchModel<SearchBatchModel>()),
 };
