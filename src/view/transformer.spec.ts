@@ -11,10 +11,10 @@
 import { expect2 } from 'lemon-core';
 import { Model, filterFields } from '../service/backend-model';
 import { $X } from './transformer';
-import { keys } from 'ts-transformer-keys';
 import $LUT from '../service/backend-types';
+import { fieldKeys } from '../generated/field-registry';
 
-const $mock = filterFields(keys<Model>(), ['meta']);
+const $mock = filterFields(fieldKeys.viewTransformerModel<Model>(), ['meta']);
 
 //! main test body.
 describe('transformer', () => {
@@ -23,6 +23,17 @@ describe('transformer', () => {
     /** 모델 샘픔이 모든 추가 필드를 가지고 있는 확인하기 위해서 */
 
     const checkAllKeys = <T extends Model>(model: T, fields: string[]) => {
+        //* 최소한, 만일 `keys()`가 잘 작동했다면, 공통 필드를 가지고 있어야함.
+        const commons = fields.reduce<string[]>((L, a) => {
+            if ($mock.includes(a)) L.push(a);
+            return L;
+        }, []);
+        expect2(() => $mock?.sort((a, b) => a.length - b.length || a.localeCompare(b)).join(',')).toEqual(
+            '$,id,ns,gid,sid,uid,lock,meta,next,type,error,stereo,createdAt,deletedAt,updatedAt',
+        );
+        expect2(() => commons?.sort((a, b) => a.length - b.length || a.localeCompare(b)).join(',')).toEqual(
+            '$,id,ns,gid,sid,uid,lock,meta,next,type,error,stereo,createdAt,deletedAt,updatedAt',
+        );
         const keys = Object.keys(model);
         const alls = notInModel(fields);
         //! model 정의에 포함안된 항목찾기 (필드 추가시 에러 발생하도록)

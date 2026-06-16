@@ -12,7 +12,20 @@ import { $U, $T, _inf, _log, _err, my_parrallel } from 'lemon-core';
 import { MyCoreProxy, MyManagerProxy } from '../../cores';
 import { ModelType, MockModel, MockModelExt, TestModel } from './model';
 import { BackendService, MockModelManager, TestModelManager } from './service';
+import { $trans } from './transformer';
 const NS = $U.NS('mock', 'blue'); // NAMESPACE TO BE PRINTED.
+
+/** resolve an id reference into its head snapshot. */
+const resolveHead = async <T>(manager: any, id: string, asHead: (model: T) => any) => {
+    const model = id ? await manager.get(id, false) : null;
+    return model ? asHead(model) : null;
+};
+
+/** resolve id array references into head snapshots. */
+const resolveHeads = async <T>(manager: any, ids: string[], asHead: (model: T) => any) => {
+    const models = ids?.length ? await manager.mget(ids, false) : [];
+    return models?.filter(Boolean).map((N: T) => asHead(N)) ?? [];
+};
 
 /** the expected `BackendProxy` */
 export abstract class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
@@ -32,6 +45,13 @@ export class MockManagerProxy extends MyManagerProxy<MockModel, MockModelManager
     /** default construction */
     public constructor(readonly proxy: BackendProxy, manager: MockModelManager) {
         super(proxy, manager);
+    }
+
+    /**
+     * data transformer
+     */
+    public get trans() {
+        return $trans.mock;
     }
 
     /**
@@ -130,6 +150,13 @@ export class TestManagerProxy extends MyManagerProxy<TestModel, TestModelManager
     }
 
     /**
+     * data transformer
+     */
+    public get trans() {
+        return $trans.test;
+    }
+
+    /**
      * validate before creating or updating.
      */
     public async validateModel<T extends TestModel>(model: T, modelId?: string): Promise<T> {
@@ -143,11 +170,21 @@ export class TestManagerProxy extends MyManagerProxy<TestModel, TestModelManager
         if (isCreate && validated?.name == '!') throw new Error(`.name[${validated.name}] is invalid - ${errScope}`);
         if (isCreate && !validated?.name) throw new Error(`.name (string) is required - ${errScope}`);
 
+        //* update mock$ if mockId is updated.
+        if (validated?.mockId !== undefined) {
+            validated.mock$ = await resolveHead(this.proxy.mock, validated.mockId, this.proxy.mock.trans.asHead);
+        }
+        //* update mock$$ if mockIds is updated.
+        if (validated?.mockIds !== undefined) {
+            validated.mock$$ = await resolveHeads(this.proxy.mock, validated.mockIds, this.proxy.mock.trans.asHead);
+        }
+
         return validated as T;
     }
 
     /**
      * load as meta
+     * - use `.meta` field of test-model to save any structured data for test-case, and load as object via this method.
      */
     public async loadMeta<T extends object>(id: string): Promise<T> {
         const model = await this.get(id, { stereo: '#meta' });
@@ -168,6 +205,7 @@ export class TestManagerProxy extends MyManagerProxy<TestModel, TestModelManager
 
     /**
      * save as meta
+     * - use `.meta` field of test-model to save any structured data for test-case, and save as json string via this method.
      */
     public async saveMeta<T extends object>(id: string, meta: T): Promise<T> {
         const $meta = await this.loadMeta(id);

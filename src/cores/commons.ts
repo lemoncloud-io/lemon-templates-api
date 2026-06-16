@@ -93,6 +93,12 @@ export const $T = {
     /** array string with clear white-spaces and trim */
     SS: <T extends string = string>(v?: any): T[] =>
         (v && Array.isArray(v) ? v : _T.SS(v)).map(v => _T.S2(v, '', ' ').trim() as T),
+    /** remove duplicates from string array using reduce */
+    US: <T extends string = string>(arr: T[]): T[] =>
+        arr?.reduce<T[]>((acc, v) => {
+            if (!acc.includes(v)) acc.push(v);
+            return acc;
+        }, []) ?? [],
     /** convert to `boolean`. */
     B: (v?: number | string | boolean, def?: 0 | 1 | boolean): boolean =>
         typeof v === 'boolean'
@@ -101,9 +107,9 @@ export const $T = {
             ? Boolean($T.BN(v, typeof def === 'boolean' ? (def ? 1 : 0) : def))
             : Boolean(def),
     /** convert to boolean style number. */
-    BN: <T extends number = BoolFlag>(v: any, def?: 0 | 1): T => (v === undefined ? (def as T) : (_T.B(v, def) as T)),
+    BN: <T extends number = BoolFlag>(v: any, def?: 0 | 1): T => (v === undefined ? (def as T) : (_T.BN(v, def) as T)),
     /** convert to `number` */
-    N: (v: boolean | number | string, def: number = 0): number =>
+    N: (v: boolean | number | string | unknown, def: number = 0): number =>
         typeof v === 'boolean' ? (v ? 1 : 0) : typeof v === 'number' || typeof v === 'string' ? _T.N(v, def) : def,
     // /** convert to `float` w/ fixed(3) */
     // F: (n: number, def?: number) => _T.F3(n, def),

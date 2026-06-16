@@ -92,10 +92,14 @@ export class TestTransformer extends AbstractTransformer<TestModel, TestView, Te
         const view = super.modelAsView(model, hasCores);
         return this.onlyDefined({
             ...view,
-            name: $T.S(model.name),
+            name: model.name,
+            stereo: model.stereo,
             count: model.count,
+            mockId: model.mockId,
+            mock$: model.mock$ ? $trans.mock.modelAsView(model.mock$) : undefined,
+            mockIds: model.mockIds,
+            mock$$: model.mock$$ ? model.mock$$.map(N => $trans.mock.modelAsView(N)) : undefined,
             _idx: model._idx,
-            _date: model._date,
         });
     }
     /**
@@ -105,8 +109,13 @@ export class TestTransformer extends AbstractTransformer<TestModel, TestView, Te
         const model = super.bodyToModel(body, isCreate);
         if (!model) return model;
 
-        if (body?.name !== undefined) model.name = $T.S(body.name);
+        if (isCreate && body?.stereo !== undefined)
+            model.stereo = $T.asLut(body?.stereo, $LUT.TestStereo, { name: 'stereo' });
+        if (body?.name !== undefined) model.name = $T.S2(body.name);
+
         if (body?.count !== undefined) model.count = $T.N(body.count);
+        if (body?.mockId !== undefined) model.mockId = $T.S2(body.mockId);
+        if (body?.mockIds !== undefined) model.mockIds = $T.SS(body.mockIds).filter(Boolean);
 
         return model;
     }

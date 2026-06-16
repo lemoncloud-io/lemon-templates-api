@@ -11,7 +11,8 @@
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { CoreModel, expect2, GETERR, NextContext } from 'lemon-core';
+import { describe, it, expect2 } from './commons.spec';
+import { CoreModel, GETERR, NextContext } from 'lemon-core';
 import { $createApi, Reversable } from './abstract-rest-apis';
 
 interface SiteModel extends CoreModel<string> {

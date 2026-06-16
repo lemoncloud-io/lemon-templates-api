@@ -444,7 +444,7 @@ export class SearchAPIController extends GeneralWEBController {
         // STEP.0 validate param..
         const name = $T.S(param?.name, param?.name === '' ? '#' : ''); // (optional) target batch-name. use '' to create new.
         const stop = !!$T.B(param?.stop, param?.stop === '' ? 1 : 0); // flag to stop the current runs.
-        const slack = $T.B(param?.slack, param?.slack === '' ? 1 : 1); // flag to report via slack.
+        const slack = $T.BN(param?.slack, param?.slack === '' ? 1 : 1); // flag to report via slack.
         // const size = $T.N(param?.size, 0); // batch size (if result.length==0, then EOF)
         // const limit = $T.N(param?.limit, 0); // max limit (-1 means doing until EOF)
         const target = $T.S(param?.target, ''); // the target of batch-handler.

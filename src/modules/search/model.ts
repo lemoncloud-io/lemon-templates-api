@@ -116,8 +116,9 @@ export interface SearchBatchModel extends SearchModel {
 }
 
 //! extract properties out of Model...
-import { keys } from 'ts-transformer-keys';
-export const FIELDS: string[] = keys<SearchModel>().filter(_ => !_.startsWith('_'));
+import { fieldKeys } from '../../generated/field-registry';
+
+export const FIELDS: string[] = fieldKeys.searchModel<SearchModel>().filter(_ => !_.startsWith('_'));
 
 /**
  * extends fields of model.
@@ -137,6 +138,6 @@ const extendsFields = (fields: string[], bases: string[] = FIELDS): string[] =>
 //! extended fields set of sub-class.
 export const $FIELD = {
     // search: extendsFields(keys<SearchModel>()),
-    $query: extendsFields(keys<SearchQueryModel>()),
-    $batch: extendsFields(keys<SearchBatchModel>()),
+    $query: extendsFields(fieldKeys.searchQueryModel<SearchQueryModel>()),
+    $batch: extendsFields(fieldKeys.searchBatchModel<SearchBatchModel>()),
 };

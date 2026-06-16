@@ -50,7 +50,17 @@ export class MockAPIController extends AbstractCRUDController<
      * $ http ':8800/mocks/0' name=hello stereo=#
      */
     public doGetHello: NextHandler = async (id, param, body, $ctx) => {
-        return { id, hello: this.hello(), param, body, context: { clientIp: $ctx.clientIp } };
+        return { id, hello: this.hello(), param, body, context: { clientIp: $ctx.clientIp, method: 'GET' } };
+    };
+
+    /**
+     * POST /mocks/0/hello
+     *
+     * ```sh
+     * $ http ':8800/mocks/0/hello' name=hello
+     */
+    public doPostHello: NextHandler = async (id, param, body, $ctx) => {
+        return { id, hello: this.hello(), param, body, context: { clientIp: $ctx.clientIp, method: 'POST' } };
     };
 
     /**

@@ -10,8 +10,8 @@
 import { CoreModel, NextIdentityAccess, SimpleSet } from 'lemon-model';
 //WARN - DO NOT IMPORT FROM `../../service/backend-model`
 // import { ModelType } from '../../service/backend-types';
-import $LUT from './types';
-import { keys } from 'ts-transformer-keys';
+import $LUT, { MockStereo, TestStereo } from './types';
+import { fieldKeys } from '../../generated/field-registry';
 
 /**
  * type: `ModelType`
@@ -32,6 +32,8 @@ export interface MockHead {
     id?: string;
     /** name of mock */
     name?: string;
+    /** stereo of mock */
+    stereo?: MockStereo | ModelType;
 }
 
 /**
@@ -41,6 +43,8 @@ export interface MockHead {
 export interface MockModel<T = string> extends MockHead, Model {
     /** name of this model */
     name?: string;
+    /** stereo of this model */
+    stereo?: MockStereo | ModelType;
     /** alias-id when stereo='#alias' */
     aliasId?: string;
     /** json encoding all data */
@@ -56,10 +60,14 @@ export interface MockModelExt<T = string> extends MockModel<T> {
  * - common head of test-model.
  */
 export interface TestHead {
+    /** id of head */
+    id?: string;
+    /** name of model */
+    name?: string;
+    /** stereo of model */
+    stereo?: TestStereo;
     /** internal reference */
     _idx?: number;
-    /** internal date(YYYY-MM-DD) */
-    _date?: string;
 }
 
 /**
@@ -68,16 +76,35 @@ export interface TestHead {
 export interface TestModel extends Model, TestHead {
     /** name of model */
     name?: string;
+    /** stereo of model */
+    stereo?: TestStereo;
+
     /** test count */
     count?: number;
 
     /** (optional) extra */
     extra?: SimpleSet;
 
+    /** linked mock id */
+    mockId?: string;
+    /** linked mock head */
+    mock$?: MockHead;
+
+    /** linked mock ids */
+    mockIds?: string[];
+    /** linked mock heads */
+    mock$$?: MockHead[];
+
     /**
      * inner Object.
      */
     readonly Model?: Model;
+
+    /** linked mock model */
+    readonly $mock?: MockModel;
+
+    /** linked mock models */
+    readonly $mocks?: MockModel[];
 
     /**
      * (view) Access Infor.
@@ -102,14 +129,14 @@ export const filterFields = (fields: string[], base: string[] = []) =>
 
 /** field names from head */
 export const $HEAD = {
-    mock: filterFields(keys<MockHead>()),
-    test: filterFields(keys<TestHead>()),
+    mock: filterFields(fieldKeys.mockHead<MockHead>()),
+    test: filterFields(fieldKeys.testHead<TestHead>()),
 };
 
 // extract field names from models
 export const $FIELD = {
-    mock: filterFields(keys<MockModel>(), ['meta']),
-    test: filterFields(keys<TestModel>()),
+    mock: filterFields(fieldKeys.mockModel<MockModel>(), ['meta']),
+    test: filterFields(fieldKeys.mockTestModel<TestModel>()),
 };
 
 /** must export default as below */
