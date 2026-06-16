@@ -8,8 +8,10 @@
  *
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
-import { expect2, NextIdentityAccess, _it, $info, GETERR } from 'lemon-core';
-import { MockModel } from './model';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { _it, describe, it, expect2, expect, GETERR } from '../../cores/commons.spec';
+import { NextIdentityAccess, $info } from 'lemon-core';
+import { MockModel, TestModel } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';
@@ -62,10 +64,41 @@ describe('BackendProxy', () => {
         });
 
         //* validate update linked models
-        const $new = await $prx.makeModel({ ...model });
+        const $new = await $prx.makeModel<MockModel>({ ...model });
         expect2(() => $new).toEqual({
             ..._ts(model.id, { type: $prx.$mgr.type }),
             name: model.name,
+        });
+    });
+
+    //* test of test-manager reference heads
+    it('should update test.mock$ and test.mock$$ when mock ids are changed', async () => {
+        const { proxy, _ts } = instance();
+
+        const mockA = await proxy.mock.makeModel<MockModel>({ id: 'mock-A', name: 'Mock A', stereo: '#' });
+        const mockB = await proxy.mock.makeModel<MockModel>({ id: 'mock-B', name: 'Mock B', stereo: '#alias' });
+
+        const test = await proxy.test.makeModel<TestModel>({
+            id: 'test-A',
+            name: 'Test A',
+            mockId: mockA.id,
+            mockIds: [mockA.id, mockB.id],
+        });
+
+        expect2(() => test, 'mockId,mock$,mockIds,mock$$').toEqual({
+            mockId: 'mock-A',
+            mock$: { id: 'mock-A', name: 'Mock A', stereo: '#' },
+            mockIds: ['mock-A', 'mock-B'],
+            mock$$: [
+                { id: 'mock-A', name: 'Mock A', stereo: '#' },
+                { id: 'mock-B', name: 'Mock B', stereo: '#alias' },
+            ],
+        });
+
+        expect2(() => test, 'id,name,type').toEqual({
+            id: 'test-A',
+            name: 'Test A',
+            type: 'test',
         });
     });
 });

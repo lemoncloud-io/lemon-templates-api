@@ -9,7 +9,9 @@
  * @copyright   (C) lemoncloud.io 2022 - All Rights Reserved.
  */
 import { loadProfile } from 'lemon-core/dist/environ';
-import { expect2, NextIdentityAccess, _it, $info } from 'lemon-core';
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { _it, describe, it, expect2, expect, GETERR } from '../../cores/commons.spec';
+import { NextIdentityAccess, $info } from 'lemon-core';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';
@@ -44,11 +46,15 @@ describe('BackendProxy', () => {
 
         const expFields = [
             'name',
+            'stereo',
             'count',
             'extra',
+            'mockId',
+            'mock$',
+            'mockIds',
+            'mock$$',
             'ns',
             'type',
-            'stereo',
             'sid',
             'uid',
             'gid',
@@ -61,7 +67,6 @@ describe('BackendProxy', () => {
             'error',
             'id',
             '_idx',
-            '_date',
         ];
         expect2(() => service.$test.FIELDS).toEqual(expFields);
         expect2(() => service.$test.type).toEqual('test');

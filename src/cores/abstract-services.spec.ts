@@ -13,7 +13,8 @@
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { $T, $U, expect2, GETERR, NextContext, NextIdentity, SearchBody, SearchResult } from 'lemon-core';
+import { describe, it, expect2, expect } from './commons.spec';
+import { $T, $U, GETERR, NextContext, NextIdentity, SearchBody, SearchResult } from 'lemon-core';
 import { SimpleSet, CoreModel, filterFields, loadJsonSync } from 'lemon-core';
 import { CanDoActionType, MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
 import { PaginateParam } from './types';
@@ -149,12 +150,17 @@ describe('abstract-services', () => {
         const { service } = instance();
         expect2(() => true).toEqual(true);
 
-        expect2(() => filterFields($FIELD.test).join(',')).toEqual(
-            'name,test,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id',
-        );
-        expect2(() => filterFields($FIELD.test, ['test']).join(',')).toEqual(
-            'test,name,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id',
-        );
+        const isKeys = true;
+        if (isKeys) {
+            expect2(() => filterFields($FIELD.test).join(',')).toEqual(
+                'name,test,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id',
+            );
+            expect2(() => filterFields($FIELD.test, ['test']).join(',')).toEqual(
+                'test,name,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id',
+            );
+        } else {
+            console.warn('check ts-transformer-keys!');
+        }
         // test CoreService
         expect2(() => service.dynamoOptions).toEqual({ idName: '_id', tableName: 'dummy-data.yml' });
 
@@ -166,8 +172,15 @@ describe('abstract-services', () => {
         expect2(await $test.find('A')).toEqual(null);
         expect2(await $test.exists('A')).toEqual(false);
         expect2(await $test.findByKey('A')).toEqual(null);
-        expect2(await $test.getMulti(['A', 'A'])).toEqual([null, null]);
-        expect2(await $test.getMulti$(['A', 'A'])).toEqual({ A: { id: 'A', error: '404 NOT FOUND - test:A' } });
+        expect2(await $test.getMulti(['A', 'A']).catch(GETERR)).toEqual(
+            '404 NOT FOUND - test:A (S:0/1) - parallel(10/1)',
+        );
+
+        const $A = await $test.save('A', { name: 'AAA', test: 1 });
+        expect2(() => $A, 'id').toEqual({ id: 'A' });
+
+        expect2(await $test.getMulti(['A', 'A']).catch(GETERR), 'id').toEqual([{ id: 'A' }, { id: 'A' }]);
+        expect2(await $test.getMulti$(['A', 'A']).catch(GETERR)).toEqual({ A: { ...$A } });
     });
 
     it('should pass ManagerProxy', async () => {
@@ -318,11 +331,11 @@ describe('abstract-services', () => {
         const model2: Model = {
             id: '1000001',
         };
-        expect2(() => proxy.makeModelBase(model1)).toEqual(model1);
-        expect2(() => proxy.makeModelBase(model1, { parent: parent })).toEqual(model1);
-        expect2(() => proxy.makeModelBase(model1, { useSession: true })).toEqual(model1);
-        expect2(() => proxy.makeModelBase(model2)).toEqual(model2);
-        expect2(() => proxy.makeModelBase(model2, { parent: parent })).toEqual({
+        expect2(await proxy.makeModelBase(model1)).toEqual(model1);
+        expect2(await proxy.makeModelBase(model1, { parent: parent })).toEqual(model1);
+        expect2(await proxy.makeModelBase(model1, { useSession: true })).toEqual(model1);
+        expect2(await proxy.makeModelBase(model2)).toEqual(model2);
+        expect2(await proxy.makeModelBase(model2, { parent: parent })).toEqual({
             id: '1000001',
             sid: '0000008',
             uid: '0000007',
@@ -484,25 +497,39 @@ describe('abstract-services', () => {
     it('should pass packSearchParam(session)', async () => {
         const { service, context } = instance('session');
 
+        expect2(await service.guardProxy(context, async proxy => proxy.tests.packSearchParam({}))).toEqual({
+            $page: { limit: 10, page: 0, sort: '' },
+            $param: {},
+        });
+
+        expect2(await service.guardProxy(context, async proxy => proxy.tests.packSearchParam({ page: '1' }))).toEqual({
+            $page: { limit: 10, page: 1, sort: '' },
+            $param: {},
+        });
+
         expect2(
             await service
-                .guardProxy(context, async proxy => {
-                    expect2(() => proxy.tests.packSearchParam({})).toEqual({
-                        $page: { limit: 10, page: 0 },
-                        $param: {},
-                    });
-                    expect2(() => proxy.tests.packSearchParam({ page: '1' })).toEqual({
-                        $page: { limit: 10, page: 1 },
-                        $param: {},
-                    });
-                    return proxy.tests.packSearchParam(
+                .guardProxy(context, async proxy =>
+                    proxy.tests.packSearchParam(
                         { page: '1', offset: '2', limit: '3' },
                         { name: '' },
                         { useSession: true },
-                    );
-                })
+                    ),
+                )
+                // .then(N => $U.json(N))
                 .catch(GETERR),
-        ).toEqual({ $page: { limit: 3, offset: 2, page: 1 }, $param: { name: '', sid: '1000008' } });
+        ).toEqual({
+            $page: {
+                page: 1,
+                limit: 3,
+                offset: 2,
+                sort: '',
+            },
+            $param: {
+                sid: '1000008',
+                name: '',
+            },
+        });
     });
 
     it('should pass buildQuery for ES', async () => {

@@ -767,7 +767,7 @@ export abstract class MyCoreManager<
         //* inner type.
         type Chunks<T = any> = {
             id: string;
-            error: any;
+            error?: string | null;
             chunk: T[];
         };
         type BulkResponseBody = {
@@ -787,6 +787,9 @@ export abstract class MyCoreManager<
             // result?: string;
             status?: number;
         };
+        type BulkChunkResult<T = any> = Chunks<T> & {
+            list?: ItemList[];
+        };
 
         //* 2. chunk the list into smaller parts
         const _makeChucks = <T = any>(list: T[], chunkSize: number) => {
@@ -803,13 +806,14 @@ export abstract class MyCoreManager<
                 _err(this.NS, `>> err=`, e);
                 throw e;
             });
-            const list = ($res.body as BulkResponseBody)?.items?.map<ItemList>(item => ({
-                _id: item.index._id,
-                _version: item.index._version,
-                error: item.index.error,
-                status: item.index.status,
-            }));
-            return { list, error: null as string };
+            const list =
+                ($res.body as BulkResponseBody)?.items?.map<ItemList>(item => ({
+                    _id: item.index._id,
+                    _version: item.index._version,
+                    error: item.index.error,
+                    status: item.index.status,
+                })) ?? [];
+            return { list, error: null as string | null };
         };
 
         const chunkSize = options?.size ?? 10;
@@ -831,11 +835,10 @@ export abstract class MyCoreManager<
             });
         };
 
-        const results = await my_sequence(chunkList, async N => {
+        const results = await my_sequence<Chunks<Model>, BulkChunkResult<Model>>(chunkList, async N => {
             const operations = _transformBulkOperations(N.chunk);
-            return _saveBulk(operations).catch(e => {
-                return { list: null as ItemList[], error: GETERR(e) };
-            });
+            const bulk = await _saveBulk(operations).catch(e => ({ list: [] as ItemList[], error: GETERR(e) }));
+            return { ...N, ...bulk };
         });
         // _log(this.logNS, `> results =`, $U.json(results));
 
@@ -1499,6 +1502,7 @@ export class MyManagerProxy<
         //* STEP.2 batch read from storage
         if (toFetch.length > 0) {
             const context = this.proxy.asNextContext();
+            //TODO [Steve] 여기서 갑자기 storage 에서 읽어오는부분을 proxy 에서 하도록 개선 필요해 보임 @260608.
             const $res = await this.$mgr.storage.storage.doReadMulti(this.$mgr.type, toFetch, { throwable, context });
             const successMap: { [key: string]: T } = {};
             ($res?.success || []).forEach(model => {

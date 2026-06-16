@@ -8,10 +8,12 @@
  * @copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { AbstractTransformer, expect2 } from 'lemon-core';
+import { _it, describe, it, expect2, expect, GETERR } from '../../cores/commons.spec';
+import { AbstractTransformer } from 'lemon-core';
 import { $FIELD, Model, MockModel, filterFields, TestModel } from './model';
 import { $Y, $trans } from './transformer';
 import { fieldKeys } from '../../generated/field-registry';
+import { onlyDefined } from '../../cores';
 
 const $mock = filterFields(fieldKeys.mockTransformerModel<Model>(), ['meta']);
 
@@ -22,6 +24,17 @@ describe('transformer', () => {
     /** 모델 샘픔이 모든 추가 필드를 가지고 있는 확인하기 위해서 */
 
     const checkAllKeys = <T extends Model>(model: T, fields: string[]) => {
+        //* 최소한, 만일 `keys()`가 잘 작동했다면, 공통 필드를 가지고 있어야함.
+        const commons = fields.reduce<string[]>((L, a) => {
+            if ($mock.includes(a)) L.push(a);
+            return L;
+        }, []);
+        expect2(() => $mock?.sort((a, b) => a.length - b.length || a.localeCompare(b)).join(',')).toEqual(
+            'id,ns,gid,sid,uid,lock,meta,next,type,error,stereo,createdAt,deletedAt,updatedAt',
+        );
+        expect2(() => commons?.sort((a, b) => a.length - b.length || a.localeCompare(b)).join(',')).toEqual(
+            'id,ns,gid,sid,uid,lock,meta,next,type,error,stereo,createdAt,deletedAt,updatedAt',
+        );
         const keys = Object.keys(model);
         const alls = notInModel(fields);
         //! model 정의에 포함안된 항목찾기 (필드 추가시 에러 발생하도록)
@@ -66,6 +79,7 @@ describe('transformer', () => {
         expect2(() => trans.asHead($model)).toEqual({
             id: $model.id,
             name: $model.name,
+            stereo: $model.stereo,
         });
 
         // check ONLY in view
@@ -85,27 +99,94 @@ describe('transformer', () => {
         });
     });
 
-    //! test for each transformer w/ default instance.
-    it('should pass test transformer', async () => {
+    //* test of `test-model`
+    it('should pass test-model', async () => {
         const FIELD = $FIELD.test;
         const trans = $trans.test;
         const $model: TestModel = {
             id: 'id',
             name: '방법',
+            stereo: '#',
             count: 1,
             extra: {},
+            mockId: 'mock-1',
+            mock$: { id: 'mock-1', name: 'Mock', stereo: '#' },
+            mockIds: ['mock-1', 'mock-2'],
+            mock$$: [
+                { id: 'mock-1', name: 'Mock', stereo: '#' },
+                { id: 'mock-2', name: 'Mock 2', stereo: '#alias' },
+            ],
+            $mock: { id: 'mock-1', name: 'Mock', stereo: '#' },
+            $mocks: [{ id: 'mock-1', name: 'Mock', stereo: '#' }],
         };
-        expect2(() => checkAllKeys($model, FIELD)).toEqual(['_idx', '_date']);
-        expect2(() => trans.modelAsView($model), 'required').toEqual({});
-        expect2(() => trans.bodyToModel(trans.modelAsView($model))).toEqual({
-            ...$model,
-            stereo: undefined, //* immutable.
-            extra: undefined, //* immutable.
+
+        //* immutable.
+        const $imune: TestModel = {
+            // id: undefined,
+            stereo: undefined,
+            extra: undefined,
+            mock$: undefined,
+            mock$$: undefined,
+            $mock: undefined,
+            $mocks: undefined,
+        };
+
+        expect2(() => trans.asHead($model)).toEqual({
+            id: $model.id,
+            name: $model.name,
+            stereo: $model.stereo,
         });
+
+        expect2(() => checkAllKeys($model, FIELD)).toEqual(['_idx']);
+        expect2(() => trans.modelAsView($model), 'required,mockId,mock$,mockIds,mock$$').toEqual({
+            require: undefined,
+            mockId: 'mock-1',
+            mock$: $trans.mock.modelAsView($model.mock$),
+            mockIds: ['mock-1', 'mock-2'],
+            mock$$: $model.mock$$.map(N => $trans.mock.modelAsView(N)),
+        });
+
+        // check of immutable fields (stereo)
+        expect2(() => trans.bodyToModel(onlyDefined(trans.modelAsView($model)))).toEqual({
+            ...$model,
+            ...$imune,
+        });
+        // check of initial creation.
         expect2(() => trans.bodyToModel(trans.modelAsView($model), true)).toEqual({
             ...$model,
-            stereo: $model.stereo,
-            extra: undefined, //* immutable.
+            ...$imune,
+            stereo: $model?.stereo,
+        });
+    });
+
+    //* golden sample contract: `TestModel` reference fields.
+    it('should keep test-model golden reference contract', async () => {
+        const FIELD = $FIELD.test;
+        const trans = $trans.test;
+        const $model: TestModel = {
+            id: 'test-1',
+            name: 'Test',
+            stereo: '#',
+            mockId: 'mock-1',
+            mock$: { id: 'mock-1', name: 'Mock', stereo: '#' },
+            mockIds: ['mock-1'],
+            mock$$: [{ id: 'mock-1', name: 'Mock', stereo: '#' }],
+            $mock: { id: 'mock-1', name: 'Mock', stereo: '#' },
+            $mocks: [{ id: 'mock-1', name: 'Mock', stereo: '#' }],
+        };
+
+        expect2(() => FIELD.filter(N => N.startsWith('mock'))).toEqual(['mockId', 'mock$', 'mockIds', 'mock$$']);
+        expect2(() => trans.modelAsView($model), 'mockId,mock$,mockIds,mock$$').toEqual({
+            mockId: 'mock-1',
+            mock$: $trans.mock.modelAsView($model.mock$),
+            mockIds: ['mock-1'],
+            mock$$: [$trans.mock.modelAsView($model.mock$$[0])],
+        });
+        expect2(() => trans.bodyToModel(onlyDefined(trans.modelAsView($model)))).toEqual({
+            id: 'test-1',
+            name: 'Test',
+            mockId: 'mock-1',
+            mockIds: ['mock-1'],
         });
     });
 });

@@ -40,7 +40,9 @@ export interface TestBody extends Body, Partial<TestView> {}
  * type: `TestView`
  * - usually same as post's body.
  */
-export interface TestView extends View, Omit<Partial<TestModel>, 'id' | 'required'> {
+export interface TestView
+    extends View,
+        Omit<Partial<TestModel>, 'id' | 'required' | 'mock$' | 'mock$$' | '$mock' | '$mocks'> {
     /**
      * unique id of this type
      */
@@ -50,4 +52,10 @@ export interface TestView extends View, Omit<Partial<TestModel>, 'id' | 'require
      * (optional) flag required.
      */
     required?: boolean;
+
+    /** linked mock resolved from `mockId` */
+    mock$?: MockView;
+
+    /** linked mocks resolved from `mockIds` */
+    mock$$?: MockView[];
 }

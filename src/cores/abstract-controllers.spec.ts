@@ -16,7 +16,8 @@
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { $rand, $T, $U, expect2, GETERR, GETERR$, NextContext } from 'lemon-core';
+import { describe, it, expect2 } from './commons.spec';
+import { $rand, $T, $U, GETERR, GETERR$, NextContext } from 'lemon-core';
 import { $ES6 } from './abstract-services';
 import { AbstractCRUDController, AbstractTransformer } from './abstract-controllers';
 import { View, Body } from './types';
@@ -730,7 +731,7 @@ describe('AbstractCRUDController', () => {
             id: `#811c9dc5.0`,
             type: '#test',
             stereo: '#',
-            meta: { hash: '811c9dc5', text: '' },
+            meta: { hash: '811c9dc5', text: null },
             lock: 1,
             next: initialNo + 1,
             ...$ts,
@@ -740,7 +741,7 @@ describe('AbstractCRUDController', () => {
             id: '#1B2M2Y8AsgTpgAmY7PhCfg==.0',
             type: '#test',
             stereo: '#',
-            meta: { hash: '1B2M2Y8AsgTpgAmY7PhCfg==', text: '' },
+            meta: { hash: '1B2M2Y8AsgTpgAmY7PhCfg==', text: null },
             lock: 1,
             next: initialNo + 2,
             ...$ts,

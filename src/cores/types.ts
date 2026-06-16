@@ -14,7 +14,7 @@
  */
 //NOTE - must use `lemon-model` to publish w/o `lemon-core`.
 import { NextIdentity, CoreModel, View, Body } from 'lemon-model';
-export { CoreModel, View, Body };
+export type { CoreModel, View, Body };
 
 /** type: `IdentityTokenSite` */
 export interface IdentityTokenSite {
@@ -57,6 +57,12 @@ export interface IdentityToken<
     G extends IdentityTokenGroup = IdentityTokenGroup,
 > extends NextIdentity<T> {
     /**
+     * cloud-id (= id in `AWS ACCOUNT_NO`)
+     * - `#` 일경우, 무시됨.
+     * - aws 계정 수준의 cloud-id
+     */
+    cid: string;
+    /**
      * site-id (= id in `SiteModel(사이트)`)
      * - `#` 일경우, 특정 site에 엮이지 않음 (무시됨)
      * - `0000` 일경우, 기본 site 정보로 환경설정에 따름
@@ -87,6 +93,14 @@ export interface IdentityToken<
      * @see AuthModel
      */
     aid: string;
+    /**
+     * (optional) delegator-id (= 위임된 게스트 User ID)
+     * - **중계서버(`backend-api`)에서만 유효한 필드.** 다른 시스템(socials 등)은 이 필드를 신뢰하지 말 것.
+     * - 소셜 로그인 세션에서 원본 디바이스 게스트 User ID를 가리킴 (= `AuthModel.linkUserId`).
+     * - 채팅(개인 채팅방) 도메인은 본 신원이 아닌 `did`를 채택하여 게스트의 데이터를 그대로 이용함.
+     * - 게스트 세션이거나 위임이 없을 때는 `undefined`.
+     */
+    did?: string;
 
     /**
      * list of roles  (like `user`, `admin`, `super`)
@@ -144,7 +158,11 @@ export interface ListResult<T, R = any> {
     /**
      * (optional) aggr list
      */
-    aggr?: R[];
+    aggr?: R | R[];
+}
+
+export interface AggrResult {
+    [key: string]: { [key: string]: number };
 }
 
 export interface AggrKeyCount {

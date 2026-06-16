@@ -37,7 +37,7 @@ import { GeneralWEBController, NextHandler, my_parrallel, SimpleSet } from 'lemo
 import { CoreModel, AbstractTransformer, View, Body } from 'lemon-model';
 import { BulkBody, ListResult, PaginatedListResult, PaginateParam } from './types';
 import { MyCoreManager, MyCoreService, MyCoreProxy } from './abstract-services';
-export { CoreModel, AbstractTransformer };
+export { CoreModel, AbstractTransformer, GeneralWEBController };
 
 /**
  * convert as id string.
@@ -212,6 +212,8 @@ export abstract class AbstractCRUDController<
         const $id: { [key: string]: number } = {
             '': $T.N(conf?.$id, 1000), // global starting seq of id
         };
+        const _num = (v: unknown, def = 0): number =>
+            typeof v === 'boolean' || typeof v === 'number' || typeof v === 'string' ? $T.N(v, def) : def;
         const _id = (type: string, id = 0, auto = false): string => {
             if ($id[type] === undefined) {
                 $id[type] = $id['']; // each starts of `type`.
@@ -225,14 +227,14 @@ export abstract class AbstractCRUDController<
             Object.entries(data).reduce<any>(
                 (M, [k, N]) => {
                     if (k === 'id') {
-                        M[k] = _id(M.type, $T.N(N, 0) || i || 0, N === 0 ? true : false);
+                        M[k] = _id(M.type, _num(N, 0) || i || 0, N === 0 ? true : false);
                     } else if (isObjKey(k)) {
                         const type = k.charAt(0).toLowerCase() + k.substring(1, k.length - 1);
                         const inner = Array.isArray(N) ? N.map((N, i) => _mock(N, N.type || type, i)) : _mock(N, type);
                         M[k] = inner;
                     } else if (/^[_]+/.test(k)) {
                         const type = k.substring(1);
-                        const refId = _id(type, $T.N(N, 0));
+                        const refId = _id(type, _num(N, 0));
                         M[`${type}Id`] = refId;
                     } else {
                         M[k] = N;

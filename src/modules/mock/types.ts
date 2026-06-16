@@ -34,12 +34,23 @@ const $LUT = {
         '#': 'dummy', // dummy.
         '#alias': 'alias', // alias.
     },
+    /** type: TestStereo */
+    TestStereo: {
+        '': '',
+        '#': 'dummy', // dummy.
+        '#meta': 'meta', // meta.
+    },
 };
 
 /**
  * type: `MockStereo`
  */
 export type MockStereo = keyof typeof $LUT.MockStereo;
+
+/**
+ * type: `TestStereo`
+ */
+export type TestStereo = keyof typeof $LUT.TestStereo;
 
 /** must export $LUT as default */
 export default $LUT;

@@ -8,8 +8,9 @@
  * @copyright   (C) 2024 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+import { describe, it, expect2, expect } from './commons.spec';
 import { NextContext } from 'lemon-model';
-import { expect2 } from 'lemon-core';
 
 /**
  * sample sample context
