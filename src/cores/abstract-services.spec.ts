@@ -1263,7 +1263,7 @@ describe('abstract-services', () => {
         process.env.OS2_INDEX = 'something-without-v1';
         expect2(await (mgr as any).doRefreshJwt().catch(GETERR)).toEqual(null);
 
-        process.env.OS2_INDEX = 'chatic-backend-v1-abc';
+        process.env.OS2_INDEX = 'lemon-templates-v1-abc';
         expect2(await (mgr as any).doRefreshJwt().catch(GETERR)).toEqual(null);
 
         //* restore env (the live success path mutates process.env.OS2_JWT_TOKEN).
@@ -1379,7 +1379,7 @@ describe('abstract-services', () => {
         //* patchLambdaJwt() - touches real AWS Lambda; only run under the `lemon` profile.
         //   in other environments it would fail with a credential/permission error.
         if (PROFILE === 'lemon') {
-            const patched = await (mgr as any).patchLambdaJwt('chatic-backend-api', 'dummy-jwt').catch(GETERR);
+            const patched = await (mgr as any).patchLambdaJwt('lemon-templates-api', 'dummy-jwt').catch(GETERR);
             //* result is the list of fulfilled function names; on permission failure it falls back to [].
             expect2(() => Array.isArray(patched)).toEqual(true);
         }
