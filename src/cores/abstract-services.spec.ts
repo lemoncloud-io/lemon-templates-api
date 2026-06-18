@@ -18,7 +18,7 @@ import { $T, $U, GETERR, NextContext, NextIdentity, SearchBody, SearchResult } f
 import { SimpleSet, CoreModel, filterFields, loadJsonSync, Elastic6Option } from 'lemon-core';
 import { CanDoActionType, MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
 import { OS2FGACManager } from './abstract-services';
-import { keys } from 'ts-transformer-keys';
+
 import { PaginateParam } from './types';
 import { loadSample } from './contexts.spec';
 import { fieldKeys } from '../generated/field-registry';
