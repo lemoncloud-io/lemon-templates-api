@@ -15,8 +15,10 @@
 import { loadProfile } from 'lemon-core/dist/environ';
 import { describe, it, expect2, expect } from './commons.spec';
 import { $T, $U, GETERR, NextContext, NextIdentity, SearchBody, SearchResult } from 'lemon-core';
-import { SimpleSet, CoreModel, filterFields, loadJsonSync } from 'lemon-core';
+import { SimpleSet, CoreModel, filterFields, loadJsonSync, Elastic6Option } from 'lemon-core';
 import { CanDoActionType, MyCoreManager, MyCoreProxy, MyCoreService, MyManagerProxy } from './abstract-services';
+import { OS2FGACManager } from './abstract-services';
+import { keys } from 'ts-transformer-keys';
 import { PaginateParam } from './types';
 import { loadSample } from './contexts.spec';
 import { fieldKeys } from '../generated/field-registry';
@@ -1203,5 +1205,183 @@ describe('abstract-services', () => {
             { ..._base('test'), id: 'a', name: 'second-update', test: 100 },
             { ..._base('test'), id: 'a', name: 'second-update', test: 100 },
         ]);
+    });
+
+    //* OS2FGACManager: tests for private methods { doProxy, is401, refreshJwtOnce, doRefreshJwt, patchLambdaJwt }.
+    //  - private modifiers are compile-time only; tests reach them via `(mgr as any)`.
+    //  - external deps (sigV4 proxy, $protocol, AWS Lambda) are not called for real.
+    //    `proxy` getter and the helper methods are overridden per-test so each method's
+    //    branch logic is exercised in isolation.
+    it('should pass OS2FGACManager', async () => {
+        //* OS2FGACManager test
+        // 1. validate parameters test     - is401()의 입력 검증 (Error, 문자열, null, undefined 등)
+        // 2. match err cases              - doProxy() 401/refresh-fail, doRefreshJwt() OS2_INDEX 파싱 실패
+        // 3. success cases                - doProxy() 정상 + 401 후 재시도 성공, refreshJwtOnce() 메모이제이션
+
+        const fgacOptions: Elastic6Option = {
+            endpoint: 'https://search-test.ap-northeast-2.es.amazonaws.com',
+            indexName: 'test-index',
+        };
+        const mgr = new OS2FGACManager(fgacOptions);
+
+        //* test of validation - basic accessors
+        expect2(() => mgr.hello()).toEqual('FGACService');
+        expect2(() => mgr.options.indexName).toEqual('test-index');
+        expect2(() => mgr.options.endpoint).toEqual('https://search-test.ap-northeast-2.es.amazonaws.com');
+
+        //* test of is401() - pure predicate over Error / string / null
+        const is401 = (e: any): boolean => (mgr as any).is401(e);
+        expect2(() => is401(new Error('401 Unauthorized - bad jwt'))).toEqual(true);
+        expect2(() => is401(new Error('401 '))).toEqual(true);
+        expect2(() => is401(new Error('401'))).toEqual(true);
+
+        expect2(() => is401(new Error('500 Internal Server Error'))).toEqual(false);
+        expect2(() => is401(new Error('404 Not Found'))).toEqual(false);
+        expect2(() => is401(new Error(''))).toEqual(false);
+        //* non-Error inputs are stringified via `${e ?? ''}`.
+        expect2(() => is401('401 Unauthorized')).toEqual(true);
+        expect2(() => is401('401 ')).toEqual(true);
+        expect2(() => is401('401')).toEqual(true);
+        expect2(() => is401('500')).toEqual(false);
+        expect2(() => is401('')).toEqual(false);
+        expect2(() => is401(null)).toEqual(false);
+        expect2(() => is401(undefined)).toEqual(false);
+        expect2(() => is401(0)).toEqual(false);
+        expect2(() => is401(401)).toEqual(true);
+
+        //* match err cases - doRefreshJwt() returns null when OS2_INDEX cannot be parsed
+        //   pattern requires `(.*)-v1-(\d+)$`. Save/restore env around the test.
+        const origIndex = process.env.OS2_INDEX;
+        const origJwt = process.env.OS2_JWT_TOKEN;
+
+        process.env.OS2_INDEX = '';
+        expect2(await (mgr as any).doRefreshJwt().catch(GETERR)).toEqual(null);
+
+        process.env.OS2_INDEX = 'badformat';
+        expect2(await (mgr as any).doRefreshJwt().catch(GETERR)).toEqual(null);
+
+        process.env.OS2_INDEX = 'something-without-v1';
+        expect2(await (mgr as any).doRefreshJwt().catch(GETERR)).toEqual(null);
+
+        process.env.OS2_INDEX = 'chatic-backend-v1-abc';
+        expect2(await (mgr as any).doRefreshJwt().catch(GETERR)).toEqual(null);
+
+        //* restore env (the live success path mutates process.env.OS2_JWT_TOKEN).
+        process.env.OS2_INDEX = origIndex;
+        process.env.OS2_JWT_TOKEN = origJwt;
+
+        //* refreshJwtOnce() memoization - replace `doRefreshJwt` with a slow stub
+        //   so two concurrent calls collapse into a single in-flight refresh.
+        let refreshCount = 0;
+        (mgr as any)._refreshPromise = null; // ensure clean state
+        (mgr as any).doRefreshJwt = async (): Promise<string> => {
+            refreshCount++;
+            await new Promise(r => setTimeout(r, 30));
+            return `jwt-${refreshCount}`;
+        };
+
+        const [r1, r2] = await Promise.all([(mgr as any).refreshJwtOnce(), (mgr as any).refreshJwtOnce()]);
+        expect2(() => [r1, r2]).toEqual(['jwt-1', 'jwt-1']);
+        expect2(() => refreshCount).toEqual(1);
+
+        //* after the first refresh settles, _refreshPromise is cleared → next call refreshes again.
+        const r3 = await (mgr as any).refreshJwtOnce();
+        expect2(() => r3).toEqual('jwt-2');
+        expect2(() => refreshCount).toEqual(2);
+
+        //* doProxy() - stub the `proxy` getter so no real sigV4/network call happens.
+        //   the getter is defined on the prototype; an instance-level Object.defineProperty shadows it.
+        const makeStub = (impl: (...args: any[]) => Promise<any>) => {
+            Object.defineProperty(mgr, 'proxy', {
+                get: () => ({ doProxy: impl }),
+                configurable: true,
+            });
+        };
+
+        //* success cases - doProxy() returns the underlying proxy's result directly.
+        const calls: any[][] = [];
+        makeStub(async (...args: any[]) => {
+            calls.push(args);
+            return { ok: true };
+        });
+        expect2(await (mgr as any).doProxy('GET', 'host', 'path', { q: 1 }, { b: 2 }).catch(GETERR)).toEqual({
+            ok: true,
+        });
+        expect2(() => calls.length).toEqual(1);
+        expect2(() => calls[0]).toEqual(['GET', 'host', 'path', { q: 1 }, { b: 2 }, undefined, undefined]);
+
+        //* match err cases - non-401 errors are re-thrown without refresh attempts.
+        let proxyCalls = 0;
+        makeStub(async () => {
+            proxyCalls++;
+            throw new Error('500 Internal Error');
+        });
+        let refreshCalls = 0;
+        (mgr as any).refreshJwtOnce = async (): Promise<string> => {
+            refreshCalls++;
+            return 'should-not-be-used';
+        };
+        expect2(await (mgr as any).doProxy('GET').catch(GETERR)).toEqual('500 Internal Error');
+        expect2(() => proxyCalls).toEqual(1);
+        expect2(() => refreshCalls).toEqual(0);
+
+        //* match err cases - 401 with failed refresh → re-throw the ORIGINAL 401.
+        proxyCalls = 0;
+        refreshCalls = 0;
+        makeStub(async () => {
+            proxyCalls++;
+            throw new Error('401 Unauthorized - bad');
+        });
+        (mgr as any).refreshJwtOnce = async (): Promise<string | null> => {
+            refreshCalls++;
+            return null;
+        };
+        expect2(await (mgr as any).doProxy('GET').catch(GETERR)).toEqual('401 Unauthorized - bad');
+        expect2(() => proxyCalls).toEqual(1);
+        expect2(() => refreshCalls).toEqual(1);
+
+        //* success cases - 401 then refresh ok → retry exactly once and surface the retry's result.
+        proxyCalls = 0;
+        refreshCalls = 0;
+        let throwOnNext = true;
+        makeStub(async () => {
+            proxyCalls++;
+            if (throwOnNext) {
+                throwOnNext = false;
+                throw new Error('401 Unauthorized - first');
+            }
+            return { ok: 'retried' };
+        });
+        (mgr as any).refreshJwtOnce = async (): Promise<string> => {
+            refreshCalls++;
+            return 'fresh-jwt';
+        };
+        expect2(await (mgr as any).doProxy('GET').catch(GETERR)).toEqual({ ok: 'retried' });
+        expect2(() => proxyCalls).toEqual(2);
+        expect2(() => refreshCalls).toEqual(1);
+
+        //* success cases - 401 → refresh ok → retry STILL fails → the retry error surfaces.
+        //   (doProxy retries only ONCE; the retry exception is not caught.)
+        proxyCalls = 0;
+        refreshCalls = 0;
+        makeStub(async () => {
+            proxyCalls++;
+            throw new Error(`401 Unauthorized - attempt-${proxyCalls}`);
+        });
+        (mgr as any).refreshJwtOnce = async (): Promise<string> => {
+            refreshCalls++;
+            return 'fresh-jwt';
+        };
+        expect2(await (mgr as any).doProxy('GET').catch(GETERR)).toEqual('401 Unauthorized - attempt-2');
+        expect2(() => proxyCalls).toEqual(2);
+        expect2(() => refreshCalls).toEqual(1);
+
+        //* patchLambdaJwt() - touches real AWS Lambda; only run under the `lemon` profile.
+        //   in other environments it would fail with a credential/permission error.
+        if (PROFILE === 'lemon') {
+            const patched = await (mgr as any).patchLambdaJwt('chatic-backend-api', 'dummy-jwt').catch(GETERR);
+            //* result is the list of fulfilled function names; on permission failure it falls back to [].
+            expect2(() => Array.isArray(patched)).toEqual(true);
+        }
     });
 });

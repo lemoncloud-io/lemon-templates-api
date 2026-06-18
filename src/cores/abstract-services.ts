@@ -42,14 +42,38 @@
  * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import $cores, { $U, _log, _inf, _err, NUL404, GETERR, asyncCredentials, ConfigModule, $engine } from 'lemon-core';
+import $cores, {
+    $U,
+    _log,
+    _inf,
+    _err,
+    NUL404,
+    GETERR,
+    asyncCredentials,
+    ConfigModule,
+    $engine,
+    $protocol,
+} from 'lemon-core';
+import {
+    LambdaClient,
+    GetFunctionConfigurationCommand,
+    UpdateFunctionConfigurationCommand,
+} from '@aws-sdk/client-lambda';
 import { my_parrallel, SearchType, _ES6, createSigV4Proxy, my_sequence } from 'lemon-core';
 import { Elastic6Service, Elastic6Option, Elastic6QueryService, Elastic6Synchronizer } from 'lemon-core';
 import { $ERROR, Incrementable, GETERR$, CoreManager, CoreModel, CoreService } from 'lemon-core';
 import { SearchBody, SearchQuery, SearchResult, ManagerProxy, AbstractProxy, loadJsonSync } from 'lemon-core';
 import { NextContext, NextIdentity, NextIdentityCognito, getIdentityId, waited, SortTerm, SimpleSet } from 'lemon-core';
 import { DynamoScanService, DynamoScanFilter, DynamoScanResult, GeneralItem, Elastic6Instance } from 'lemon-core';
-import { ApiHttpProxy, APIHeaders, elasticsearch, SearchResponse, DynamoOption, Elastic6Item } from 'lemon-core';
+import {
+    ApiHttpProxy,
+    APIHeaders,
+    APIHttpMethod,
+    elasticsearch,
+    SearchResponse,
+    DynamoOption,
+    Elastic6Item,
+} from 'lemon-core';
 import { BulkItemsResult, IdentityToken, ListResult, PaginateParam } from './types';
 import { $T, onlyDefined, parsePaginateParam } from './commons';
 import { CrendentialForAWS } from 'lemon-core/dist/environ';
@@ -2057,6 +2081,9 @@ export class OS2FGACManager {
     private _fgacProxy: ApiHttpProxy;
     public readonly options: Elastic6Option;
 
+    /** in-flight refresh guard so a 401 storm triggers exactly one refresh cycle */
+    private _refreshPromise: Promise<string | null> | null = null;
+
     public constructor(options: Elastic6Option) {
         this.options = options;
     }
@@ -2097,12 +2124,138 @@ export class OS2FGACManager {
         return this._fgacProxy;
     }
 
+    /**
+     * central chokepoint for all FGAC proxy calls.
+     * - on `401 Unauthorized`, refresh the OS2 jwt once and retry the call a single time.
+     */
+    private async doProxy<T = any>(
+        method: APIHttpMethod,
+        host?: string,
+        path?: string,
+        param?: any,
+        body?: any,
+        ctx?: any,
+        hash?: string,
+    ): Promise<T> {
+        try {
+            return await this.proxy.doProxy<T>(method, host, path, param, body, ctx, hash);
+        } catch (e) {
+            if (!this.is401(e)) throw e;
+            _inf(NS, `> OS2FGAC 401 detected - try to refresh jwt..`);
+            const jwt = await this.refreshJwtOnce();
+            if (!jwt) throw e; // refresh failed → surface the original 401.
+            this._fgacProxy = undefined; // rebuild proxy with the new token.
+            return await this.proxy.doProxy<T>(method, host, path, param, body, ctx, hash); // retry ONCE.
+        }
+    }
+
+    /**
+     * detect `401 Unauthorized` from a `doProxy()` rejection.
+     * - the sigV4 proxy rejects non-2xx as `new Error(`${statusCode} ${statusMessage||'FAILURE'} - ${body}`)`,
+     *   so the message always begins with the real HTTP status code (e.g. `401 Unauthorized - ...`).
+     */
+    private is401(e: any): boolean {
+        const msg = e instanceof Error ? e.message : `${e ?? ''}`;
+        return msg.startsWith('401');
+    }
+
+    /** memoized refresh so concurrent 401s trigger exactly one refresh cycle. */
+    private async refreshJwtOnce(): Promise<string | null> {
+        if (!this._refreshPromise) {
+            this._refreshPromise = this.doRefreshJwt().finally(() => {
+                this._refreshPromise = null;
+            });
+        }
+        return this._refreshPromise;
+    }
+
+    /**
+     * re-issue a fresh OS2 jwt from prod `eureka-codes-api`, patch the 4 deployed lambdas, and
+     * update the in-memory token so the retry uses it.
+     * @returns the new jwt, or null if it could not be refreshed.
+     */
+    private async doRefreshJwt(): Promise<string | null> {
+        const errScope = `doRefreshJwt()`;
+        // a. parse OS2_INDEX → { service, id }
+        const index = $U.env('OS2_INDEX', '');
+        const m = /^(.*)-v1-(\d+)$/.exec(index);
+        if (!m) {
+            _err(NS, `> ${errScope} skip - OS2_INDEX[${index}] has no -v1-<id>`);
+            return null;
+        }
+        const service = `${m[1]}-api`; // e.g. chatic-backend-api
+        const id = m[2]; // e.g. 26030046
+
+        // b. call prod eureka-codes-api `os2/{id}/refresh` via $protocol.
+        const ctx = { domain: 'localhost' } as NextContext;
+        const uri = `//eureka-codes-api/os2/${id}/refresh`;
+        const $res = await $protocol(ctx, uri, { isProd: true })
+            .execute({}, {}, 'POST')
+            .catch((e: any) => {
+                _err(NS, `> ${errScope} - failed to call ${uri} =`, GETERR(e));
+                return null as any;
+            });
+        const jwt = $T.S($res?.jwt);
+        if (!jwt) {
+            _err(NS, `> ${errScope} - no jwt from ${uri}`);
+            return null;
+        }
+
+        // c. patch the 4 lambdas' OS2_JWT_TOKEN (mirrors `patchLambdaEnvirons`, own role).
+        await this.patchLambdaJwt(service, jwt);
+
+        // d. update in-memory token so the retry uses it.
+        process.env.OS2_JWT_TOKEN = jwt;
+        return jwt;
+    }
+
+    /**
+     * patch `OS2_JWT_TOKEN` env on the 4 deployed lambdas: `{service}-{dev|prod}-{backend|lambda}`.
+     * - uses the running lambda's own execution role (default `LambdaClient`).
+     * - mirrors the format of `$prx.patchLambdaEnvirons()` in `eureka-codes-api`.
+     */
+    private async patchLambdaJwt(service: string, jwt: string): Promise<string[]> {
+        const errScope = `patchLambdaJwt(${service})`;
+        const region = 'ap-northeast-2';
+        const lambda = new LambdaClient({ region });
+        const functionNames = ['dev', 'prod'].flatMap(s => ['backend', 'lambda'].map(f => `${service}-${s}-${f}`));
+        const environ$ = { OS2_JWT_TOKEN: jwt };
+
+        const results = await Promise.allSettled(
+            functionNames.map(async fn => {
+                const $conf = await lambda.send(new GetFunctionConfigurationCommand({ FunctionName: fn }));
+                const current = $conf?.Environment?.Variables ?? {};
+                await lambda.send(
+                    new UpdateFunctionConfigurationCommand({
+                        FunctionName: fn,
+                        Environment: { Variables: { ...current, ...environ$ } },
+                    }),
+                );
+                return fn;
+            }),
+        );
+
+        const patched = results
+            .filter((r): r is PromiseFulfilledResult<string> => r.status === 'fulfilled')
+            .map(r => r.value);
+        const failed = results.filter((r): r is PromiseRejectedResult => r.status === 'rejected');
+        if (failed.length > 0) {
+            _err(
+                NS,
+                `> ${errScope} failed[${failed.length}] =`,
+                failed.map(r => GETERR(r.reason)),
+            );
+        }
+        _log(NS, `> ${errScope} patched =`, $U.json({ functionNames, patched }));
+        return patched;
+    }
+
     /** FGAC 기반 검색 */
     public async doFgacSearch<R = any>(params: ElasticSearchParams): Promise<R> {
         const index = params?.index ?? '';
         const body = onlyDefined(params?.body ?? undefined);
         const queryParams = params?.searchType ? { search_type: params?.searchType } : undefined;
-        return this.proxy.doProxy('POST', index, `_search`, queryParams, body);
+        return this.doProxy('POST', index, `_search`, queryParams, body);
     }
 
     /** FGAC 기반 읽기: client.get() 대응 */
@@ -2110,7 +2263,7 @@ export class OS2FGACManager {
         const index = params?.index ?? '';
         const id = encodeURIComponent(params?.id ?? '');
         const body = onlyDefined(params?.body ?? undefined);
-        return this.proxy.doProxy('GET', index, `_doc/${id}`, undefined, body);
+        return this.doProxy('GET', index, `_doc/${id}`, undefined, body);
     }
 
     /** FGAC 기반 저장: client.index() 대응 */
@@ -2118,7 +2271,7 @@ export class OS2FGACManager {
         const index = params?.index ?? '';
         const id = encodeURIComponent(params?.id ?? '');
         const body = onlyDefined(params?.body ?? undefined);
-        return this.proxy.doProxy('PUT', index, `_doc/${id}`, undefined, body);
+        return this.doProxy('PUT', index, `_doc/${id}`, undefined, body);
     }
 
     /** FGAC 기반 저장: client.index() 대응 */
@@ -2132,7 +2285,7 @@ export class OS2FGACManager {
 
         // 사전 포맷된 bulkBody를 JSONL 문자열로 변환
         const content = body.map(line => $U.json(line)).join('\n') + '\n';
-        return this.proxy.doProxy('POST', index, `_bulk`, undefined, content);
+        return this.doProxy('POST', index, `_bulk`, undefined, content);
     }
 
     /** FGAC 기반 업데이트: client.update() 대응 */
@@ -2140,14 +2293,14 @@ export class OS2FGACManager {
         const index = params?.index ?? '';
         const id = encodeURIComponent(params?.id ?? '');
         const body = onlyDefined(params?.body ?? undefined);
-        return this.proxy.doProxy('POST', index, `_update/${id}`, undefined, body);
+        return this.doProxy('POST', index, `_update/${id}`, undefined, body);
     }
 
     /** FGAC 기반 삭제: client.delete() 대응 */
     public async doFgacDelete<R = any>(params: ElasticParams): Promise<R> {
         const index = params?.index ?? '';
         const id = encodeURIComponent(params?.id ?? '');
-        return this.proxy.doProxy('DELETE', index, `_doc/${id}`);
+        return this.doProxy('DELETE', index, `_doc/${id}`);
     }
 
     /** FGAC 기반 Create (Strict - 존재하면 실패): client.create() 대응 */
@@ -2155,12 +2308,12 @@ export class OS2FGACManager {
         const index = params?.index ?? '';
         const id = encodeURIComponent(params?.id ?? '');
         const body = onlyDefined(params?.body ?? undefined);
-        return this.proxy.doProxy('PUT', index, `_doc/${id}`, { op_type: 'create' }, body);
+        return this.doProxy('PUT', index, `_doc/${id}`, { op_type: 'create' }, body);
     }
 
     /** FGAC 기반 인덱스 삭제: client.indices.delete() 대응 */
     public async doFgacDeleteIndex<R = any>(index: string): Promise<R> {
-        return this.proxy.doProxy('DELETE', index, '');
+        return this.doProxy('DELETE', index, '');
     }
 
     /**
@@ -2190,7 +2343,7 @@ export class OS2FGACManager {
     public async doFgacPutSettings<R = any>(index: string, settings: Record<string, any>): Promise<R> {
         const errScope = `doFgacPutSettings(${index})`;
         if (!index) throw new Error(`.index(string) is required - ${errScope}`);
-        return this.proxy.doProxy('PUT', index, `_settings`, undefined, { settings });
+        return this.doProxy('PUT', index, `_settings`, undefined, { settings });
     }
     /**
      * FGAC 기반 인덱스 Settings 조회: client.indices.getSettings() 대응
@@ -2199,7 +2352,7 @@ export class OS2FGACManager {
         const errScope = `doFgacGetSettings(${index})`;
         if (!index) throw new Error(`.index(string) is required - ${errScope}`);
 
-        return this.proxy.doProxy('GET', index, `_settings`);
+        return this.doProxy('GET', index, `_settings`);
     }
     /**
      * FGAC 기반 인덱스 Mapping 조회: client.indices.getMapping() 대응
@@ -2208,7 +2361,7 @@ export class OS2FGACManager {
         const errScope = `doFgacGetMapping(${index})`;
         if (!index) throw new Error(`.index(string) is required - ${errScope}`);
 
-        return this.proxy.doProxy('GET', index, `_mapping`);
+        return this.doProxy('GET', index, `_mapping`);
     }
     /**
      * FGAC 기반 인덱스 Mapping 변경: client.indices.putMapping() 대응
@@ -2217,7 +2370,7 @@ export class OS2FGACManager {
         const errScope = `doFgacPutMapping(${index})`;
         if (!index) throw new Error(`.index(string) is required - ${errScope}`);
 
-        return this.proxy.doProxy('PUT', index, `_mapping`, undefined, mapping);
+        return this.doProxy('PUT', index, `_mapping`, undefined, mapping);
     }
     /**
      * FGAC 기반 인덱스 닫기: client.indices.close() 대응
@@ -2226,7 +2379,7 @@ export class OS2FGACManager {
         const errScope = `doFgacCloseIndex(${index})`;
         if (!index) throw new Error(`.index(string) is required - ${errScope}`);
 
-        return this.proxy.doProxy('POST', index, `_close`);
+        return this.doProxy('POST', index, `_close`);
     }
     /**
      * FGAC 기반 인덱스 열기: client.indices.open() 대응
@@ -2235,7 +2388,7 @@ export class OS2FGACManager {
         const errScope = `doFgacOpenIndex(${index})`;
         if (!index) throw new Error(`.index(string) is required - ${errScope}`);
 
-        return this.proxy.doProxy('POST', index, `_open`);
+        return this.doProxy('POST', index, `_open`);
     }
 }
 
