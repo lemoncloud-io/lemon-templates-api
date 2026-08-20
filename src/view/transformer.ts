@@ -21,7 +21,7 @@ export const $X = {
     /** convert to `boolean`. */
     B: (v: number): boolean => (typeof v === 'number' ? Boolean(v) : undefined),
     /** convert to boolean style number. */
-    BN: <T extends number = number>(v: any): T => (v === undefined ? undefined : ($T.B(v) as T)),
+    BN: <T extends number = number>(v: any): T => (v === undefined ? undefined : ($T.B(v) as unknown as T)),
     /** convert to `number` */
     N: (v: boolean | number): number =>
         typeof v === 'boolean' ? (v ? 1 : 0) : typeof v === 'number' ? $T.N(v) : undefined,
