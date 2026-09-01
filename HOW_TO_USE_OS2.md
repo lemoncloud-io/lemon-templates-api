@@ -73,7 +73,7 @@ OS2_JWT_TOKEN: '<옵션: 전체 JWT(헤더.페이로드.서명)>'
 - `OS2_MESSAGE` + `OS2_SIGNATURE`를 조합하여 `message.signature` 형태로 JWT를 구성
 - 실제 헤더 구성 코드 (참고):
 
-```1932:1953:src/cores/abstract-services.ts
+```1932:1953:lemon-core/src/extended/cores/abstract-services.ts
             const OS2_JWT_TOKEN = $U.env('OS2_JWT_TOKEN', '');
             const message = $U.env('OS2_MESSAGE', '');
             const signature = ($config as ConfigModule)?.config?.get('OS2_SIGNATURE') as string;
