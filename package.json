@@ -58,7 +58,7 @@
   "author": "Steve Jung (steve@lemoncloud.io)",
   "license": "MIT",
   "dependencies": {
-    "lemon-core": "^4.2.6"
+    "lemon-core": "^4.3.0"
   },
   "devDependencies": {
     "@cruglobal/serverless-merge-config": "^1.1.0",
