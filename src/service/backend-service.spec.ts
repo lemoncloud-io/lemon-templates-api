@@ -57,13 +57,20 @@ describe('BackendService', () => {
         const ns = `${service.NS || ''}`;
         expect2(() => ({ ns })).toEqual({ ns: 'TT' });
 
+        // NOTE: TestModel gained mockId/mock$/mockIds/mock$$ (linked-mock refs) and lost `_date`
+        // in 73fadf2 ("chore: opt cores and mocks"); this expectation was never updated then.
+        // field-registry.ts (regenerated via `fields:gen`, unchanged) confirms this is the current model shape.
         const expFields = [
             'name',
+            'stereo',
             'count',
             'extra',
+            'mockId',
+            'mock$',
+            'mockIds',
+            'mock$$',
             'ns',
             'type',
-            'stereo',
             'sid',
             'uid',
             'gid',
@@ -76,7 +83,6 @@ describe('BackendService', () => {
             'error',
             'id',
             '_idx',
-            '_date',
         ];
         expect2(() => service.$test.FIELDS).toEqual(expFields);
         expect2(() => service.$test.type).toEqual('test');
