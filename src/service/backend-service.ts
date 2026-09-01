@@ -12,7 +12,7 @@ import { NextContext, NextIdentityAccess, $protocol, getIdentityId } from 'lemon
 import { Model } from './backend-model';
 import { ModelType } from './backend-types';
 import { BackendProxy } from './backend-proxy';
-import { $ES6, MyCoreService } from '../cores/abstract-services';
+import { MyCoreService, $ES6Routed as $ES6 } from 'lemon-core';
 import { SearchService, Elastic6Option } from '../modules/search/service';
 import { CallbackModelManager } from '../modules/callback/service';
 import { MockModelManager, TestModelManager } from '../modules/mock/service';

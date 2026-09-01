@@ -14,10 +14,10 @@ import { $T, GeneralItem } from 'lemon-core';
  */
 export const $X = {
     /** clear white-spaces and trim */
-    S2: <T extends string = string>(v?: any): T => $T.S2(v, '', ' ').trim() as T,
+    S2: <T extends string = string>(v?: any): T => $T.S2(v, '').trim() as T,
     /** array string with clear white-spaces and trim */
     SS: <T extends string = string>(v?: any): T[] =>
-        (v && Array.isArray(v) ? v : $T.SS(v)).map(v => $T.S2(v, '', ' ').trim() as T),
+        (v && Array.isArray(v) ? v : $T.SS(v)).map(v => $T.S2(v, '').trim() as T),
     /** convert to `boolean`. */
     B: (v: number): boolean => (typeof v === 'number' ? Boolean(v) : undefined),
     /** convert to boolean style number. */

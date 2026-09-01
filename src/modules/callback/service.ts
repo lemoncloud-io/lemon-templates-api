@@ -11,7 +11,7 @@
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, _inf, _log, _err, CoreModel, Body, $slack } from 'lemon-core';
 import { $FIELD, CallbackModel, CallbackRequest, ModelType } from './model';
-import { MyCoreManager, MyCoreService } from '../../cores';
+import { MyCoreManager, MyCoreService } from 'lemon-core';
 import { SearchService } from '../search/service';
 import { BackendProxy } from './proxy';
 const NS = $U.NS('callback', 'blue'); // NAMESPACE TO BE PRINTED.

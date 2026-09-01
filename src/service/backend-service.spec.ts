@@ -11,8 +11,8 @@
 import { expect2, GETERR, $U, NextContext } from 'lemon-core';
 import { BackendService } from './backend-service';
 import { Model } from './backend-model';
-import { onlyDefined } from '../cores/commons';
-import { loadSample } from '../cores/contexts.spec';
+import { onlyDefined } from 'lemon-core';
+import { loadSample } from '../test-helpers/contexts.spec';
 
 export type AuthType = 'authed' | 'public' | 'session';
 export interface ServiceParams {

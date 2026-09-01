@@ -9,7 +9,7 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $T, $U, _log, _inf, _err, NextHandler } from 'lemon-core';
-import { AbstractCRUDController } from '../../cores';
+import { AbstractCRUDController } from 'lemon-core';
 import { TestModel } from './model';
 import { TestModelManager } from './service';
 import { $trans, TestTransformer } from './transformer';

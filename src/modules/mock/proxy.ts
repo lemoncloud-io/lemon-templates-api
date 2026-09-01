@@ -9,7 +9,7 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, $T, _inf, _log, _err, my_parrallel } from 'lemon-core';
-import { MyCoreProxy, MyManagerProxy } from '../../cores';
+import { MyCoreProxy, MyManagerProxy } from 'lemon-core';
 import { ModelType, MockModel, MockModelExt, TestModel } from './model';
 import { BackendService, MockModelManager, TestModelManager } from './service';
 import { $trans } from './transformer';

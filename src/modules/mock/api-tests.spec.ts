@@ -10,7 +10,7 @@
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { _it, describe, it, expect2, expect, GETERR } from '../../cores/commons.spec';
+import { _it, describe, it, expect2, expect, GETERR } from '../../test-helpers/commons.spec';
 import { $U } from 'lemon-core';
 import { TestAPIController } from './api-tests';
 

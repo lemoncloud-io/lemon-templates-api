@@ -8,12 +8,12 @@
  * @copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { _it, describe, it, expect2, expect, GETERR } from '../../cores/commons.spec';
+import { _it, describe, it, expect2, expect, GETERR } from '../../test-helpers/commons.spec';
 import { AbstractTransformer } from 'lemon-core';
 import { $FIELD, Model, MockModel, filterFields, TestModel } from './model';
 import { $Y, $trans } from './transformer';
 import { fieldKeys } from '../../generated/field-registry';
-import { onlyDefined } from '../../cores';
+import { onlyDefined } from 'lemon-core';
 
 const $mock = filterFields(fieldKeys.mockTransformerModel<Model>(), ['meta']);
 
