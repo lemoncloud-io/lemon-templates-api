@@ -14,9 +14,6 @@ export const fieldKeys = {
     // source: src/modules/callback/transformer.spec.ts#Model
     callbackTransformerModel: <T extends object>() =>
         ["$", "ns", "type", "stereo", "sid", "uid", "gid", "lock", "next", "meta", "createdAt", "updatedAt", "deletedAt", "error", "id", "_id"] as Array<Extract<keyof T, string>>,
-    // source: src/cores/abstract-services.ts#CoreModel
-    coreModel: <T extends object>() =>
-        ["$", "ns", "type", "stereo", "sid", "uid", "gid", "lock", "next", "meta", "createdAt", "updatedAt", "deletedAt", "error", "id", "_id"] as Array<Extract<keyof T, string>>,
     // source: src/modules/mock/model.ts#MockHead
     mockHead: <T extends object>() =>
         ["id", "name", "stereo"] as Array<Extract<keyof T, string>>,
@@ -41,9 +38,6 @@ export const fieldKeys = {
     // source: src/modules/mock/model.ts#TestHead
     testHead: <T extends object>() =>
         ["id", "name", "stereo", "_idx"] as Array<Extract<keyof T, string>>,
-    // source: src/cores/abstract-services.spec.ts#TestModel
-    testModel: <T extends object>() =>
-        ["name", "test", "extra", "Model", "$identity", "$", "ns", "type", "stereo", "sid", "uid", "gid", "lock", "next", "meta", "createdAt", "updatedAt", "deletedAt", "error", "id", "_id"] as Array<Extract<keyof T, string>>,
     // source: src/view/transformer.spec.ts#Model
     viewTransformerModel: <T extends object>() =>
         ["$", "ns", "type", "stereo", "sid", "uid", "gid", "lock", "next", "meta", "createdAt", "updatedAt", "deletedAt", "error", "id", "_id"] as Array<Extract<keyof T, string>>,
@@ -52,7 +46,7 @@ export const fieldKeys = {
 export const fieldRegistryMeta = {
     "kind": "concrete",
     "schemaVersion": 1,
-    "entryCount": 15,
-    "checksum": "2c8d75afc3b8c78c",
+    "entryCount": 13,
+    "checksum": "d117582120d75b30",
     "generatedBy": "lemon-fields"
 } as const;
