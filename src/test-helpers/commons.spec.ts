@@ -9,7 +9,7 @@
  * @origin      `@lemoncloud/lemon-templates-api/cores`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $T, parsePaginateParam } from './commons';
+import { $T, parsePaginateParam } from 'lemon-core';
 
 export const describe = (globalThis as any).describe;
 export const expect = (globalThis as any).expect;
