@@ -11,7 +11,7 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, _log, _inf, _err, NextHandler, SearchQuery, $protocol, $slack } from 'lemon-core';
-import { $T, AbstractCRUDController, MyManagerProxy, onlyDefined } from '../../cores';
+import { $T, AbstractCRUDController, MyManagerProxy, onlyDefined } from 'lemon-core';
 import { Model, CallbackModel, CallbackRequest } from './model';
 import { CallbackModelManager } from './service';
 import { $trans, CallbackTransformer } from './transformer';

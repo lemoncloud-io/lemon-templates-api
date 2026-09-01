@@ -9,10 +9,10 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { $U, _inf, _log, _err, NextContext } from 'lemon-core';
-import { $T } from '../cores/commons';
+import { $T } from 'lemon-core';
 import { ModelType } from './backend-types';
 import { BackendService } from './backend-service';
-import { MyCoreProxy } from '../cores/abstract-services';
+import { MyCoreProxy } from 'lemon-core';
 import { CallbackManagerProxy } from '../modules/callback/proxy';
 import { MockManagerProxy, TestManagerProxy } from '../modules/mock/proxy';
 const NS = $U.NS('backend', 'blue'); // NAMESPACE TO BE PRINTED.

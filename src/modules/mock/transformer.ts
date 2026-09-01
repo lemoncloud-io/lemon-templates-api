@@ -8,7 +8,7 @@
  * @copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
 import { AbstractTransformer } from 'lemon-core';
-import { $T } from '../../cores/commons';
+import { $T } from 'lemon-core';
 import { $HEAD, MockHead, MockModel, TestHead, TestModel } from './model';
 import $LUT, { MockBody, MockView, TestBody, TestView } from './views';
 

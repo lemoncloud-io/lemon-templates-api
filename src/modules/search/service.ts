@@ -22,8 +22,8 @@ import {
     Elastic6SearchParams,
     Elastic6Instance,
 } from 'lemon-core';
-import { $T } from '../../cores/commons';
-import { _OS2 } from '../../cores/abstract-services';
+import { $T } from 'lemon-core';
+import { _OS2 } from 'lemon-core';
 import {
     $FIELD,
     SearchBody,

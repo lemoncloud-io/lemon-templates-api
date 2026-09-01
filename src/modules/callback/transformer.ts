@@ -9,7 +9,7 @@
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 import { AbstractTransformer } from 'lemon-core';
-import { $T } from '../../cores/commons';
+import { $T } from 'lemon-core';
 import { $HEAD, CallbackHead, CallbackModel } from './model';
 import $LUT, { CallbackBody, CallbackView } from './views';
 
