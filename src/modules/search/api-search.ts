@@ -22,7 +22,7 @@ import {
     SearchProxyBody,
 } from 'lemon-core';
 import { SearchBatchModel, SearchBody, SearchResult, SearchQueryModel } from './model';
-import { $ES6, _OS2 } from '../../cores/abstract-services';
+import { _OS2, $ES6Routed as $ES6 } from 'lemon-core';
 import { BatchParams, SearchService } from './service';
 import { performance } from 'perf_hooks';
 

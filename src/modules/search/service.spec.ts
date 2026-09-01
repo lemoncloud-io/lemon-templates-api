@@ -15,7 +15,7 @@ import { loadProfile } from 'lemon-core/dist/environ';
 import { do_parrallel, expect2, GETERR, NUL404, _it, $U, _ES6 } from 'lemon-core';
 import { SearchBody } from './model';
 import { BatchHandler, SearchService } from './service';
-import { $ES6 } from '../../cores/abstract-services';
+import { $ES6Routed as $ES6 } from 'lemon-core';
 import * as $service from '../../service/backend-service.spec';
 
 //! create service + search instance.
