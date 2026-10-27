@@ -9,7 +9,7 @@
  * Copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
 import { CoreModel, NextIdentityAccess, SimpleSet } from 'lemon-model';
-//* v5 B4: field annotations (lemon-model 1.6.0; not on the lemon-core root).
+//* v5 B4: field annotations (lemon-model 5.0.0; not on the lemon-core root).
 import { field, fieldsOf } from 'lemon-model';
 //WARN - DO NOT IMPORT FROM `../../service/backend-model`
 // import { ModelType } from '../../service/backend-types';
