@@ -12,15 +12,15 @@
 import { $U, _err, _inf, _log, $protocol, SimpleSet, GETERR, NextContext } from 'lemon-core';
 import {
     CoreModelFilterable,
-    Elastic6Option,
+    OS2BaseOption,
     GeneralKeyMaker,
     GeneralModelFilter,
     ProxyStorageService,
     StorageMakeable,
     TypedStorageService,
     UniqueFieldManager,
-    Elastic6SearchParams,
-    Elastic6Instance,
+    OS2SearchParams,
+    OS2Instance,
 } from 'lemon-core';
 import { $T } from 'lemon-core';
 import { _OS2 } from 'lemon-core';
@@ -36,7 +36,7 @@ import {
 
 const NS = $U.NS('search', 'blue'); // NAMESPACE TO BE PRINTED.
 
-export { Elastic6Option };
+export { OS2BaseOption };
 
 /**
  * batch-options
@@ -79,9 +79,9 @@ export class SearchService
     implements StorageMakeable<SearchModel, SearchModelType>
 {
     /**
-     * Elastic6Instance
+     * OS2Instance
      */
-    public readonly instance?: Elastic6Instance;
+    public readonly instance?: OS2Instance;
 
     protected readonly tableName: string;
     protected current: number = 0; // for unit-test. set the current time-stamp.
@@ -100,7 +100,7 @@ export class SearchService
     /**
      * constructor
      */
-    public constructor(tableName: string, ns: string, options: Elastic6Option) {
+    public constructor(tableName: string, ns: string, options: OS2BaseOption) {
         super(ns);
         _log(NS, `SearchService(${tableName}, ${ns})..`);
         this.tableName = tableName;
@@ -127,7 +127,8 @@ export class SearchService
      * check if search is running over proxy.
      */
     public isProxy(): boolean {
-        return !!this.instance?.hello().startsWith('Elastic6Proxy');
+        //* v5: lemon-core has no proxied search instance any more (removed with the L1 instance).
+        return false;
     }
 
     /**
@@ -194,7 +195,7 @@ export class SearchService
      * @param body      Elasticsearch Query DSL
      * @param params    (optional) search parameters.
      */
-    public async search<T>(body: SearchBody, params?: Elastic6SearchParams): Promise<SearchResult<T>> {
+    public async search<T>(body: SearchBody, params?: OS2SearchParams): Promise<SearchResult<T>> {
         if (!this.instance) throw new Error(`.instance is invalid (mis-config)`);
         return this.instance.search(body, params);
     }
@@ -202,7 +203,7 @@ export class SearchService
     /**
      * search all until limit (-1 means no-limit)
      */
-    public async searchAll<T>(body: SearchBody, params?: Elastic6SearchParams, limit: number = -1) {
+    public async searchAll<T>(body: SearchBody, params?: OS2SearchParams, limit: number = -1) {
         const list: T[] = [];
         for await (const chunk of this.generateSearchResult(body, params, limit)) {
             chunk.forEach((N: T) => list.push(N));
@@ -217,7 +218,7 @@ export class SearchService
      * @param params    (optional) search parameters.
      * @param limit     the maximum limit of loop (-1 means un-limited)
      */
-    public async *generateSearchResult<T>(body: SearchBody, params?: Elastic6SearchParams, limit?: number) {
+    public async *generateSearchResult<T>(body: SearchBody, params?: OS2SearchParams, limit?: number) {
         if (!body.sort) body.sort = '_doc';
 
         do {

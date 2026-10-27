@@ -12,7 +12,7 @@
  */
 //! override environment with `env/<profile>.yml`
 import { loadProfile } from 'lemon-core/dist/environ';
-import { do_parrallel, expect2, GETERR, NUL404, _it, $U, _ES6 } from 'lemon-core';
+import { do_parrallel, expect2, GETERR, NUL404, _it, $U } from 'lemon-core';
 import { SearchBody } from './model';
 import { BatchHandler, SearchService } from './service';
 import { $ES6Routed as $ES6 } from 'lemon-core';
@@ -30,8 +30,7 @@ export const instance = (type = 'dummy') => {
         const nsName = 'TT';
         const endpoint = 'https://localhost:8443'; //need `ssh tunneling`
         const indexName = 'test-v1';
-        const docType = '_doc';
-        const search = new SearchService(tableName, nsName, { endpoint, indexName, docType });
+        const search = new SearchService(tableName, nsName, { endpoint, indexName });
         search.setCurrent(current);
         return search;
     };
@@ -262,13 +261,9 @@ describe('SearchService', () => {
 
         expect2(() => $U.env('OS2_INDEX', '')).toEqual(indexName);
         expect2(() => $U.env('OS2_ENDPOINT', '')).toEqual(endpoint);
-        expect2(() => $ES6.options).toEqual(null);
-
-        const $es = _ES6({ endpoint, indexName });
-        expect2(() => $es?.elastic?.options, 'indexName,endpoint').toEqual({
-            indexName,
-            endpoint,
-        });
+        //* v5: `$ES6` (= `$OS2`) is built lazily on first access, i.e. after `loadProfile()`.
+        expect2(() => $ES6.hello()).toEqual('OS2Instance');
+        expect2(() => $ES6.options?.endpoint).toEqual($U.env('OS2_ENDPOINT', ''));
 
         const { search } = instance('');
         expect2(() => search.hello()).toEqual(`search-service:TT/dummy-data.yml/${indexName}`);

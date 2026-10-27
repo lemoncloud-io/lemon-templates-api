@@ -63,8 +63,7 @@ class HelloAPIController extends GeneralWEBController {
                 PROFILE: $cores.cores.config.config.get('PROFILE'),
                 SESSION: this.service.isUseSssion(),
                 _______: '______________', // line-break
-                ES6_INDEX: $cores.cores.config.config.get('ES6_INDEX'),
-                ES6_VERSION: $cores.cores.config.config.get('ES6_VERSION'),
+                OS2_INDEX: $cores.cores.config.config.get('OS2_INDEX'),
                 DEFAULT_REGION: $cores.cores.config.config.get('DEFAULT_REGION'),
                 REPORT_ERROR_ARN: $cores.cores.config.config.get('REPORT_ERROR_ARN'),
                 MY_DYNAMO_TABLE: $cores.cores.config.config.get('MY_DYNAMO_TABLE'),
