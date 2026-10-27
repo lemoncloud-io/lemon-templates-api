@@ -61,7 +61,7 @@ class HelloAPIController extends GeneralWEBController {
                 VERSION: $cores.cores.config.config.getVersion(),
                 NAME: $cores.cores.config.config.get('NAME'),
                 PROFILE: $cores.cores.config.config.get('PROFILE'),
-                SESSION: this.service.isUseSssion(),
+                SESSION: this.service.isUseSession(), //* v5 B3: lemon-core removed the misspelled alias of this method
                 _______: '______________', // line-break
                 OS2_INDEX: $cores.cores.config.config.get('OS2_INDEX'),
                 DEFAULT_REGION: $cores.cores.config.config.get('DEFAULT_REGION'),

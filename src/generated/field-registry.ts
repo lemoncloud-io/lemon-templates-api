@@ -38,15 +38,12 @@ export const fieldKeys = {
     // source: src/modules/mock/model.ts#TestHead
     testHead: <T extends object>() =>
         ["id", "name", "stereo", "_idx"] as Array<Extract<keyof T, string>>,
-    // source: src/view/transformer.spec.ts#Model
-    viewTransformerModel: <T extends object>() =>
-        ["$", "ns", "type", "stereo", "sid", "uid", "gid", "lock", "next", "meta", "createdAt", "updatedAt", "deletedAt", "error", "id", "_id"] as Array<Extract<keyof T, string>>,
 } as const;
 
 export const fieldRegistryMeta = {
     "kind": "concrete",
     "schemaVersion": 1,
-    "entryCount": 13,
-    "checksum": "d117582120d75b30",
+    "entryCount": 12,
+    "checksum": "0f0e6844e68ed5f1",
     "generatedBy": "lemon-fields"
 } as const;
