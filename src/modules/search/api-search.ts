@@ -88,7 +88,7 @@ export class SearchAPIController extends GeneralWEBController {
     public getSearchHello: NextHandler = async (id, param, body, $ctx) => {
         const errScope = `getSearchHello(${id ?? ''})`;
         id = id == '0' ? '' : id;
-        const isLocal = $ctx?.domain === 'localhost';
+        const isLocal = $U.isLocalMode(); //* v5 B5: runtime local mode, never from `$ctx.domain`.
         if (!isLocal) throw new Error(`403 NOT ALLOWED - domain[${$ctx?.domain ?? ''}] is invali  @${errScope}`);
 
         const hello = this.hello();
@@ -636,7 +636,7 @@ export class SearchAPIController extends GeneralWEBController {
         const errScope = `doPostMigrate(${this.type()}/${id ?? ''})`;
         id = id == '0' ? '' : $T.S2(id);
 
-        const isLocal = $ctx?.domain === 'localhost';
+        const isLocal = $U.isLocalMode(); //* v5 B5: runtime local mode, never from `$ctx.domain`.
         if (!isLocal) throw new Error(`403 NOT ALLOWED - domain[${$ctx?.domain ?? ''}] is invali  @${errScope}`);
         if (id) throw new Error(`@id[${id}] is invalid - ${errScope}`);
 
