@@ -29,7 +29,7 @@ export interface BackendService<T extends ModelType = any> extends MyCoreService
  */
 export class MockModelManager extends MyCoreManager<MockModel, ModelType, BackendService> {
     public constructor(parent: BackendService) {
-        super('mock', parent, $FIELD.mock);
+        super('mock', parent, $FIELD.mock, { enableSync: true }); //* v5 B5: sync is opt-in (lemon-core default false).
     }
 
     /**
@@ -137,7 +137,7 @@ export class MockModelManager extends MyCoreManager<MockModel, ModelType, Backen
  */
 export class TestModelManager extends MyCoreManager<TestModel, ModelType, BackendService> {
     public constructor(parent: BackendService) {
-        super('test', parent, $FIELD.test);
+        super('test', parent, $FIELD.test, { enableSync: true }); //* v5 B5: sync is opt-in (lemon-core default false).
     }
 
     /**

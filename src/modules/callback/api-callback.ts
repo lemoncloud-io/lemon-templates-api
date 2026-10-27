@@ -101,7 +101,7 @@ export class CallbackAPIController extends AbstractCRUDController<
         id = id === '0' ? '' : $T.S2(id);
 
         // STEP.0 validate parameter
-        const isLocal = $ctx?.domain === 'localhost';
+        const isLocal = $U.isLocalMode(); //* v5 B5: custom `id` only in local mode, not from `$ctx.domain`.
         if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
         if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
@@ -153,7 +153,7 @@ export class CallbackAPIController extends AbstractCRUDController<
         id = id === '0' ? '' : $T.S2(id);
 
         // STEP.0 validate parameter
-        const isLocal = $ctx?.domain === 'localhost';
+        const isLocal = $U.isLocalMode(); //* v5 B5: custom `id` only in local mode, not from `$ctx.domain`.
         const isProd = !!$T.BN(param?.prod, param?.prod === '' ? 1 : 0);
         const isSimul = !!$T.BN(param?.simul, param?.simul === '' ? 1 : 0);
         if (id && !isLocal) throw new Error(`@id[${id}] is invalid - ${errScope}`);
@@ -180,7 +180,7 @@ export class CallbackAPIController extends AbstractCRUDController<
         id = id === '0' ? '' : $T.S2(id);
 
         // STEP.0 validate parameter
-        const isLocal = $ctx?.domain === 'localhost';
+        const isLocal = $U.isLocalMode(); //* v5 B5: runtime local mode (unused below, kept for the commented check).
         // if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
         // if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
