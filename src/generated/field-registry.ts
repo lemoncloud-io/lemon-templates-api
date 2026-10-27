@@ -14,12 +14,6 @@ export const fieldKeys = {
     // source: src/modules/callback/transformer.spec.ts#Model
     callbackTransformerModel: <T extends object>() =>
         ["$", "ns", "type", "stereo", "sid", "uid", "gid", "lock", "next", "meta", "createdAt", "updatedAt", "deletedAt", "error", "id", "_id"] as Array<Extract<keyof T, string>>,
-    // source: src/modules/mock/model.ts#MockHead
-    mockHead: <T extends object>() =>
-        ["id", "name", "stereo"] as Array<Extract<keyof T, string>>,
-    // source: src/modules/mock/model.ts#MockModel
-    mockModel: <T extends object>() =>
-        ["name", "stereo", "aliasId", "meta", "id", "$", "ns", "type", "sid", "uid", "gid", "lock", "next", "createdAt", "updatedAt", "deletedAt", "error", "_id"] as Array<Extract<keyof T, string>>,
     // source: src/modules/mock/model.ts#TestModel
     mockTestModel: <T extends object>() =>
         ["name", "stereo", "count", "extra", "mockId", "mock$", "mockIds", "mock$$", "Model", "$mock", "$mocks", "$identity", "$", "ns", "type", "sid", "uid", "gid", "lock", "next", "meta", "createdAt", "updatedAt", "deletedAt", "error", "id", "_id", "_idx"] as Array<Extract<keyof T, string>>,
@@ -43,7 +37,7 @@ export const fieldKeys = {
 export const fieldRegistryMeta = {
     "kind": "concrete",
     "schemaVersion": 1,
-    "entryCount": 12,
-    "checksum": "0f0e6844e68ed5f1",
+    "entryCount": 10,
+    "checksum": "44a3c579601fc7a3",
     "generatedBy": "lemon-fields"
 } as const;

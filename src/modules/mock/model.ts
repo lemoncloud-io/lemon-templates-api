@@ -4,13 +4,17 @@
  *
  * @author      Steve <steve@lemoncloud.io>
  * @date        2022-08-29 initial version.
+ * @date        2026-10-28 v5 B4: `MockModel` is a class with `@field()` annotations (no generated registry entry).
  *
  * Copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
 import { CoreModel, NextIdentityAccess, SimpleSet } from 'lemon-model';
+//* v5 B4: field annotations (lemon-model 1.6.0; not on the lemon-core root).
+import { field, fieldsOf } from 'lemon-model';
 //WARN - DO NOT IMPORT FROM `../../service/backend-model`
 // import { ModelType } from '../../service/backend-types';
 import $LUT, { MockStereo, TestStereo } from './types';
+//* the other models still use the generated registry (v5 B4 transition: only `MockModel` is annotated).
 import { fieldKeys } from '../../generated/field-registry';
 
 /**
@@ -39,16 +43,27 @@ export interface MockHead {
 /**
  * `mock`: internal mock model.
  * - provice mocks data
+ * - v5 B4: a class over `CoreModel`; head fields carry `{ group: 'head' }` (was the `MockHead` registry entry).
  */
-export interface MockModel<T = string> extends MockHead, Model {
+export class MockModel<T = string> extends CoreModel<ModelType> implements MockHead {
+    // head fields: `id` is inherited (kind `internal` kept by the option merge), redeclared to join the head group
+    /** id of mock */
+    @field({ group: 'head' })
+    declare id?: string;
     /** name of this model */
-    name?: string;
+    @field({ group: 'head' })
+    declare name?: string;
     /** stereo of this model */
-    stereo?: MockStereo | ModelType;
+    @field({ group: 'head' })
+    declare stereo?: MockStereo | ModelType;
+
+    // body fields
     /** alias-id when stereo='#alias' */
+    @field()
     aliasId?: string;
     /** json encoding all data */
-    meta?: T;
+    @field()
+    declare meta?: T;
 }
 
 export interface MockModelExt<T = string> extends MockModel<T> {
@@ -129,13 +144,15 @@ export const filterFields = (fields: string[], base: string[] = []) =>
 
 /** field names from head */
 export const $HEAD = {
-    mock: filterFields(fieldKeys.mockHead<MockHead>()),
+    //* v5 B4: head group of the annotated class (same set as before; order is parent-first).
+    mock: filterFields(fieldsOf(MockModel, { group: 'head' })),
     test: filterFields(fieldKeys.testHead<TestHead>()),
 };
 
 // extract field names from models
 export const $FIELD = {
-    mock: filterFields(fieldKeys.mockModel<MockModel>(), ['meta']),
+    //* v5 B4: all annotated fields of the class (same set as before; order is parent-first).
+    mock: filterFields(fieldsOf(MockModel), ['meta']),
     test: filterFields(fieldKeys.mockTestModel<TestModel>()),
 };
 
