@@ -2,7 +2,8 @@
 /**
  * `bin/perf-lambda.mjs`
  * - invoke the deployed Lambda `--runs` times with a web event and summarize cold / warm timings
- *   from the log tail (`REPORT` line + lemon-core `PERF: >` lines).
+ *   from the log tail (`REPORT` line + lemon-core `PERF: >` lines), or with `--logs` from the full CloudWatch log
+ *   of each request (found by its request id; the tail stays as the fallback).
  * - usage: `npm run perf:lambda -- --stage dev --profile <name> --path /hello/0 --runs 5`
  */
 import {
@@ -23,7 +24,8 @@ import {
 } from './lib/common.mjs';
 import { webEvent, eventLabel } from './lib/event.mjs';
 import { createClient, invokeLambda } from './lib/invoke.mjs';
-import { parseTail, summarize, formatRuns, formatSummary, exitCode } from './lib/perf.mjs';
+import { createLogsClient, fetchAll, fetchFullLog, DEFAULT_WAIT_MS } from './lib/logs.mjs';
+import { parseTail, mergeParsed, summarize, formatRuns, formatSummary, formatLogs, exitCode } from './lib/perf.mjs';
 
 // default path (the hello route answers without any backend).
 const DEFAULT_PATH = '/hello/0';
@@ -35,9 +37,16 @@ const MAX_RUNS = 100;
 // allowed range of `--interval` (ms).
 const MAX_INTERVAL = 60000;
 
+// allowed range of `--logs-wait` (ms).
+const MIN_LOGS_WAIT = 1000;
+const MAX_LOGS_WAIT = 120000;
+
+// the log query starts this long before the invoke (clock skew and ingestion slack).
+const LOGS_LOOKBACK_MS = 60 * 1000;
+
 // help text for `--help`.
 const HELP = [
-    'Invoke the deployed Lambda several times and summarize cold / warm timings from the log tail.',
+    'Invoke the deployed Lambda several times and summarize cold / warm timings from the log tail (or the full log).',
     '',
     'usage: node bin/perf-lambda.mjs [options]',
     '       npm run perf:lambda -- [options]',
@@ -60,7 +69,10 @@ const HELP = [
     'run:',
     `  --runs <n>              number of invokes, 1-${MAX_RUNS} (default: ${DEFAULT_RUNS})`,
     `  --interval <ms>         pause between invokes, 0-${MAX_INTERVAL} (default: 0)`,
-    '  --dry                   print the target, the event JSON and the runs, do not call AWS',
+    '  --logs                  parse the full CloudWatch log of each run (by request id) instead of the 4 KB tail;',
+    '                          needs logs:FilterLogEvents, waits a few seconds per run for the log to arrive',
+    `  --logs-wait <ms>        max wait per run for the REPORT line, ${MIN_LOGS_WAIT}-${MAX_LOGS_WAIT} (default: ${DEFAULT_WAIT_MS})`,
+    '  --dry                   print the target, the event JSON and the runs, do not call AWS (no --logs fetch)',
     '  --json                  print { target, runs, summary } only',
     '  --raw                   do not redact the output (control stripping and the size cap stay)',
     '  --max-bytes <n>         cap for one printed text (default: 65536; 0 = no cap)',
@@ -70,7 +82,7 @@ const HELP = [
 ];
 
 // flags that never take a value.
-const BOOLEANS = ['internal', 'dry', 'json', 'raw', 'help'];
+const BOOLEANS = ['internal', 'logs', 'dry', 'json', 'raw', 'help'];
 
 // every accepted option (aliases resolve to these).
 const KNOWN = [
@@ -86,6 +98,7 @@ const KNOWN = [
     'header',
     'runs',
     'interval',
+    'logs-wait',
     'max-bytes',
     ...BOOLEANS,
 ];
@@ -120,20 +133,44 @@ const httpOf = text => {
 // wait `ms` milliseconds.
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// one invoke with the log tail → one run record.
-const runOnce = async (client, name, event) => {
+// the full log of one run (`--logs`); a Logs error falls back to the tail → `{ text, complete, events, took, error }`.
+const fetchRunLog = async (logs, requestId, startTime) => {
+    const t0 = Date.now();
+    try {
+        const got = await fetchFullLog(logs.fetch, { group: logs.group, requestId, startTime, timeoutMs: logs.wait });
+        return { text: got.text, complete: got.complete, events: got.events.length, took: got.took, error: null };
+    } catch (e) {
+        // only the error name is kept (the message can carry ARNs); the run itself goes on with the tail.
+        return { text: '', complete: false, events: 0, took: Date.now() - t0, error: e?.name || 'Error' };
+    }
+};
+
+// one invoke with the log tail (+ the full log with `--logs`) → one run record.
+const runOnce = async (client, name, event, logs) => {
+    const startTime = Date.now() - LOGS_LOOKBACK_MS;
     const resp = await invokeLambda(client, { name, event, tail: true });
     const tail = resp.logResult ? Buffer.from(resp.logResult, 'base64').toString('utf8') : '';
-    const { report, perf, lines } = parseTail(tail);
-    return {
+    const fromTail = parseTail(tail);
+    const base = {
         status: resp.statusCode,
         http: httpOf(resp.text),
         functionError: resp.functionError || null,
         took: resp.took,
-        report,
-        perf,
-        lines,
     };
+    // without --logs: the tail only (same as before).
+    if (!logs) return { ...base, ...fromTail };
+    const got = await fetchRunLog(logs, resp.requestId, startTime);
+    if (got.error) console.error(`WARN: logs fetch failed (${got.error}); using the log tail for this run`);
+    // a complete log is used as is; an incomplete one is filled from the tail item by item.
+    const fromLogs = parseTail(got.text);
+    const parsed = got.complete ? fromLogs : mergeParsed(fromLogs, fromTail);
+    const meta = {
+        complete: got.complete,
+        events: got.events,
+        took: got.took,
+        ...(got.error ? { error: got.error } : {}),
+    };
+    return { ...base, ...parsed, logs: meta };
 };
 
 // entry point.
@@ -148,6 +185,8 @@ const main = async () => {
     out = outputFilter({ raw: !!opts.raw, maxBytes: parseMaxBytes(opts['max-bytes']) });
     const runs = parseIntIn(opts.runs, 'runs', 1, MAX_RUNS, DEFAULT_RUNS);
     const interval = parseIntIn(opts.interval, 'interval', 0, MAX_INTERVAL, 0);
+    const logsWait = parseIntIn(opts['logs-wait'], 'logs-wait', MIN_LOGS_WAIT, MAX_LOGS_WAIT, DEFAULT_WAIT_MS);
+    const useLogs = !!opts.logs;
     // stage guard before anything else touches the target.
     const hasName = typeof opts.name === 'string' && opts.name;
     checkStage({
@@ -165,9 +204,9 @@ const main = async () => {
     const first = makeEvent();
     const route = ` ${first.httpMethod} ${first.path}`;
     const label = eventLabel('web', opts);
-    const head = `perf ${name} event=${label}${route} runs=${runs}`;
+    const head = `perf ${name} event=${label}${route} runs=${runs} logs=${useLogs}`;
 
-    // --dry: show the target, the event (sensitive headers masked) and the runs, never call AWS.
+    // --dry: show the target, the event (sensitive headers masked) and the runs, never call AWS (no --logs fetch).
     if (opts.dry) {
         console.log(`${head} interval=${interval}ms region=${aws.region} (dry)`);
         console.log(JSON.stringify(maskHeaders(first), null, 2));
@@ -178,24 +217,31 @@ const main = async () => {
     console.error(await resolveIdentity(aws, opts, name));
     if (!opts.json) console.log(head);
 
-    // the runs, one after another (an AWS error stops the whole run with exit 1).
+    // the runs, one after another (an invoke error stops the whole run with exit 1; a Logs error falls back to the tail).
     const client = createClient(aws);
+    // --logs: one Logs client and the function's log group, shared by every run.
+    const logsClient = useLogs ? createLogsClient(aws) : null;
+    const logs = useLogs
+        ? { group: `/aws/lambda/${name}`, wait: logsWait, fetch: params => fetchAll(logsClient, params) }
+        : null;
     const records = [];
     for (let i = 0; i < runs; i++) {
         if (i > 0 && interval > 0) await sleep(interval);
-        records.push(await runOnce(client, name, i === 0 ? first : makeEvent()));
+        records.push(await runOnce(client, name, i === 0 ? first : makeEvent(), logs));
     }
     const summary = summarize(records);
 
     // --json: one object; string leaves redacted and capped.
     if (opts.json) {
         const fn = hasName ? null : opts.function || 'lambda';
-        const target = { name, stage, fn, path: first.path, method: first.httpMethod, runs };
+        const target = { name, stage, fn, path: first.path, method: first.httpMethod, runs, logs: useLogs };
         console.log(JSON.stringify(out.json({ target, runs: records, summary })));
     } else {
         console.log(out.text(formatRuns(records)));
         console.log('--- summary (ms; memUsed in MB) ---');
         console.log(out.text(formatSummary(summary)));
+        // --logs: how many runs had their full log, and the median wait for it.
+        if (useLogs) console.log(formatLogs(summary));
     }
     process.exitCode = exitCode(records);
 };

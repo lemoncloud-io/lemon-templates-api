@@ -8,7 +8,14 @@ import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 // Lambda client for the resolved SDK config (`resolveAws()`).
 export const createClient = aws => new LambdaClient(aws);
 
-// invoke `name` with `event`; returns `{ statusCode, functionError, text, logResult, took }`.
+// the request id from a decoded log tail (`END RequestId: <id>`, else `REPORT RequestId: <id>`), or null.
+export const requestIdOf = logText => {
+    const text = `${logText ?? ''}`;
+    const m = text.match(/\bEND RequestId:\s*([\w-]+)/) || text.match(/\bREPORT RequestId:\s*([\w-]+)/);
+    return m ? m[1] : null;
+};
+
+// invoke `name` with `event`; returns `{ statusCode, functionError, text, logResult, requestId, took }`.
 export const invokeLambda = async (client, { name, event, async = false, tail = false }) => {
     const cmd = new InvokeCommand({
         FunctionName: name,
@@ -21,5 +28,15 @@ export const invokeLambda = async (client, { name, event, async = false, tail = 
     const took = Date.now() - t0;
     // payload bytes as text ('' when none, e.g. async).
     const text = resp.Payload ? new TextDecoder().decode(resp.Payload) : '';
-    return { statusCode: resp.StatusCode, functionError: resp.FunctionError, text, logResult: resp.LogResult, took };
+    // request id: the `x-amzn-RequestId` of the call (= the function's awsRequestId), else from the log tail.
+    const tailText = resp.LogResult ? Buffer.from(resp.LogResult, 'base64').toString('utf8') : '';
+    const requestId = resp.$metadata?.requestId || requestIdOf(tailText) || null;
+    return {
+        statusCode: resp.StatusCode,
+        functionError: resp.FunctionError,
+        text,
+        logResult: resp.LogResult,
+        requestId,
+        took,
+    };
 };

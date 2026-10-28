@@ -4,7 +4,6 @@
  * - print (and optionally follow) CloudWatch logs of the deployed Lambda by polling `FilterLogEvents`.
  * - usage: `npm run lambda:logs -- --stage dev --profile <name> --follow --perf`
  */
-import { CloudWatchLogsClient, FilterLogEventsCommand } from '@aws-sdk/client-cloudwatch-logs';
 import {
     parseArgs,
     resolveAws,
@@ -22,6 +21,7 @@ import {
     HarnessError,
     DEFAULT_REGION,
 } from './lib/common.mjs';
+import { createLogsClient, fetchAll } from './lib/logs.mjs';
 
 // help text for `--help`.
 const HELP = [
@@ -95,19 +95,6 @@ const fmtTime = ms => {
 // wait for the given milliseconds.
 const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
 
-// fetch all pages from startTime; returns events sorted by timestamp.
-const fetchAll = async (client, params) => {
-    const events = [];
-    let nextToken;
-    // follow nextToken until the last page.
-    do {
-        const resp = await client.send(new FilterLogEventsCommand({ ...params, nextToken }));
-        events.push(...(resp.events || []));
-        nextToken = resp.nextToken;
-    } while (nextToken);
-    return events.sort((a, b) => a.timestamp - b.timestamp);
-};
-
 // entry point.
 const main = async () => {
     const opts = parseArgs(process.argv.slice(2), {
@@ -149,7 +136,7 @@ const main = async () => {
     console.error(`logs ${group} since=${new Date(since).toISOString()} follow=${follow}`);
     process.on('SIGINT', () => process.exit(0));
 
-    const client = new CloudWatchLogsClient(aws);
+    const client = createLogsClient(aws);
     const seen = new Map(); // eventId -> timestamp, for dedupe across polls.
     let startTime = since;
     let maxTs = since;
