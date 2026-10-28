@@ -39,6 +39,7 @@
     "!lambda": "------- invoke the deployed lambda / watch its logs (bin/) -----",
     "lambda:invoke": "node bin/lambda-invoke.mjs",
     "lambda:logs": "node bin/lambda-logs.mjs",
+    "lambda:test": "node --test bin/lib/*.test.mjs",
     "!remove": "----- sls remove by profile -----",
     "remove": "sls remove --stage prod",
     "remove.lemon": "sls remove --param='profile=lemon' --stage dev",

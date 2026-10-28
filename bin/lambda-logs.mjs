@@ -5,7 +5,23 @@
  * - usage: `npm run lambda:logs -- --stage dev --profile <name> --follow --perf`
  */
 import { CloudWatchLogsClient, FilterLogEventsCommand } from '@aws-sdk/client-cloudwatch-logs';
-import { parseArgs, resolveAws, functionName, parseSince, printHelp, fail, DEFAULT_REGION } from './lib/common.mjs';
+import {
+    parseArgs,
+    resolveAws,
+    functionName,
+    parseSince,
+    printHelp,
+    fail,
+    checkStage,
+    tryServiceName,
+    groupFunctionName,
+    stripControl,
+    parseMaxBytes,
+    outputFilter,
+    resolveIdentity,
+    HarnessError,
+    DEFAULT_REGION,
+} from './lib/common.mjs';
 
 // help text for `--help`.
 const HELP = [
@@ -16,6 +32,7 @@ const HELP = [
     '',
     'target:',
     '  --stage <stage>         deploy stage (default: dev)',
+    '  --confirm-stage <stage> required for any stage other than dev (same value as the stage)',
     '  --function, --fn <fn>   lambda | backend (default: lambda)',
     '  --name <name>           full function name (overrides <service>-<stage>-<fn>)',
     '  --group <log-group>     log group (default: /aws/lambda/<name>)',
@@ -32,13 +49,35 @@ const HELP = [
     '  --follow, -f            keep polling until Ctrl-C',
     '  --interval <sec>        poll interval with --follow (default: 2)',
     '  --json                  one JSON object per line: { ts, stream, message }',
+    '  --raw                   do not redact messages (control stripping and the size cap stay)',
+    '  --max-bytes <n>         cap for one message (default: 65536; 0 = no cap)',
     '  --help                  show this help',
     '',
     'exit codes: 0 = ok, 1 = AWS error, 2 = bad arguments or log group not found.',
 ];
 
 // flags that never take a value.
-const BOOLEANS = ['follow', 'perf', 'json', 'help'];
+const BOOLEANS = ['follow', 'perf', 'json', 'raw', 'help'];
+
+// every accepted option (aliases resolve to these).
+const KNOWN = [
+    'stage',
+    'confirm-stage',
+    'function',
+    'name',
+    'group',
+    'region',
+    'profile',
+    'since',
+    'filter',
+    'grep',
+    'interval',
+    'max-bytes',
+    ...BOOLEANS,
+];
+
+// output filter for this run (redacting by default until the options are parsed).
+let out = outputFilter();
 
 // re-scan window in follow mode, so late-ingested events from other streams are not missed.
 const LAG_MS = 10 * 1000;
@@ -71,10 +110,27 @@ const fetchAll = async (client, params) => {
 
 // entry point.
 const main = async () => {
-    const opts = parseArgs(process.argv.slice(2), { booleans: BOOLEANS, aliases: { f: 'follow', fn: 'function' } });
+    const opts = parseArgs(process.argv.slice(2), {
+        booleans: BOOLEANS,
+        aliases: { f: 'follow', fn: 'function' },
+        known: KNOWN,
+        maxPositional: 0,
+    });
     if (opts.help) return printHelp(HELP);
+    out = outputFilter({ raw: !!opts.raw, maxBytes: parseMaxBytes(opts['max-bytes']) });
+    // stage guard: --group and --name are checked by the function name they point at.
+    const hasGroup = typeof opts.group === 'string' && opts.group;
+    const hasName = typeof opts.name === 'string' && opts.name;
+    const target = hasGroup ? groupFunctionName(opts.group) ?? opts.group : hasName ? opts.name : undefined;
+    checkStage({
+        stage: opts.stage,
+        confirm: opts['confirm-stage'],
+        name: target,
+        service: target !== undefined ? tryServiceName() : null,
+        label: hasGroup ? '--group' : '--name',
+    });
     const aws = resolveAws(opts);
-    const group = typeof opts.group === 'string' && opts.group ? opts.group : `/aws/lambda/${functionName(opts)}`;
+    const group = hasGroup ? opts.group : `/aws/lambda/${functionName(opts)}`;
     const since = parseSince(opts.since);
     const follow = !!opts.follow;
     const interval = Math.max(1, Number(opts.interval) || 2) * 1000;
@@ -88,6 +144,8 @@ const main = async () => {
     }
     const filterPattern = typeof opts.filter === 'string' && opts.filter ? opts.filter : undefined;
 
+    // identity banner first; an STS failure stops before Logs is called.
+    console.error(await resolveIdentity(aws, opts, groupFunctionName(group) ?? group));
     console.error(`logs ${group} since=${new Date(since).toISOString()} follow=${follow}`);
     process.on('SIGINT', () => process.exit(0));
 
@@ -113,8 +171,15 @@ const main = async () => {
             const message = `${ev.message || ''}`.replace(/[\r\n]+$/, '');
             if (grep && !grep.test(message)) continue;
             const stream = `${ev.logStreamName || ''}`;
-            if (opts.json) console.log(JSON.stringify({ ts: new Date(ev.timestamp).toISOString(), stream, message }));
-            else console.log(`${fmtTime(ev.timestamp)}  ${stream.slice(-8)}  ${message}`);
+            // control-stripped, redacted (unless --raw) and capped message.
+            if (opts.json) {
+                const row = out.json({
+                    ts: new Date(ev.timestamp).toISOString(),
+                    stream,
+                    message: stripControl(message),
+                });
+                console.log(JSON.stringify(row));
+            } else console.log(`${fmtTime(ev.timestamp)}  ${stripControl(stream.slice(-8))}  ${out.log(message)}`);
         }
         if (!follow) break;
         // advance the window (keep a short re-scan lag) and drop dedupe ids older than it.
@@ -124,5 +189,8 @@ const main = async () => {
     }
 };
 
-// report other SDK errors without a stack trace (exit 1).
-main().catch(e => fail(`${e.name || 'Error'}: ${e.message}`, 1));
+// run; harness errors keep their exit code, other SDK errors are redacted and exit 1 (no stack trace).
+main().catch(e => {
+    if (e instanceof HarnessError) return fail(e.message, e.code);
+    fail(out.log(`${e.name || 'Error'}: ${e.message}`), 1);
+});
