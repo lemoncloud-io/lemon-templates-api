@@ -40,6 +40,7 @@
     "lambda:invoke": "node bin/lambda-invoke.mjs",
     "lambda:logs": "node bin/lambda-logs.mjs",
     "lambda:test": "node --test bin/lib/*.test.mjs",
+    "fields:admin": "node bin/fields-admin.mjs",
     "!remove": "----- sls remove by profile -----",
     "remove": "sls remove --stage prod",
     "remove.lemon": "sls remove --param='profile=lemon' --stage dev",
@@ -66,7 +67,7 @@
     "@aws-sdk/client-sqs": "^3.971.0",
     "@aws-sdk/client-sts": "^3.971.0",
     "@aws-sdk/credential-providers": "^3.971.0",
-    "lemon-core": "^5.0.0",
+    "lemon-core": "^5.0.1",
     "lemon-model": "^5.0.0"
   },
   "devDependencies": {

@@ -6,7 +6,6 @@
  */
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
 import {
     parseArgs,
     resolveAws,
@@ -23,6 +22,7 @@ import {
     DEFAULT_REGION,
 } from './lib/common.mjs';
 import { webEvent, readValue, checkWebOptions, eventLabel } from './lib/event.mjs';
+import { createClient, invokeLambda } from './lib/invoke.mjs';
 
 // help text for `--help`.
 const HELP = [
@@ -224,30 +224,22 @@ const main = async () => {
     // identity banner first; an STS failure stops before Lambda is called.
     console.error(await resolveIdentity(aws, opts, name));
 
-    const client = new LambdaClient(aws);
-    const cmd = new InvokeCommand({
-        FunctionName: name,
-        InvocationType: opts.async ? 'Event' : 'RequestResponse',
-        LogType: opts.tail && !opts.async ? 'Tail' : 'None',
-        Payload: Buffer.from(JSON.stringify(event)),
-    });
-    const t0 = Date.now();
-    const resp = await client.send(cmd);
-    const took = Date.now() - t0;
-    const text = resp.Payload ? new TextDecoder().decode(resp.Payload) : '';
-    const ok = resp.StatusCode >= 200 && resp.StatusCode < 300 && !resp.FunctionError;
+    // the call itself is shared with `fields-admin.mjs` (`lib/invoke.mjs`).
+    const resp = await invokeLambda(createClient(aws), { name, event, async: !!opts.async, tail: !!opts.tail });
+    const { text, took } = resp;
+    const ok = resp.statusCode >= 200 && resp.statusCode < 300 && !resp.functionError;
 
     // --json: raw payload only (redacted string values).
     if (opts.json) {
         if (text) printJson(text);
     } else {
         console.log(`invoke ${name} event=${label}${route}`);
-        console.log(`status=${resp.StatusCode} function-error=${resp.FunctionError || 'none'} took=${took}ms`);
+        console.log(`status=${resp.statusCode} function-error=${resp.functionError || 'none'} took=${took}ms`);
         printPayload(kind, text);
         // decoded log tail (base64 in LogResult), control-stripped and redacted.
-        if (resp.LogResult) {
+        if (resp.logResult) {
             console.log('--- log tail ---');
-            console.log(out.log(Buffer.from(resp.LogResult, 'base64').toString('utf8').replace(/\n+$/, '')));
+            console.log(out.log(Buffer.from(resp.logResult, 'base64').toString('utf8').replace(/\n+$/, '')));
         }
     }
     process.exitCode = ok ? 0 : 1;

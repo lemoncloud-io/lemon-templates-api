@@ -1,10 +1,13 @@
-# bin/ — invoke the deployed Lambda and watch its logs
+# bin/ — invoke the deployed Lambda, watch its logs, and check `fields/admin`
 
-Two small Node scripts for test-env and prod verification after `sls deploy`.
+Small Node scripts for test-env and prod verification after `sls deploy`.
 They call AWS directly with the SDK (no `sls`), so they work on any machine with AWS credentials.
 
 - `lambda-invoke.mjs` — invoke the deployed function with a generated event (web, cron, SNS, SQS, or a raw JSON file).
 - `lambda-logs.mjs` — print or follow the function's CloudWatch logs (polling `FilterLogEvents`).
+- `fields-admin.mjs` — check `GET /<type>/fields/admin` on the local express server or the deployed Lambda with `checkFieldsAdmin()` of lemon-core. See [fields:admin](#fieldsadmin).
+
+The Lambda call itself (`lambda:Invoke`) is shared in `lib/invoke.mjs` by `lambda-invoke.mjs` and `fields-admin.mjs`.
 
 The target function name is `<service>-<stage>-<function>` (Serverless default).
 `service` is read from the `service:` line of `serverless.yml`.
@@ -133,9 +136,90 @@ npm run lambda:logs -- --stage dev --profile lemon --fn backend --since 1h --fil
 npm run lambda:logs -- --stage prod --confirm-stage prod --profile lemon --since 2026-10-28T09:00:00+09:00 --json
 ```
 
+## fields:admin
+
+```sh
+npm run fields:admin -- --target express|lambda [options]
+```
+
+lemon-core v5 serves `GET /<type>/fields/admin` on every CRUD controller.
+It returns a report of the model fields: `type`, `model`, `core`, `fields`, `extra`, `counts`, `source`, `ok`, `issues`, and `runtime` (`local`, `external`, `lambda`, `node`, `lemonCore`).
+The route is open only on a local server (`LOCAL_MODE=1`, not in Lambda) or on a direct `lambda:Invoke` (a request with no `Host`).
+Any other request gets `403 NOT ALLOWED - fields/admin is local or direct-invoke only @doGetAdmin(<type>/fields)`.
+
+This script checks that report with `checkFieldsAdmin()` of lemon-core, the one verifier of the report.
+The jest spec `src/modules/mock/fields-admin.spec.ts` uses the same verifier and the same fixture (`src/modules/mock/fields-admin.expected.json`).
+So jest, the local express server, and the deployed Lambda all run the same check.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--target <t>` | | Required. `express` or `lambda`. |
+| `--type <type>` | `mocks` | API type (one path segment). |
+| `--expect <file>` | the fixture for `mocks` | Expected values (JSON object with any of `type`, `model`, `source`, `counts`, `extra`, `core`, `lemonCore`). For another type without `--expect`, only the structural and content checks run. A missing file, invalid JSON, or an unknown key: exit 2. |
+| `--json` | | Print `{ target, type, status, report, check: { ok, issues }, gate }` only. String values are redacted; the structure is kept. |
+| `--raw`, `--max-bytes <n>` | | Same as `lambda:invoke`. |
+| `--help` | | Show help. |
+| `--url <base>` | `http://127.0.0.1:<"port" of package.json>` | `express` only. Server base URL. |
+| `--stage`, `--confirm-stage`, `--function`/`--fn`, `--name`, `--region`, `--profile` | | `lambda` only. Same as `lambda:invoke`, with the same stage guard and identity line. |
+| `--dry` | | `lambda` only. Print the target and both events (sensitive headers masked). No AWS call, no STS call. |
+| `--no-gate` | | `lambda` only. Skip the gate check. |
+
+An option of the other target is an error (exit 2), for example `--stage` with `--target express`.
+
+### Targets
+
+- `express`: `GET <base>/<type>/fields/admin` with `Accept: application/json`.
+  It expects HTTP 200, then runs `checkFieldsAdmin(report, { ...expect, runtime: { local: true, lambda: false } })`.
+- `lambda`: two direct invokes of the deployed function.
+  1. Admin: an internal web event (no `Host` header, like `lambda:invoke --internal`) for `/<type>/fields/admin`.
+     It expects `statusCode` 200 in the payload, then runs `checkFieldsAdmin(report, { ...expect, runtime: { local: false, external: false, lambda: <function name> } })`.
+  2. Gate: the default external web event (with `Host`, like an API Gateway request) for the same path.
+     It expects `statusCode` 403 (`gate=closed(403)`). Any other code is a failure (`gate=open(<code>)`). `--no-gate` skips this step.
+
+### Auth model
+
+- `express`: no credentials. The route is open because the server you started locally runs with `LOCAL_MODE=1` (for example `ENV=lemon STAGE=local node dist/index.js` after `npm run build`). The script does not start or stop the server.
+- `lambda`: IAM credentials only (`--profile`, or the SDK default chain), and `lambda:InvokeFunction` on the target function. No API Gateway, no session token, no user identity.
+- The API Gateway path answers 403 by design. The gate step checks exactly that, with an event of the same shape.
+
+### Output
+
+One summary line, the same for both targets:
+
+```text
+fields/admin target=<express|lambda> type=<type> http=<code> ok=<true|false> source=<source> counts=<core>/<fields>/<extra> runtime=<local|lambda:<name>> lemon-core=<version> issues=<n>
+```
+
+Then one `  - <issue>` line per issue, then for `lambda` one `gate=closed(403)` or `gate=open(<code>)` line.
+A non-200 response is one issue: `expected http 200 got <code>: <body>`.
+For `lambda` the identity line goes to stderr first (see [Safety](#safety)).
+The output is redacted and capped like the other scripts.
+
+Exit codes: 0 = HTTP 200, `ok`, and the gate closed (or skipped); 1 = any of those failed, or a transport or AWS error; 2 = bad arguments or the stage guard.
+
+Examples:
+
+```sh
+# local server (LOCAL_MODE=1) on the package.json port
+npm run fields:admin -- --target express
+
+# machine-readable
+npm run fields:admin -- --target express --json
+
+# deployed dev Lambda: admin check + gate check
+npm run fields:admin -- --target lambda --stage dev --profile <name>
+
+# show both events first, no AWS call
+npm run fields:admin -- --target lambda --stage dev --dry
+
+# another type: structural and content checks only, or with your own expectations
+npm run fields:admin -- --target express --type tests
+npm run fields:admin -- --target express --type tests --expect path/to/tests.expected.json
+```
+
 ## Safety
 
-Both scripts apply these rules.
+All three scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target lambda`).
 
 1. **Strict options.** An option that is not in the table above (and not an alias) stops the run: `ERROR: unknown option --foo (see --help)`, exit 2. An extra positional argument stops it the same way (`unknown argument <arg>`). `--help` still works with any other argument.
 2. **Stage guard.** Only `dev` (the default) runs without confirmation. Any other stage needs `--confirm-stage <stage>` with the exact same value: `ERROR: stage "prod" needs --confirm-stage prod`, exit 2. A `--confirm-stage` that differs from the stage is also an error. `--name` (and `--group /aws/lambda/<name>` for `lambda:logs`) gives the stage when the name has the shape `<service>-<stage>-<fn>`. If the stage cannot be derived (another service, or another log group), the run needs both `--stage <stage>` and `--confirm-stage <stage>`. The guard runs before `--dry`.
@@ -151,7 +235,7 @@ Both scripts apply these rules.
 5. **Size cap.** A printed response body, a log tail, or a single log message longer than 64 KB is cut and ends with `…[truncated N bytes]`. With `--json`, each string value is cut instead, so the JSON stays valid. `--raw` does not lift the cap. `--max-bytes <n>` sets it; `--max-bytes 0` removes it.
 6. **Header echo.** `--dry` prints `<redacted>` for the values of the sensitive headers in rule 4 (`headers` and `multiValueHeaders`). Other headers print as given. The event sent to Lambda keeps the real values. This covers `--identity` (`x-lemon-identity`).
 7. **Internal events.** `--internal` only changes the shape of the web event (no `Host` header). It does not bypass the stage guard or the identity line.
-8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/common.test.mjs` and `bin/lib/event.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, and the web event builder (`--internal`, `--identity`). They need no AWS access; the `event` tests run `lambda-invoke.mjs --dry` only.
+8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/*.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, the web event builder (`--internal`, `--identity`), the shared invoke call, and `fields:admin` with a fake `fetch` and a fake invoker (arguments, both targets, the gate, `--json`, `--no-gate`, `--dry`). They need no AWS access and no server; the scripts run with `--dry` or `--help` only.
 
 ## Exit codes
 
@@ -162,3 +246,5 @@ Both scripts apply these rules.
 | 2 | Bad arguments, an unknown option, or the stage guard | Bad arguments, an unknown option, the stage guard, or the log group does not exist |
 
 `lambda:invoke` exit codes reflect the Lambda call only. An `http 4xx/5xx` from the web handler still exits 0; check the printed `http` line.
+
+`fields:admin` exit codes are in its own section: unlike `lambda:invoke`, a non-200 `http` code or a failed check exits 1.
