@@ -5,10 +5,11 @@ They call AWS directly with the SDK (no `sls`), so they work on any machine with
 
 - `lambda-invoke.mjs` — invoke the deployed function with a generated event (web, cron, SNS, SQS, or a raw JSON file).
 - `lambda-logs.mjs` — print or follow the function's CloudWatch logs (polling `FilterLogEvents`).
-- `perf-lambda.mjs` — invoke the deployed function several times and summarize cold / warm timings from the log tail. See [perf:lambda](#perflambda).
+- `perf-lambda.mjs` — invoke the deployed function several times and summarize cold / warm timings from the log tail, or from the full CloudWatch log with `--logs`. See [perf:lambda](#perflambda).
 - `fields-admin.mjs` — check `GET /<type>/fields/admin` on the local express server or the deployed Lambda with `checkFieldsAdmin()` of lemon-core. See [fields:admin](#fieldsadmin).
 
 The Lambda call itself (`lambda:Invoke`) is shared in `lib/invoke.mjs` by `lambda-invoke.mjs`, `fields-admin.mjs`, and `perf-lambda.mjs`.
+The paged `FilterLogEvents` read is shared in `lib/logs.mjs` by `lambda-logs.mjs` and `perf-lambda.mjs --logs`.
 
 The target function name is `<service>-<stage>-<function>` (Serverless default).
 `service` is read from the `service:` line of `serverless.yml`.
@@ -226,6 +227,7 @@ npm run perf:lambda -- [options]
 
 Invokes the deployed function `--runs` times with a web event and the log tail (`LogType=Tail`, like `lambda:invoke --tail`).
 Each tail is parsed for the Lambda `REPORT` line and the lemon-core `PERF: >` lines, and the runs are summarized per phase (cold / warm).
+With `--logs`, each run also reads its full CloudWatch log by request id and parses that instead of the 4 KB tail (see [Full log](#full-log---logs)).
 
 | Option | Default | Meaning |
 |---|---|---|
@@ -236,8 +238,10 @@ Each tail is parsed for the Lambda `REPORT` line and the lemon-core `PERF: >` li
 | `--internal` | | Same as `lambda:invoke`: no `Host` header. The banner shows `event=web(internal)`. |
 | `--runs <n>` | `5` | Number of invokes, one after another. `1`–`100`, else exit 2. |
 | `--interval <ms>` | `0` | Pause between invokes. `0`–`60000`, else exit 2. |
-| `--dry` | | Print the target, the runs, and the event JSON of the first run. Do not call AWS (no STS call either). |
-| `--json` | | Print `{ target: { name, stage, fn, path, method, runs }, runs: [...], summary }` only. String values are redacted; the structure is kept. |
+| `--logs` | | After each invoke, read the full CloudWatch log of that request (by request id) and parse it instead of the tail. Needs `logs:FilterLogEvents`. See [Full log](#full-log---logs). |
+| `--logs-wait <ms>` | `20000` | Longest wait per run for the request's `REPORT` line to arrive in CloudWatch. `1000`–`120000`, else exit 2 (checked with or without `--logs`). |
+| `--dry` | | Print the target, the runs, and the event JSON of the first run. Do not call AWS (no STS call either). With `--logs`, no log is read either. |
+| `--json` | | Print `{ target: { name, stage, fn, path, method, runs, logs }, runs: [...], summary }` only. String values are redacted; the structure is kept. With `--logs`, each run has `logs: { complete, events, took[, error] }` and `summary` has `logs: { n, complete, wait }`. |
 | `--raw`, `--max-bytes <n>` | | Same as `lambda:invoke`. |
 | `--help` | | Show help. |
 
@@ -257,46 +261,92 @@ Each run sends a fresh event (new `requestId`). `--event`, `--body`, `--identity
 The CloudWatch prefix (timestamp, request id, level) and ANSI color codes are ignored. If a kind appears more than once in one tail, the last line wins.
 `loaded …` and `initialize` are process times (`process.uptime()`), printed once per container. The other values are durations.
 The `loaded engine` line comes from `src/engine.ts`; like every engine log line, it is silent with `LS=1`.
+Other lines (`START`, `END`, `INIT_START`, `INIT_REPORT`, app lines) are skipped, so the same parser reads a tail or a full log.
+
+### Full log (`--logs`)
+
+The 4 KB tail often loses the early lines of a cold run. `--logs` reads the whole log of each request instead:
+
+1. The request id comes from the invoke response (`x-amzn-RequestId`, the same id as the function's `awsRequestId`). If it is missing, it is read from the `END RequestId:` line of the tail.
+2. `FilterLogEvents` on `/aws/lambda/<name>` with the filter `"<request id>"`, from 60 seconds before the invoke. This returns the `START`, app, `END`, and `REPORT` lines of that request. CloudWatch gets them a few seconds after the invoke, so the query repeats every second until the `REPORT` line is there or `--logs-wait` has passed.
+3. Cold run only (`Init Duration` in `REPORT`): the `loaded lemon-core` and `loaded engine` lines are printed in the INIT phase, before `START`, and carry no request id. A second query reads them from the same log stream with the filter `"PERF:" "loaded"` (two terms — the INIT lines carry ANSI color codes, so a one-phrase filter does not match), up to the `START` line. They go in front of the request lines.
+4. The joined text goes through the same parser as the tail.
+
+If the `REPORT` line did not arrive in time (`complete=false`), each item missing from the log is taken from the tail of the same run; items found in the log win.
+If the Logs call fails (for example no `logs:FilterLogEvents` permission), a `WARN:` line with the error name goes to stderr and that run uses its tail only. The run itself does not fail.
 
 ### Output
 
 The identity line goes to stderr first (see [Safety](#safety)). Then:
 
 ```text
-perf <name> event=web GET /hello/0 runs=5
-run  phase  http  error  took  duration  billed    init  initialize  handle  request  handler  memUsed
-#1   cold    200      -  1100   1037.05    1556  518.53       998.9    12.3      4.2      2.6      117
-#2   warm    200      -    40      4.42       5     n/a         n/a     3.1      1.6      1.1      118
-#3   warm    200      -    30       3.2       4     n/a         n/a     2.9      1.4      1.1      118
-#4   warm    200      -    50      6.75       7     n/a         n/a       5      2.8      1.1      118
-#5   warm    200      -    36       3.9       4     n/a         n/a     n/a      n/a      n/a      118
+perf <name> event=web GET /hello/0 runs=5 logs=false
+run  phase  http  error  took  duration  billed    init  loadedCore  loadedEngine  initialize  handle  request  handler  memUsed
+#1   cold    200      -  1100   1037.05    1556  518.53         n/a           n/a       998.9    12.3      4.2      2.6      117
+#2   warm    200      -    40      4.42       5     n/a         n/a           n/a         n/a     3.1      1.6      1.1      118
+#3   warm    200      -    30       3.2       4     n/a         n/a           n/a         n/a     2.9      1.4      1.1      118
+#4   warm    200      -    50      6.75       7     n/a         n/a           n/a         n/a       5      2.8      1.1      118
+#5   warm    200      -    36       3.9       4     n/a         n/a           n/a         n/a     n/a      n/a      n/a      118
 --- summary (ms; memUsed in MB) ---
 runs=5 cold=1 warm=4
-metric      cold.n   median      p95      max  warm.n  median   p95   max
-took             1     1100     1100     1100       4      38    50    50
-duration         1  1037.05  1037.05  1037.05       4    4.16  6.75  6.75
-billed           1     1556     1556     1556       4     4.5     7     7
-init             1   518.53   518.53   518.53       0     n/a   n/a   n/a
-initialize       1    998.9    998.9    998.9       0     n/a   n/a   n/a
-handle           1     12.3     12.3     12.3       3     3.1     5     5
-request          1      4.2      4.2      4.2       3     1.6   2.8   2.8
-context          1      0.8      0.8      0.8       3     0.2   0.2   0.2
-param            1      0.3      0.3      0.3       3     0.1   0.1   0.1
-handler          1      2.6      2.6      2.6       3     1.1   1.1   1.1
-response         1      0.1      0.1      0.1       3     0.1   0.1   0.1
-memUsed          1      117      117      117       4     118   118   118
+metric           cold.n   median      p95      max  warm.n  median   p95   max
+took                  1     1100     1100     1100       4      38    50    50
+duration              1  1037.05  1037.05  1037.05       4    4.16  6.75  6.75
+billed                1     1556     1556     1556       4     4.5     7     7
+init                  1   518.53   518.53   518.53       0     n/a   n/a   n/a
+loadedLemonCore       0      n/a      n/a      n/a       0     n/a   n/a   n/a
+loadedEngine          0      n/a      n/a      n/a       0     n/a   n/a   n/a
+initialize            1    998.9    998.9    998.9       0     n/a   n/a   n/a
+handle                1     12.3     12.3     12.3       3     3.1     5     5
+request               1      4.2      4.2      4.2       3     1.6   2.8   2.8
+context               1      0.8      0.8      0.8       3     0.2   0.2   0.2
+param                 1      0.3      0.3      0.3       3     0.1   0.1   0.1
+handler               1      2.6      2.6      2.6       3     1.1   1.1   1.1
+response              1      0.1      0.1      0.1       3     0.1   0.1   0.1
+memUsed               1      117      117      117       4     118   118   118
 ```
 
-Run #5 above has only its `REPORT` line in the tail (no `PERF` lines), so its `PERF` columns are `n/a` and it drops out of those summary rows.
-The summary has one row per metric (`took`, `duration`, `billed`, `init`, `initialize`, `handle`, `request`, `context`, `param`, `handler`, `response`, `memUsed`) with `n`, median, p95, and max for each phase.
+Run #1 above lost its `loaded …` lines to the 4 KB cut, and run #5 has only its `REPORT` line in the tail (no `PERF` lines). Those `PERF` columns are `n/a`, and the runs drop out of those summary rows.
+The run table shows `loaded lemon-core` as `loadedCore`.
+The summary has one row per metric (`took`, `duration`, `billed`, `init`, `loadedLemonCore`, `loadedEngine`, `initialize`, `handle`, `request`, `context`, `param`, `handler`, `response`, `memUsed`) with `n`, median, p95, and max for each phase.
 `took` is the client-side round trip of the invoke. `context`, `param`, `handler`, and `response` are the parts of `request`.
 `n` counts only the runs that have the value; a metric with no value prints `n/a`.
 The median of an even count is the mean of the two middle values. p95 uses the nearest-rank method (`ceil(0.95 × n)`-th smallest value).
 The tables are redacted and capped like the other scripts.
 
+With `--logs`, the same runs read from the full log, and one more line follows the summary: how many runs got their `REPORT` line in time, and the median wait for the log.
+
+```text
+perf <name> event=web GET /hello/0 runs=5 logs=true
+run  phase  http  error  took  duration  billed    init  loadedCore  loadedEngine  initialize  handle  request  handler  memUsed
+#1   cold    200      -  1100   1037.05    1556  518.53       420.5         980.2       998.9    12.3      4.2      2.6      117
+#2   warm    200      -    40      4.42       5     n/a         n/a           n/a         n/a     3.1      1.6      1.1      118
+#3   warm    200      -    30       3.2       4     n/a         n/a           n/a         n/a     2.9      1.4      1.1      118
+#4   warm    200      -    50      6.75       7     n/a         n/a           n/a         n/a       5      2.8      1.1      118
+#5   warm    200      -    36       3.9       4     n/a         n/a           n/a         n/a       3      1.5      1.1      118
+--- summary (ms; memUsed in MB) ---
+runs=5 cold=1 warm=4
+metric           cold.n   median      p95      max  warm.n  median   p95   max
+took                  1     1100     1100     1100       4      38    50    50
+duration              1  1037.05  1037.05  1037.05       4    4.16  6.75  6.75
+billed                1     1556     1556     1556       4     4.5     7     7
+init                  1   518.53   518.53   518.53       0     n/a   n/a   n/a
+loadedLemonCore       1    420.5    420.5    420.5       0     n/a   n/a   n/a
+loadedEngine          1    980.2    980.2    980.2       0     n/a   n/a   n/a
+initialize            1    998.9    998.9    998.9       0     n/a   n/a   n/a
+handle                1     12.3     12.3     12.3       4    3.05     5     5
+request               1      4.2      4.2      4.2       4    1.55   2.8   2.8
+context               1      0.8      0.8      0.8       4     0.2   0.2   0.2
+param                 1      0.3      0.3      0.3       4     0.1   0.1   0.1
+handler               1      2.6      2.6      2.6       4     1.1   1.1   1.1
+response              1      0.1      0.1      0.1       4     0.1   0.1   0.1
+memUsed               1      117      117      117       4     118   118   118
+logs: complete=5/5 wait=2810ms
+```
+
 ### Limits
 
-- **Tail is 4 KB.** Lambda returns only the last 4 KB of the log. On a cold run with long startup logs, the early lines (`loaded lemon-core`, `loaded engine`, sometimes `initialize`) can be cut. Those runs drop out of that metric (`n` shrinks); they still count for the `REPORT` metrics. Use `lambda:logs --perf` for the full lines.
+- **Tail is 4 KB.** Lambda returns only the last 4 KB of the log. On a cold run with long startup logs, the early lines (`loaded lemon-core`, `loaded engine`, sometimes `initialize`) can be cut. Those runs drop out of that metric (`n` shrinks); they still count for the `REPORT` metrics. `--logs` solves this by reading the full log. The cost: CloudWatch delivers the log a few seconds late, so each run waits for it, and the caller needs `logs:FilterLogEvents` on the log group.
 - **Cold detection.** A run is cold when its `REPORT` line has `Init Duration`. If the `REPORT` line has none (or is missing), the `cold=1` flag of the lemon-core `handle` / `request` line also marks it cold. Everything else is warm.
 - **Forcing cold starts.** The script does not change the function. Back-to-back runs usually reuse one container, so a run of 5 is typically 1 cold + 4 warm (or 0 cold when the container was already warm).
 - **Errors.** An AWS error in any run stops the script (exit 1) and prints no tables.
@@ -309,6 +359,9 @@ npm run perf:lambda -- --stage dev --profile <name>
 
 # 20 internal runs, 1 second apart, machine-readable
 npm run perf:lambda -- --stage dev --profile <name> --internal --path /mocks/0 --runs 20 --interval 1000 --json
+
+# 5 runs with the full CloudWatch log of each run (cold-start loaded lines included)
+npm run perf:lambda -- --stage dev --profile <name> --logs
 
 # show the target and the event first, no AWS call
 npm run perf:lambda -- --stage dev --runs 3 --dry
@@ -332,7 +385,7 @@ All scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target
 5. **Size cap.** A printed response body, a log tail, or a single log message longer than 64 KB is cut and ends with `…[truncated N bytes]`. With `--json`, each string value is cut instead, so the JSON stays valid. `--raw` does not lift the cap. `--max-bytes <n>` sets it; `--max-bytes 0` removes it.
 6. **Header echo.** `--dry` prints `<redacted>` for the values of the sensitive headers in rule 4 (`headers` and `multiValueHeaders`). Other headers print as given. The event sent to Lambda keeps the real values. This covers `--identity` (`x-lemon-identity`).
 7. **Internal events.** `--internal` only changes the shape of the web event (no `Host` header). It does not bypass the stage guard or the identity line.
-8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/*.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, the web event builder (`--internal`, `--identity`), the shared invoke call, and `fields:admin` with a fake `fetch` and a fake invoker (arguments, both targets, the gate, `--json`, `--no-gate`, `--dry`), and `perf:lambda` (the log-tail parser with cold, warm, failed, and cut tails, the summary statistics, the tables, the exit code, and the CLI with `--dry`, `--help`, and bad arguments). They need no AWS access and no server; the scripts run with `--dry` or `--help` only.
+8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/*.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, the web event builder (`--internal`, `--identity`), the shared invoke call, and `fields:admin` with a fake `fetch` and a fake invoker (arguments, both targets, the gate, `--json`, `--no-gate`, `--dry`), and `perf:lambda` (the log-tail parser with cold, warm, failed, and cut tails, the summary statistics, the tables, the exit code, and the CLI with `--dry`, `--help`, and bad arguments), and `perf:lambda --logs` (`lib/logs.mjs` with a fake `fetch` and a fake clock: polling until `REPORT`, the timeout, the INIT query of a cold run, the full-log parse, the merge with the tail, and the request id). They need no AWS access and no server; the scripts run with `--dry` or `--help` only.
 
 ## Exit codes
 
@@ -346,4 +399,4 @@ All scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target
 
 `fields:admin` exit codes are in its own section: unlike `lambda:invoke`, a non-200 `http` code or a failed check exits 1.
 
-`perf:lambda` exit codes: 0 = every run answered `http` 2xx with no `FunctionError` (also `--dry`, `--help`); 1 = any run did not, or an AWS error, or no AWS identity (STS); 2 = bad arguments (also `--runs` outside 1–100 or `--interval` outside 0–60000), an unknown option, or the stage guard.
+`perf:lambda` exit codes: 0 = every run answered `http` 2xx with no `FunctionError` (also `--dry`, `--help`); 1 = any run did not, or an AWS error, or no AWS identity (STS); 2 = bad arguments (also `--runs` outside 1–100, `--interval` outside 0–60000, or `--logs-wait` outside 1000–120000), an unknown option, or the stage guard. With `--logs`, a Logs error or a log that does not arrive in time does not change the exit code (the run falls back to its tail).

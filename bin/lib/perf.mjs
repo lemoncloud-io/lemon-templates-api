@@ -1,6 +1,7 @@
 /**
  * `bin/lib/perf.mjs`
- * - parse the Lambda log tail (`REPORT` line + lemon-core `PERF: >` lines) and summarize repeated runs.
+ * - parse the Lambda log tail or the full CloudWatch log of one request (`REPORT` line + lemon-core `PERF: >` lines)
+ *   and summarize repeated runs.
  * - pure functions for `bin/perf-lambda.mjs`: no AWS SDK, no fs, no printing, no `process.exit`.
  */
 
@@ -10,6 +11,8 @@ export const METRICS = [
     'duration',
     'billed',
     'init',
+    'loadedLemonCore',
+    'loadedEngine',
     'initialize',
     'handle',
     'request',
@@ -104,7 +107,8 @@ const applyPerf = (perf, body) => {
     return true;
 };
 
-// parse a decoded log tail → `{ report, perf, lines }` (`lines` = PERF lines of a known kind).
+// parse a decoded log tail (or a full request log) → `{ report, perf, lines }` (`lines` = PERF lines of a known kind).
+// other lines (`START`, `END`, `INIT_START`, `INIT_REPORT`, app lines) are skipped.
 export const parseTail = text => {
     const report = emptyReport();
     const perf = emptyPerf();
@@ -123,6 +127,18 @@ export const parseTail = text => {
     return { report, perf, lines };
 };
 
+// first non-null of two values (`a` wins).
+const prefer = (a, b) => (a !== null && a !== undefined ? a : b ?? null);
+
+// merge two parse results item by item: `primary` (full log) wins, empty items come from `fallback` (tail).
+export const mergeParsed = (primary, fallback) => {
+    const p = primary || parseTail('');
+    const f = fallback || parseTail('');
+    const report = Object.fromEntries(Object.keys(emptyReport()).map(k => [k, prefer(p.report?.[k], f.report?.[k])]));
+    const perf = Object.fromEntries(Object.keys(emptyPerf()).map(k => [k, prefer(p.perf?.[k], f.perf?.[k])]));
+    return { report, perf, lines: Math.max(p.lines || 0, f.lines || 0) };
+};
+
 // true when the run was a cold start: `Init Duration` in REPORT, else the lemon-core `cold=1` flags.
 export const isCold = run => {
     if (run?.report?.init != null) return true;
@@ -138,6 +154,8 @@ export const metricOf = (run, key) => {
         duration: report?.duration,
         billed: report?.billed,
         init: report?.init,
+        loadedLemonCore: perf?.loadedLemonCore,
+        loadedEngine: perf?.loadedEngine,
         initialize: perf?.initialize,
         handle: perf?.handle?.ms,
         request: req.ms,
@@ -171,11 +189,20 @@ const groupStats = runs => ({
     ...Object.fromEntries(METRICS.map(key => [key, stats(runs.map(r => metricOf(r, key)))])),
 });
 
-// summarize runs → `{ cold: { n, …metrics }, warm: { n, …metrics }, all: { n } }`.
+// `--logs` stats: `{ n, complete, wait: { n, median, p95, max } }`, or null when no run fetched logs.
+export const logsStats = (runs = []) => {
+    const withLogs = runs.filter(r => r?.logs);
+    if (!withLogs.length) return null;
+    const complete = withLogs.filter(r => r.logs.complete).length;
+    return { n: withLogs.length, complete, wait: stats(withLogs.map(r => num(r.logs.took))) };
+};
+
+// summarize runs → `{ cold: { n, …metrics }, warm: { n, …metrics }, all: { n }, [logs] }` (`logs` with `--logs`).
 export const summarize = (runs = []) => {
     const cold = runs.filter(isCold);
     const warm = runs.filter(r => !isCold(r));
-    return { cold: groupStats(cold), warm: groupStats(warm), all: { n: runs.length } };
+    const logs = logsStats(runs);
+    return { cold: groupStats(cold), warm: groupStats(warm), all: { n: runs.length }, ...(logs ? { logs } : {}) };
 };
 
 // a number for a table cell (`n/a` when missing, at most 2 decimals).
@@ -190,18 +217,30 @@ const table = (rows, left = 1) => {
         .join('\n');
 };
 
+// run-table columns after `error`: `[header, metric key]`.
+const RUN_COLUMNS = [
+    ['took', 'took'],
+    ['duration', 'duration'],
+    ['billed', 'billed'],
+    ['init', 'init'],
+    ['loadedCore', 'loadedLemonCore'],
+    ['loadedEngine', 'loadedEngine'],
+    ['initialize', 'initialize'],
+    ['handle', 'handle'],
+    ['request', 'request'],
+    ['handler', 'handler'],
+    ['memUsed', 'memUsed'],
+];
+
 // one row per run: phase, http, function error, and the main timings.
 export const formatRuns = (runs = []) => {
-    const head = ['run', 'phase', 'http', 'error', 'took', 'duration', 'billed', 'init'];
-    head.push('initialize', 'handle', 'request', 'handler', 'memUsed');
+    const head = ['run', 'phase', 'http', 'error', ...RUN_COLUMNS.map(([h]) => h)];
     const rows = runs.map((r, i) => [
         `#${i + 1}`,
         isCold(r) ? 'cold' : 'warm',
         r.http ?? 'n/a',
         r.functionError || '-',
-        ...['took', 'duration', 'billed', 'init', 'initialize', 'handle', 'request', 'handler', 'memUsed'].map(k =>
-            cell(metricOf(r, k)),
-        ),
+        ...RUN_COLUMNS.map(([, k]) => cell(metricOf(r, k))),
     ]);
     return table([head, ...rows], 2);
 };
@@ -218,6 +257,14 @@ export const formatSummary = summary => {
     const rows = METRICS.map(key => [key, ...cols(s.cold, key), ...cols(s.warm, key)]);
     const line = `runs=${s.all?.n ?? 0} cold=${s.cold?.n ?? 0} warm=${s.warm?.n ?? 0}`;
     return `${line}\n${table([head, ...rows])}`;
+};
+
+// the `--logs` line under the summary: `logs: complete=<n>/<runs> wait=<median>ms` ('' without `--logs`).
+export const formatLogs = summary => {
+    const l = summary?.logs;
+    if (!l) return '';
+    const wait = cell(l.wait?.median);
+    return `logs: complete=${l.complete}/${summary.all?.n ?? l.n} wait=${wait === 'n/a' ? wait : `${wait}ms`}`;
 };
 
 // exit code: 0 when every run answered http 2xx with no FunctionError, else 1 (also for no runs).

@@ -214,12 +214,18 @@ describe('tables and exit code', () => {
         const text = formatRuns([run(COLD, { took: 1100 }), run(FAIL, { took: 20, http: 404 })]);
         const lines = text.split('\n');
         assert.equal(lines.length, 3);
-        assert.match(lines[0], /^run\s+phase\s+http\s+error\s+took\s+duration/);
+        assert.match(
+            lines[0],
+            /^run\s+phase\s+http\s+error\s+took\s+duration\s+billed\s+init\s+loadedCore\s+loadedEngine\s+initialize\s/,
+        );
         assert.match(
             lines[1],
-            /^#1\s+cold\s+200\s+-\s+1100\s+1037\.05\s+1556\s+518\.53\s+998\.9\s+12\.3\s+4\.2\s+2\.6\s+117$/,
+            /^#1\s+cold\s+200\s+-\s+1100\s+1037\.05\s+1556\s+518\.53\s+420\.5\s+980\.2\s+998\.9\s+12\.3\s+4\.2\s+2\.6\s+117$/,
         );
-        assert.match(lines[2], /^#2\s+warm\s+404\s+-\s+20\s+3\.8\s+4\s+n\/a\s+n\/a\s+2\.5\s+1\.9\s+1\.4\s+118$/);
+        assert.match(
+            lines[2],
+            /^#2\s+warm\s+404\s+-\s+20\s+3\.8\s+4\s+n\/a\s+n\/a\s+n\/a\s+n\/a\s+2\.5\s+1\.9\s+1\.4\s+118$/,
+        );
     });
     test('(c) exitCode: 0 for all 2xx, 1 for a 404, a FunctionError, a missing http, or no runs', () => {
         assert.equal(exitCode([run(COLD, { took: 1 }), run(WARM, { took: 1 })]), 0);
@@ -244,7 +250,7 @@ describe('perf-lambda CLI (offline)', () => {
         assert.equal(r.status, 0, r.stderr);
         assert.match(
             r.stdout.split('\n')[0],
-            /^perf \S+-dev-lambda event=web GET \/hello\/0 runs=3 interval=0ms region=\S+ \(dry\)$/,
+            /^perf \S+-dev-lambda event=web GET \/hello\/0 runs=3 logs=false interval=0ms region=\S+ \(dry\)$/,
         );
         const event = JSON.parse(r.stdout.slice(r.stdout.indexOf('\n') + 1));
         assert.equal(event.path, '/hello/0');

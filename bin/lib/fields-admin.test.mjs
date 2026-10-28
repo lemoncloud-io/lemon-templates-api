@@ -341,6 +341,7 @@ describe('fields-admin --dry and invokeLambda', () => {
                 functionError: undefined,
                 text: '{"statusCode":200}',
                 logResult: 'eA==',
+                requestId: null,
                 took: 0,
             },
         );
