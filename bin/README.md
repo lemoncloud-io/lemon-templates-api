@@ -27,9 +27,10 @@ npm run lambda:invoke -- [options]
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--stage <stage>` | `dev` | Deploy stage. |
+| `--stage <stage>` | `dev` | Deploy stage. Any stage other than `dev` needs `--confirm-stage`. |
+| `--confirm-stage <stage>` | | The same value as the stage. Required for any stage other than `dev`. See [Safety](#safety). |
 | `--function`, `--fn <fn>` | `lambda` | `lambda` or `backend`. |
-| `--name <name>` | | Full function name. Overrides `<service>-<stage>-<fn>`. |
+| `--name <name>` | | Full function name. Overrides `<service>-<stage>-<fn>`. Goes through the stage guard. |
 | `--region <region>` | `AWS_REGION` or `ap-northeast-2` | AWS region. |
 | `--profile <name>` | SDK default chain | Named profile. |
 | `--event <kind>` | `web` | `web`, `cron`, `sns`, `sqs`, or `raw`. |
@@ -41,10 +42,12 @@ npm run lambda:invoke -- [options]
 | `--subject <text>` | `lambda-invoke` | SNS `Subject`. |
 | `--cron-name <name>` | `1MIN` | `cron.name` (cron). |
 | `--file <event.json>` or `--file -` | | Event JSON (raw). `-` reads stdin. |
-| `--dry` | | Print the target and the event JSON. Do not call AWS. |
+| `--dry` | | Print the target and the event JSON. Do not call AWS (no STS call either). Sensitive header values print as `<redacted>`. |
 | `--tail` | | Request the log tail (last 4 KB) and print it after the response. |
 | `--async` | | `InvocationType=Event`. No payload comes back. |
-| `--json` | | Print the raw response payload only. |
+| `--json` | | Print the raw response payload only. String values are redacted; the JSON structure is kept. |
+| `--raw` | | Do not redact the output. Control stripping and the size cap stay. |
+| `--max-bytes <n>` | `65536` | Cap for one printed body or log tail. `0` means no cap. |
 | `--help` | | Show help. |
 
 Web events are API Gateway REST (v1) proxy events.
@@ -76,10 +79,12 @@ npm run lambda:invoke -- --stage dev --profile lemon --fn backend --event sqs --
 npm run lambda:invoke -- --stage dev --profile lemon --event raw --file event.json --dry
 ```
 
+Before the call, one identity line goes to stderr (see [Safety](#safety)).
 Output: a header line `invoke <name> event=<kind> [<METHOD> <path>]`, then `status=<StatusCode> function-error=<FunctionError|none> took=<ms>ms`.
 For web events with a `statusCode` in the payload, it prints `http <statusCode>` and the body (pretty JSON when it parses).
 For other events it prints the payload.
 With `--tail`, the decoded log follows a `--- log tail ---` line.
+Everything printed from AWS is redacted and capped (see [Safety](#safety)).
 
 ## lambda:logs
 
@@ -89,8 +94,8 @@ npm run lambda:logs -- [options]
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--stage`, `--function`/`--fn`, `--name`, `--region`, `--profile` | | Same as `lambda:invoke`. |
-| `--group <log-group>` | `/aws/lambda/<name>` | Log group override. |
+| `--stage`, `--confirm-stage`, `--function`/`--fn`, `--name`, `--region`, `--profile` | | Same as `lambda:invoke`. |
+| `--group <log-group>` | `/aws/lambda/<name>` | Log group override. Goes through the stage guard by the function name in `/aws/lambda/<name>`. |
 | `--since <t>` | `5m` | `30s`, `5m`, `2h`, `1d`, or an ISO date. |
 | `--follow`, `-f` | | Keep polling until Ctrl-C. |
 | `--interval <sec>` | `2` | Poll interval with `--follow`. |
@@ -98,10 +103,13 @@ npm run lambda:logs -- [options]
 | `--grep <regex>` | | Case-insensitive regex on the message (client side). |
 | `--perf` | | Shortcut for `--grep 'PERF:'`. |
 | `--json` | | One JSON object per line: `{ ts, stream, message }`. |
+| `--raw` | | Do not redact messages. Control stripping and the size cap stay. |
+| `--max-bytes <n>` | `65536` | Cap for one message. `0` means no cap. |
 | `--help` | | Show help. |
 
 Each line is `YYYY-MM-DD HH:mm:ss.SSS  <last 8 chars of the stream>  <message>` in local time.
-A header line `logs <group> since=<iso> follow=<bool>` goes to stderr.
+The identity line and a header line `logs <group> since=<iso> follow=<bool>` go to stderr.
+Each message is control-stripped, redacted, and capped (see [Safety](#safety)).
 In follow mode each poll re-scans the last 10 seconds and skips event ids it has already printed, so late events from other streams are not lost.
 
 Examples:
@@ -117,15 +125,34 @@ npm run lambda:logs -- --stage dev --profile lemon --follow --perf
 npm run lambda:logs -- --stage dev --profile lemon --fn backend --since 1h --filter '"ERROR"'
 
 # machine-readable, since a fixed time
-npm run lambda:logs -- --stage prod --profile lemon --since 2026-10-28T09:00:00+09:00 --json
+npm run lambda:logs -- --stage prod --confirm-stage prod --profile lemon --since 2026-10-28T09:00:00+09:00 --json
 ```
+
+## Safety
+
+Both scripts apply these rules.
+
+1. **Strict options.** An option that is not in the table above (and not an alias) stops the run: `ERROR: unknown option --foo (see --help)`, exit 2. An extra positional argument stops it the same way (`unknown argument <arg>`). `--help` still works with any other argument.
+2. **Stage guard.** Only `dev` (the default) runs without confirmation. Any other stage needs `--confirm-stage <stage>` with the exact same value: `ERROR: stage "prod" needs --confirm-stage prod`, exit 2. A `--confirm-stage` that differs from the stage is also an error. `--name` (and `--group /aws/lambda/<name>` for `lambda:logs`) gives the stage when the name has the shape `<service>-<stage>-<fn>`. If the stage cannot be derived (another service, or another log group), the run needs both `--stage <stage>` and `--confirm-stage <stage>`. The guard runs before `--dry`.
+3. **Identity line.** Before any invoke or log fetch, STS `GetCallerIdentity` runs and one line goes to stderr: `account=****<last4> region=<region> credentials=<profile:<name>|env|default-chain> function=<name>`. The account id shows only its last 4 digits. The ARN is never printed. If STS fails, the run prints `ERROR: cannot resolve AWS identity (<error name>)` and exits 1 before Lambda or Logs is called. `--dry` does not call STS.
+4. **Redaction (on by default, `--raw` turns it off).** Everything printed from AWS is redacted: the response body, the `--json` payload, the `--tail` log, log lines, and SDK error messages. For JSON, string values are redacted one by one and the structure is kept. The rules run in this order:
+   - 12-digit account ids → `<acct>`. `arn:aws…` up to a blank or a quote → `<arn>`.
+   - Access key ids `AKIA…` / `ASIA…` → `<aws-key>`.
+   - Values of `authorization`, `x-lemon-identity`, `x-api-key`, `cookie`, `set-cookie` (any case; `key: value`, `"key":"value"`, `key=value`) → `<redacted>`. `Bearer <token>` → `Bearer <redacted>`.
+   - JWT-looking tokens (`eyJ….….…`) → `<jwt>`.
+   - Values of keys whose name contains `secret`, `password`, `passwd`, `token`, `private_key`, `apikey`, `api_key`, or `access_key` (any case) → `<redacted>`.
+   - IPv4 addresses → `<ip>`. URLs keep the scheme and host and lose the path and query: `https://host/<path>`. Emails → `<email>`.
+   The `--tail` log and `lambda:logs` messages are also stripped of ANSI escapes and control characters (tab and newline stay). Stripping is always on, also with `--raw`.
+5. **Size cap.** A printed response body, a log tail, or a single log message longer than 64 KB is cut and ends with `…[truncated N bytes]`. With `--json`, each string value is cut instead, so the JSON stays valid. `--raw` does not lift the cap. `--max-bytes <n>` sets it; `--max-bytes 0` removes it.
+6. **Header echo.** `--dry` prints `<redacted>` for the values of the sensitive headers in rule 4 (`headers` and `multiValueHeaders`). Other headers print as given. The event sent to Lambda keeps the real values.
+7. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/common.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, and 6, and the identity line format. They need no AWS access.
 
 ## Exit codes
 
 | Code | `lambda:invoke` | `lambda:logs` |
 |---|---|---|
 | 0 | `StatusCode` 2xx and no `FunctionError` (also `--dry`, `--help`) | OK (also Ctrl-C in follow mode) |
-| 1 | Non-2xx `StatusCode`, a `FunctionError`, or an AWS error | AWS error |
-| 2 | Bad arguments | Bad arguments, or the log group does not exist |
+| 1 | Non-2xx `StatusCode`, a `FunctionError`, an AWS error, or no AWS identity (STS) | AWS error, or no AWS identity (STS) |
+| 2 | Bad arguments, an unknown option, or the stage guard | Bad arguments, an unknown option, the stage guard, or the log group does not exist |
 
 `lambda:invoke` exit codes reflect the Lambda call only. An `http 4xx/5xx` from the web handler still exits 0; check the printed `http` line.

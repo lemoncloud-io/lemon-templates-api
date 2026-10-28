@@ -7,7 +7,21 @@
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { LambdaClient, InvokeCommand } from '@aws-sdk/client-lambda';
-import { parseArgs, resolveAws, functionName, printHelp, fail, DEFAULT_REGION } from './lib/common.mjs';
+import {
+    parseArgs,
+    resolveAws,
+    functionName,
+    printHelp,
+    fail,
+    checkStage,
+    tryServiceName,
+    parseMaxBytes,
+    outputFilter,
+    maskHeaders,
+    resolveIdentity,
+    HarnessError,
+    DEFAULT_REGION,
+} from './lib/common.mjs';
 
 // help text for `--help`.
 const HELP = [
@@ -18,6 +32,7 @@ const HELP = [
     '',
     'target:',
     '  --stage <stage>         deploy stage (default: dev)',
+    '  --confirm-stage <stage> required for any stage other than dev (same value as the stage)',
     '  --function, --fn <fn>   lambda | backend (default: lambda)',
     '  --name <name>           full function name (overrides <service>-<stage>-<fn>)',
     `  --region <region>       AWS region (default: $AWS_REGION or ${DEFAULT_REGION})`,
@@ -39,13 +54,39 @@ const HELP = [
     '  --tail                  request the last 4 KB of the log and print it',
     '  --async                 InvocationType=Event (no payload returned)',
     '  --json                  print the raw response payload only',
+    '  --raw                   do not redact the output (control stripping and the size cap stay)',
+    '  --max-bytes <n>         cap for one printed body / log (default: 65536; 0 = no cap)',
     '  --help                  show this help',
     '',
     'exit codes: 0 = StatusCode 2xx and no FunctionError, 1 = otherwise, 2 = bad arguments.',
 ];
 
 // flags that never take a value.
-const BOOLEANS = ['dry', 'tail', 'async', 'json', 'help'];
+const BOOLEANS = ['dry', 'tail', 'async', 'json', 'raw', 'help'];
+
+// every accepted option (aliases resolve to these).
+const KNOWN = [
+    'stage',
+    'confirm-stage',
+    'function',
+    'name',
+    'region',
+    'profile',
+    'event',
+    'method',
+    'path',
+    'query',
+    'header',
+    'body',
+    'subject',
+    'cron-name',
+    'file',
+    'max-bytes',
+    ...BOOLEANS,
+];
+
+// output filter for this run (redacting by default until the options are parsed).
+let out = outputFilter();
 
 // read a `@file` reference, or return the literal value.
 const readValue = value => {
@@ -180,48 +221,76 @@ const rawEvent = opts => {
 // event builders by kind.
 const BUILDERS = { web: webEvent, cron: cronEvent, sns: snsEvent, sqs: sqsEvent, raw: rawEvent };
 
+// parse a JSON text, or return undefined.
+const tryJson = text => {
+    try {
+        return JSON.parse(text);
+    } catch {
+        return undefined;
+    }
+};
+
+// print a body: pretty JSON when it parses, else text; redacted, then the printed text is capped once.
+const printBody = body => {
+    const parsed = typeof body === 'string' ? tryJson(body) : undefined;
+    if (parsed !== undefined) return console.log(out.cap(JSON.stringify(out.json(parsed, { cap: false }), null, 2)));
+    console.log(out.text(body ?? ''));
+};
+
 // print the payload; for web responses print `http <code>` and the (pretty) body.
 const printPayload = (kind, text) => {
-    let payload = null;
-    try {
-        payload = text ? JSON.parse(text) : null;
-    } catch {
-        payload = null;
-    }
-    // non-JSON or empty payload: print as is.
-    if (payload === null) return text && console.log(text);
+    const payload = text ? tryJson(text) ?? null : null;
+    // non-JSON or empty payload: print as text.
+    if (payload === null) return text && console.log(out.text(text));
     if (kind === 'web' && payload && typeof payload === 'object' && 'statusCode' in payload) {
         console.log(`http ${payload.statusCode}`);
-        const body = payload.body;
-        try {
-            console.log(JSON.stringify(JSON.parse(body), null, 2));
-        } catch {
-            console.log(body ?? '');
-        }
-        return;
+        return printBody(payload.body);
     }
-    console.log(JSON.stringify(payload, null, 2));
+    console.log(out.cap(JSON.stringify(out.json(payload, { cap: false }), null, 2)));
+};
+
+// print the raw payload for `--json`: string leaves redacted and capped, structure kept.
+const printJson = text => {
+    const payload = tryJson(text);
+    console.log(payload === undefined ? out.text(text) : JSON.stringify(out.json(payload)));
 };
 
 // entry point.
 const main = async () => {
-    const opts = parseArgs(process.argv.slice(2), { booleans: BOOLEANS, aliases: { fn: 'function' } });
+    const opts = parseArgs(process.argv.slice(2), {
+        booleans: BOOLEANS,
+        aliases: { fn: 'function' },
+        known: KNOWN,
+        maxPositional: 0,
+    });
     if (opts.help) return printHelp(HELP);
+    out = outputFilter({ raw: !!opts.raw, maxBytes: parseMaxBytes(opts['max-bytes']) });
     const kind = `${opts.event || 'web'}`;
     if (!BUILDERS[kind]) fail(`--event must be one of ${Object.keys(BUILDERS).join('|')} (got: ${kind})`, 2);
+    // stage guard before anything else touches the target.
+    const hasName = typeof opts.name === 'string' && opts.name;
+    checkStage({
+        stage: opts.stage,
+        confirm: opts['confirm-stage'],
+        name: hasName ? opts.name : undefined,
+        service: hasName ? tryServiceName() : null,
+    });
     const stage = typeof opts.stage === 'string' && opts.stage ? opts.stage : 'dev';
     const aws = resolveAws(opts);
     const name = functionName(opts);
     const event = BUILDERS[kind](opts, stage, aws.region);
     const route = kind === 'web' ? ` ${event.httpMethod} ${event.path}` : '';
 
-    // --dry: show the target and event, never call AWS.
+    // --dry: show the target and event (sensitive headers masked), never call AWS.
     if (opts.dry) {
         console.log(`invoke ${name} event=${kind}${route} region=${aws.region} (dry)`);
-        console.log(JSON.stringify(event, null, 2));
+        console.log(JSON.stringify(maskHeaders(event), null, 2));
         return;
     }
     if (opts.tail && opts.async) console.error('WARN: --tail is ignored with --async');
+
+    // identity banner first; an STS failure stops before Lambda is called.
+    console.error(await resolveIdentity(aws, opts, name));
 
     const client = new LambdaClient(aws);
     const cmd = new InvokeCommand({
@@ -236,21 +305,24 @@ const main = async () => {
     const text = resp.Payload ? new TextDecoder().decode(resp.Payload) : '';
     const ok = resp.StatusCode >= 200 && resp.StatusCode < 300 && !resp.FunctionError;
 
-    // --json: raw payload only.
+    // --json: raw payload only (redacted string values).
     if (opts.json) {
-        if (text) console.log(text);
+        if (text) printJson(text);
     } else {
         console.log(`invoke ${name} event=${kind}${route}`);
         console.log(`status=${resp.StatusCode} function-error=${resp.FunctionError || 'none'} took=${took}ms`);
         printPayload(kind, text);
-        // decoded log tail (base64 in LogResult).
+        // decoded log tail (base64 in LogResult), control-stripped and redacted.
         if (resp.LogResult) {
             console.log('--- log tail ---');
-            console.log(Buffer.from(resp.LogResult, 'base64').toString('utf8').replace(/\n+$/, ''));
+            console.log(out.log(Buffer.from(resp.LogResult, 'base64').toString('utf8').replace(/\n+$/, '')));
         }
     }
     process.exitCode = ok ? 0 : 1;
 };
 
-// run and report SDK errors without a stack trace.
-main().catch(e => fail(`${e.name || 'Error'}: ${e.message}`, 1));
+// run; harness errors keep their exit code, SDK errors are redacted and exit 1 (no stack trace).
+main().catch(e => {
+    if (e instanceof HarnessError) return fail(e.message, e.code);
+    fail(out.log(`${e.name || 'Error'}: ${e.message}`), 1);
+});
