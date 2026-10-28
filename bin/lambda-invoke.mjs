@@ -22,6 +22,7 @@ import {
     HarnessError,
     DEFAULT_REGION,
 } from './lib/common.mjs';
+import { webEvent, readValue, checkWebOptions, eventLabel } from './lib/event.mjs';
 
 // help text for `--help`.
 const HELP = [
@@ -44,6 +45,8 @@ const HELP = [
     '  --path <path>           HTTP path for web (default: /); `?a=1` is moved into the query',
     '  --query k=v             query parameter for web (repeatable)',
     '  --header k:v            header for web (repeatable)',
+    '  --internal              web: no Host header, like a direct invoke (lemon-core treats it as internal)',
+    '  --identity <json>       web: x-lemon-identity header, sent verbatim (honoured on internal calls only)',
     '  --body <json>|@file     body for web, SNS Message, or SQS body',
     '  --subject <text>        SNS Subject (default: lambda-invoke)',
     '  --cron-name <name>      cron.name for cron (default: 1MIN)',
@@ -62,7 +65,7 @@ const HELP = [
 ];
 
 // flags that never take a value.
-const BOOLEANS = ['dry', 'tail', 'async', 'json', 'raw', 'help'];
+const BOOLEANS = ['internal', 'dry', 'tail', 'async', 'json', 'raw', 'help'];
 
 // every accepted option (aliases resolve to these).
 const KNOWN = [
@@ -77,6 +80,7 @@ const KNOWN = [
     'path',
     'query',
     'header',
+    'identity',
     'body',
     'subject',
     'cron-name',
@@ -87,81 +91,6 @@ const KNOWN = [
 
 // output filter for this run (redacting by default until the options are parsed).
 let out = outputFilter();
-
-// read a `@file` reference, or return the literal value.
-const readValue = value => {
-    if (typeof value !== 'string') return null;
-    if (!value.startsWith('@')) return value;
-    try {
-        return readFileSync(value.slice(1), 'utf8').replace(/\s+$/, '');
-    } catch (e) {
-        return fail(`cannot read ${value}: ${e.message}`, 2);
-    }
-};
-
-// split `k<sep>v` pairs into an object of arrays (keeps repeated keys).
-const toMulti = (list, sep) =>
-    [].concat(list || []).reduce((M, item) => {
-        const s = `${item}`;
-        const at = s.indexOf(sep);
-        if (at <= 0) fail(`expected k${sep}v, got: ${s}`, 2);
-        const key = s.slice(0, at).trim();
-        M[key] = [...(M[key] || []), s.slice(at + 1).trim()];
-        return M;
-    }, {});
-
-// collapse multi-value map into single values (last one wins, like API Gateway).
-const toSingle = multi => Object.fromEntries(Object.entries(multi).map(([k, v]) => [k, v[v.length - 1]]));
-
-// derive API Gateway `resource` and `pathParameters` from the path (`/{type}/{id}/{cmd}` routes).
-const toRoute = pathname => {
-    const segs = pathname.split('/').filter(Boolean);
-    if (segs.length < 2) return { resource: segs.length ? `/${segs[0]}` : '/', pathParameters: null };
-    if (segs.length === 2) return { resource: `/${segs[0]}/{id}`, pathParameters: { id: segs[1] } };
-    return { resource: `/${segs[0]}/{id}/{cmd}`, pathParameters: { id: segs[1], cmd: segs.slice(2).join('/') } };
-};
-
-// API Gateway REST (v1) proxy event.
-const webEvent = (opts, stage) => {
-    const method = `${opts.method || 'GET'}`.toUpperCase();
-    const [pathname, qs = ''] = `${opts.path || '/'}`.split('?');
-    // query from `--path ...?a=1` first, then `--query k=v`.
-    const fromPath = qs ? qs.split('&').filter(Boolean) : [];
-    const multiQuery = toMulti([...fromPath.map(decodeURIComponent), ...[].concat(opts.query || [])], '=');
-    const body = readValue(opts.body);
-    // default headers; `Host` marks the request as external like a real API Gateway call.
-    const multiHeaders = {
-        Host: ['localhost'],
-        Accept: ['application/json'],
-        'User-Agent': ['lambda-invoke'],
-        ...(body !== null ? { 'Content-Type': ['application/json'] } : {}),
-        ...toMulti(opts.header, ':'),
-    };
-    const { resource, pathParameters } = toRoute(pathname);
-    const hasQuery = Object.keys(multiQuery).length > 0;
-    return {
-        resource,
-        path: pathname,
-        httpMethod: method,
-        headers: toSingle(multiHeaders),
-        multiValueHeaders: multiHeaders,
-        queryStringParameters: hasQuery ? toSingle(multiQuery) : null,
-        multiValueQueryStringParameters: hasQuery ? multiQuery : null,
-        pathParameters,
-        stageVariables: null,
-        requestContext: {
-            resourcePath: resource,
-            httpMethod: method,
-            path: pathname,
-            stage,
-            requestId: randomUUID(),
-            identity: { sourceIp: '127.0.0.1', userAgent: 'lambda-invoke' },
-            requestTimeEpoch: Date.now(),
-        },
-        body,
-        isBase64Encoded: false,
-    };
-};
 
 // CloudWatch schedule input (same shape as `input:` in serverless.yml).
 const cronEvent = (opts, stage) => ({ cron: { name: opts['cron-name'] || '1MIN', stage } });
@@ -267,6 +196,8 @@ const main = async () => {
     out = outputFilter({ raw: !!opts.raw, maxBytes: parseMaxBytes(opts['max-bytes']) });
     const kind = `${opts.event || 'web'}`;
     if (!BUILDERS[kind]) fail(`--event must be one of ${Object.keys(BUILDERS).join('|')} (got: ${kind})`, 2);
+    // web-only options (`--internal`, `--identity`): errors exit 2, warnings go to stderr.
+    for (const w of checkWebOptions(kind, opts)) console.error(w);
     // stage guard before anything else touches the target.
     const hasName = typeof opts.name === 'string' && opts.name;
     checkStage({
@@ -280,10 +211,11 @@ const main = async () => {
     const name = functionName(opts);
     const event = BUILDERS[kind](opts, stage, aws.region);
     const route = kind === 'web' ? ` ${event.httpMethod} ${event.path}` : '';
+    const label = eventLabel(kind, opts);
 
     // --dry: show the target and event (sensitive headers masked), never call AWS.
     if (opts.dry) {
-        console.log(`invoke ${name} event=${kind}${route} region=${aws.region} (dry)`);
+        console.log(`invoke ${name} event=${label}${route} region=${aws.region} (dry)`);
         console.log(JSON.stringify(maskHeaders(event), null, 2));
         return;
     }
@@ -309,7 +241,7 @@ const main = async () => {
     if (opts.json) {
         if (text) printJson(text);
     } else {
-        console.log(`invoke ${name} event=${kind}${route}`);
+        console.log(`invoke ${name} event=${label}${route}`);
         console.log(`status=${resp.StatusCode} function-error=${resp.FunctionError || 'none'} took=${took}ms`);
         printPayload(kind, text);
         // decoded log tail (base64 in LogResult), control-stripped and redacted.
