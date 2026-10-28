@@ -14,7 +14,7 @@
 /** ********************************************************************************************************************
  *  start initializing `lemon-core` with global `process.env`
  ** ********************************************************************************************************************/
-import $engine from 'lemon-core';
+import $engine, { _inf, $U } from 'lemon-core';
 
 //! extract core handlers.
 const $lambda = $engine.cores.lambda;
@@ -51,3 +51,6 @@ const lambda = async (e: any, c: any) => {
     return $lambda.lambda.handle(e, c);
 };
 export default { $engine, lambda };
+
+//* PERF: process time when this engine module (lemon-core + all controllers) has loaded; silent with `LS=1`.
+_inf($U.NS('PERF', 'cyan'), '>', 'loaded engine', `${(process.uptime() * 1000).toFixed(1)} ms`);
