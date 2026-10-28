@@ -36,6 +36,9 @@
     "logs": "sls logs --stage prod -t --startTime 5m -f hello",
     "logs.lemon": "sls logs --param='profile=lemon' --stage dev -t --startTime 5m -f lambda",
     "logs.lemon.prod": "sls logs --param='profile=lemon' --stage prod -t --startTime 5m -f lambda",
+    "!lambda": "------- invoke the deployed lambda / watch its logs (bin/) -----",
+    "lambda:invoke": "node bin/lambda-invoke.mjs",
+    "lambda:logs": "node bin/lambda-logs.mjs",
     "!remove": "----- sls remove by profile -----",
     "remove": "sls remove --stage prod",
     "remove.lemon": "sls remove --param='profile=lemon' --stage dev",
@@ -66,6 +69,7 @@
     "lemon-model": "^5.0.0"
   },
   "devDependencies": {
+    "@aws-sdk/client-cloudwatch-logs": "^3.971.0",
     "@cruglobal/serverless-merge-config": "^1.1.0",
     "@types/cors": "^2.8.7",
     "@types/jest": "^27.5.0",
