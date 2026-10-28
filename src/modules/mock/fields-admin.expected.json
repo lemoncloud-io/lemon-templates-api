@@ -1,0 +1,7 @@
+{
+    "type": "mocks",
+    "model": "mock",
+    "source": "list",
+    "counts": { "core": 16, "fields": 16, "extra": 2 },
+    "extra": ["name", "aliasId"]
+}

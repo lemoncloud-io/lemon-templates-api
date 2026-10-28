@@ -33,3 +33,14 @@ $ npm run test:watch /backend- /transformer. /mock/
 - `src/modules/mock/proxy.spec.ts`
 - `src/generated/field-registry.ts` (`npm run fields:gen`)
 - `docs/proxy-implementation-guide.md`
+
+## fields/admin 점검
+
+`GET /mocks/fields/admin`(lemon-core v5)의 기대값은 `fields-admin.expected.json` 하나에 둔다.
+세 환경이 이 파일과 lemon-core의 `checkFieldsAdmin()`으로 같은 점검을 한다.
+
+- jest: `fields-admin.spec.ts` (supertest로 `app`에 요청, `LOCAL_MODE=1`이면 200, 아니면 403)
+- 로컬 express 서버: `npm run fields:admin -- --target express`
+- 배포된 Lambda: `npm run fields:admin -- --target lambda --stage dev` (IAM 자격으로 직접 invoke, 외부 경로는 403인지도 확인)
+
+모델 필드가 바뀌면 이 파일의 `counts`·`extra`를 함께 고친다. 자세한 옵션은 `bin/README.md`의 `fields:admin` 절을 본다.
