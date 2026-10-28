@@ -38,6 +38,8 @@ npm run lambda:invoke -- [options]
 | `--path <path>` | `/` | HTTP path (web). A `?a=1` part goes into the query. |
 | `--query k=v` | | Query parameter (web). Repeatable. |
 | `--header k:v` | | Header (web). Repeatable. |
+| `--internal` | | Web only. Send no `Host` header (removed from `headers` and `multiValueHeaders`, also one given by `--header`) and no `requestContext.domainName`, like a direct `lambda:Invoke`. lemon-core then treats the call as internal. The banner shows `event=web(internal)`. With any other `--event`: exit 2. |
+| `--identity <json>` | | Web only. Sets the `x-lemon-identity` header to the JSON text as given (wins over `--header x-lemon-identity:…`). lemon-core reads it on internal calls only, so without `--internal` a warning goes to stderr. Invalid JSON or another `--event`: exit 2. `--dry` prints it as `<redacted>`. |
 | `--body <json>` or `--body @file.json` | | Body (web), SNS `Message`, or SQS `body`. SNS/SQS default to `{}`. |
 | `--subject <text>` | `lambda-invoke` | SNS `Subject`. |
 | `--cron-name <name>` | `1MIN` | `cron.name` (cron). |
@@ -54,7 +56,7 @@ Web events are API Gateway REST (v1) proxy events.
 `resource` and `pathParameters` follow the `/{type}/{id}/{cmd}` routes of `serverless.yml`:
 `/hello/0` becomes `resource=/hello/{id}`, `pathParameters={ id: '0' }`.
 Default headers are `Host: localhost`, `Accept: application/json`, `User-Agent: lambda-invoke`, and `Content-Type: application/json` when a body is given.
-The `Host` header makes the call look like an external API Gateway request.
+The `Host` header makes the call look like an external API Gateway request; `--internal` removes it.
 `--header` overrides any default.
 
 Examples:
@@ -62,6 +64,9 @@ Examples:
 ```sh
 # web GET /hello/0 with the log tail
 npm run lambda:invoke -- --stage dev --profile lemon --path /hello/0 --tail
+
+# internal web call (no Host header), e.g. the lemon-core admin command `GET /<type>/fields/admin`
+npm run lambda:invoke -- --stage dev --internal --path /mocks/fields/admin
 
 # web POST with a JSON body, a query and a header
 npm run lambda:invoke -- --stage dev --profile lemon --method POST --path /hello/0 --body '{"x":1}' --query a=1 --header x-test:1
@@ -80,7 +85,7 @@ npm run lambda:invoke -- --stage dev --profile lemon --event raw --file event.js
 ```
 
 Before the call, one identity line goes to stderr (see [Safety](#safety)).
-Output: a header line `invoke <name> event=<kind> [<METHOD> <path>]`, then `status=<StatusCode> function-error=<FunctionError|none> took=<ms>ms`.
+Output: a header line `invoke <name> event=<kind> [<METHOD> <path>]` (`event=web(internal)` with `--internal`), then `status=<StatusCode> function-error=<FunctionError|none> took=<ms>ms`.
 For web events with a `statusCode` in the payload, it prints `http <statusCode>` and the body (pretty JSON when it parses).
 For other events it prints the payload.
 With `--tail`, the decoded log follows a `--- log tail ---` line.
@@ -144,8 +149,9 @@ Both scripts apply these rules.
    - IPv4 addresses → `<ip>`. URLs keep the scheme and host and lose the path and query: `https://host/<path>`. Emails → `<email>`.
    The `--tail` log and `lambda:logs` messages are also stripped of ANSI escapes and control characters (tab and newline stay). Stripping is always on, also with `--raw`.
 5. **Size cap.** A printed response body, a log tail, or a single log message longer than 64 KB is cut and ends with `…[truncated N bytes]`. With `--json`, each string value is cut instead, so the JSON stays valid. `--raw` does not lift the cap. `--max-bytes <n>` sets it; `--max-bytes 0` removes it.
-6. **Header echo.** `--dry` prints `<redacted>` for the values of the sensitive headers in rule 4 (`headers` and `multiValueHeaders`). Other headers print as given. The event sent to Lambda keeps the real values.
-7. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/common.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, and 6, and the identity line format. They need no AWS access.
+6. **Header echo.** `--dry` prints `<redacted>` for the values of the sensitive headers in rule 4 (`headers` and `multiValueHeaders`). Other headers print as given. The event sent to Lambda keeps the real values. This covers `--identity` (`x-lemon-identity`).
+7. **Internal events.** `--internal` only changes the shape of the web event (no `Host` header). It does not bypass the stage guard or the identity line.
+8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/common.test.mjs` and `bin/lib/event.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, and the web event builder (`--internal`, `--identity`). They need no AWS access; the `event` tests run `lambda-invoke.mjs --dry` only.
 
 ## Exit codes
 
