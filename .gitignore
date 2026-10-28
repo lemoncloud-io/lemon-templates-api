@@ -71,3 +71,6 @@ typings/
 
 # JetBrains IDE project directory
 .idea/
+
+# git worktrees of this repo (agent lanes)
+.wt/
