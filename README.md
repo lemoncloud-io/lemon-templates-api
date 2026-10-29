@@ -23,15 +23,16 @@ lemoncloud 백엔드 마이크로서비스(`<code>-<service>-api`)의 템플릿 
 |---|---|---|
 | `handler.js` | Lambda 진입점. `dist/index`의 `engine()`을 export 한다. | 거의 안 고침 |
 | `src/index.ts` | `engine()`·`express()` 로더. 직접 실행하면 express 서버를 띄운다. | 거의 안 고침 |
-| `src/engine.ts` | lemon-core 엔진. 웹 컨트롤러와 cron 리스너를 등록한다. | 기능 추가 시 |
+| `src/engine.ts` | lemon-core 엔진. 웹 컨트롤러, cron 리스너, SNS·SQS 루프 테스트 리스너를 등록한다. | 기능 추가 시 |
 | `src/express.ts` | 로컬 express 서버. `POST /echo`를 더한다. | 거의 안 고침 |
 | `src/api/` | 모델 없는 컨트롤러(`hello-api.ts`, `crons-api.ts`)와 cron 목록(`cron-jobs.ts`) | 개발자 |
 | `src/modules/<name>/` | 모델 있는 기능 모듈. `mock`(골든 샘플), `callback`, `search` | 개발자 |
+| `src/modules/callback/loop.ts` | 루프 테스트(SNS·SQS·protocol). 라우트는 `api-callback.ts`의 `doPostLoop()`·`doPostLoopRecv()`다. | 개발자 |
 | `src/service/` | `BackendService`·`BackendProxy`·`ModelType` 등 모듈 연결 지점 | 기능 추가 시 |
 | `src/view/` | 외부 공개 타입(`types.ts`)과 transformer 묶음 | 기능 추가 시 |
 | `src/test-helpers/` | 테스트용 컨텍스트 샘플(`loadSample`) | 개발자 |
 | `src/generated/field-registry.ts` | 필드 레지스트리. `lemon-fields gen`(lemon-devkit)이 만든다. | **손으로 고치지 않음** |
-| `bin/` | 배포된 Lambda 호출·로그·성능·`fields/admin` 점검 스크립트 | 개발자 |
+| `bin/` | 배포된 Lambda 호출·로그·성능·`fields/admin`·루프 테스트 점검 스크립트 | 개발자 |
 | `data/` | 더미 데이터(`dummy-data.yml` 등)와 배치 샘플(`batch/`). Lambda 패키지에 들어간다. | 개발자 |
 | `sample/` | 컨텍스트·응답 예시 JSON | 참고용 |
 | `swagger/documentation.yml` | `serverless-aws-documentation` 설정 | 개발자 |
@@ -58,7 +59,8 @@ flowchart LR
     LC -- "sns/sqs, Subject x-protocol-service" --> WEB
     LC -- "cron" --> CRON["$cron 리스너: crons.handleEvent"]
     CRON --> JOBS["src/api/cron-jobs.ts CRON_JOBS"]
-    LC -- "그 밖의 sns/sqs, dynamo stream" --> NONE["앱 리스너 미등록"]
+    LC -- "그 밖의 sns/sqs" --> LOOP["$sns/$sqs 리스너: callback/loop.ts onLoopMessage"]
+    LC -- "dynamo stream" --> NONE["앱 리스너 미등록"]
     LOCAL["로컬 express :8800"] --> EXP["src/express.ts buildExpress"]
     EXP --> WEB
     WEB --> API["src/api: hello, crons"]
@@ -66,7 +68,18 @@ flowchart LR
 ```
 
 - 두 함수 모두 같은 `handler.lambda`를 쓴다. 함수별 이벤트는 `serverless.yml` `functions:`에 있다.
-- `src/engine.ts`는 웹 컨트롤러 6개와 cron 리스너 1개만 등록한다. SNS·SQS·DynamoDB stream 리스너는 없다.
+- `src/engine.ts`는 웹 컨트롤러 6개, cron 리스너 1개, SNS·SQS 리스너 각 1개를 등록한다. DynamoDB stream 리스너는 없다.
+- SNS·SQS 리스너는 루프 테스트 전용이다. 제목 `x-loop-test` 메시지만 처리한다. 다른 메시지는 무시한다.
+- 루프 테스트는 callback 모듈에 있다. 트리거는 `POST /callback/<kind>/loop`(admin만)다. `kind`는 `sns`·`sqs`·`protocol`이다.
+- protocol 루프의 수신부는 `POST /callback/<loopId>/loop-recv`다. `//self`는 `lambda` 함수다.
+- 루프 테스트 수신부는 로그만 남긴다. 재발신하지 않는다. 가드는 다음과 같다.
+  1. 수신부 3곳은 로그만 남기고 돌아간다.
+  2. 트리거는 protocol 경유 재진입을 거부한다(`400 INVALID LOOP - nested trigger`).
+  3. `hop`은 1만 받는다. 수신부는 `hop`을 올려 다시 보내지 않는다.
+  4. SNS·SQS 리스너는 throw 하지 않는다.
+  5. 오류 보고는 `REPORT_ERROR_ARN` 토픽으로 간다. `backend`가 구독한 토픽이 아니다.
+  6. 앱 코드에 cron·재시도 루프가 없다. `loop:check`는 kind마다 한 번만 호출한다.
+- 자세한 내용: [bin/README.md](bin/README.md#loopcheck), [src/modules/callback/README.md](src/modules/callback/README.md)
 - 일반 라우트 `/{type}/{id}/{cmd}`에는 `authorizer: aws_iam`이 붙는다. `/`·`/hello`·`/mocks` 명시 라우트에는 없다.
 
 ## 기능을 어디에 넣나
@@ -108,6 +121,7 @@ flowchart LR
 | `npm run lambda:logs -- ...` | CloudWatch 로그 조회·추적 | [bin/README.md](bin/README.md#lambdalogs) |
 | `npm run perf:lambda -- ...` | 반복 호출, cold/warm 시간 요약 | [bin/README.md](bin/README.md#perflambda) |
 | `npm run fields:admin -- --target express\|lambda` | `GET /<type>/fields/admin` 점검 | [bin/README.md](bin/README.md#fieldsadmin) |
+| `npm run loop:check -- ...` | SNS·SQS·protocol 루프 테스트를 로그 줄로 점검 | [bin/README.md](bin/README.md#loopcheck) |
 
 **사람만 실행** — 에이전트는 사람이 명시적으로 시킬 때만 돌린다.
 
@@ -143,6 +157,15 @@ npm run lambda:test     # bin/ 을 바꿨을 때. 기대: fail 0
 npm run fields:admin -- --target lambda --stage dev   # 기대: ok=true, gate=closed(403), exit 0
 npm run lambda:invoke -- --stage dev --path /hello/0  # 기대: function-error=none, http 200
 npm run lambda:logs -- --stage dev --since 5m         # 오류 줄 확인
+npm run loop:check -- --stage dev                     # 기대: 세 줄 모두 send=ok recv=ok, exit 0
+```
+
+- `loop:check`는 kind마다 `lambda`를 한 번 호출한다. 그 뒤 `[LOOP] recv` 줄을 로그에서 찾는다. 기본 대기는 60초다.
+- 같은 점검을 손으로 하려면 먼저 트리거를 호출한다. 응답의 `loopId`를 적는다.
+
+```sh
+npm run lambda:invoke -- --stage dev --internal --identity '{"roles":["admin"]}' --method POST --path /callback/sns/loop
+npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'   # protocol은 --fn lambda
 ```
 
 - `lambda:invoke`는 `http 4xx/5xx`여도 exit 0이다. 출력의 `http` 줄을 본다.
@@ -174,9 +197,9 @@ npm run lambda:logs -- --stage dev --since 5m         # 오류 줄 확인
 
 | 문서 | 내용 |
 |---|---|
-| [bin/README.md](bin/README.md) | `lambda:invoke`·`lambda:logs`·`perf:lambda`·`fields:admin` 옵션, 자격 증명, 안전 규칙, exit code |
+| [bin/README.md](bin/README.md) | `lambda:invoke`·`lambda:logs`·`perf:lambda`·`fields:admin`·`loop:check` 옵션, 자격 증명, 안전 규칙, exit code |
 | [src/modules/mock/README.md](src/modules/mock/README.md) | `TestModel` 골든 계약, 함께 고칠 파일, `fields/admin` 점검 |
-| [src/modules/callback/README.md](src/modules/callback/README.md) | callback 모듈 설계 개념 |
+| [src/modules/callback/README.md](src/modules/callback/README.md) | callback 모듈 설계 개념, 루프 테스트 라우트와 가드 |
 | [docs/proxy-implementation-guide.md](docs/proxy-implementation-guide.md) | `BackendProxy`·`ManagerProxy`·`guardProxy()`와 use-case 구현 가이드 (lemon-devkit 관리) |
 | [docs/dependency-audit.md](docs/dependency-audit.md) | 운영 의존성 `npm audit` 점검 기록 |
 | [HOW_TO_UPGRADE_V4.md](HOW_TO_UPGRADE_V4.md) | lemon-core v3 → v4 업그레이드 가이드 (과거 기록) |
