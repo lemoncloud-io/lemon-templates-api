@@ -20,6 +20,7 @@ Summarized specifications to design modeling
 
 | Version   | Description
 |--         |--
+| 5.26.xxx  | optimized `lemon-core@5.0.3` since 2026.
 | 0.25.808  | optimized `lemon-core@4.0.6` initially.
 
 <!-- lemon-devkit:proxy-doc:start -->
