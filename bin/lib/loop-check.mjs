@@ -6,6 +6,8 @@
  *   - `protocol`: send and recv both in the `lambda` log group (`//self` is the `lambda` function).
  *   - `notify`, `enqueue`: protocol service over SNS / SQS; send in `lambda`, recv (`loop-recv`) in `backend`.
  * - exactly one invoke per kind, no retry; the log poll stops at `--timeout`.
+ * - lemon-core B13 trace: each `[LOOP]` line ends with ` tid=<tid> hop=<hop>`. per kind it prints the send `tid`;
+ *   for `protocol`, `notify`, `enqueue` (relay hops) the recv line must carry the same `tid` (else exit 1).
  * - `--target express`: the same trigger on a local express server run with lemon-core's local transport
  *   (`npm run express.lemon`, `LOCAL_TRANSPORT=mock`): `POST /callback/<kind>/loop`, and the answer must hold
  *   `mock: true` and `recv` with the same loop id (no AWS, no log poll).
@@ -30,6 +32,9 @@ import { webEvent } from './event.mjs';
 
 // every loop kind, in the order of `--kind all`.
 export const KINDS = ['sns', 'sqs', 'protocol', 'notify', 'enqueue'];
+
+// kinds that cross a protocol hop (lemon-core relay): the recv line carries the send `tid`.
+export const TRACE_KINDS = ['protocol', 'notify', 'enqueue'];
 
 // identity of the admin trigger (lemon-core reads it on internal calls only).
 // lemon-core accepts a JSON identity only with a non-empty `sid` (else the identity is dropped → 403).
@@ -59,6 +64,8 @@ export const HELP = [
     'per kind: one internal admin invoke of `lambda` (POST /callback/<kind>/loop), then a poll of the log lines',
     '  sns, sqs, notify, enqueue:  [LOOP] send in the lambda log group, [LOOP] recv in the backend log group',
     '  protocol:                   [LOOP] send and [LOOP] recv both in the lambda log group',
+    '  tid:                        the send line tid is printed; protocol, notify, enqueue: the recv line',
+    '                              must carry the same tid (lemon-core relay trace)',
     '',
     'options:',
     '  --target <t>            lambda | express (default: lambda)',
@@ -79,7 +86,8 @@ export const HELP = [
     '  per kind: one POST /callback/<kind>/loop; the answer must be http 200 with mock: true and',
     '  recv holding the same loopId exactly once (no AWS call, no log poll)',
     '',
-    'exit codes: 0 = every kind received; 1 = any missing, timeout, non-200, or AWS error; 2 = bad arguments.',
+    'exit codes: 0 = every kind received; 1 = any missing, timeout, non-200, tid mismatch, or AWS error;',
+    '            2 = bad arguments.',
 ];
 
 // flags that never take a value.
@@ -215,20 +223,33 @@ export const checkAnswer = (kind, body) => {
 // escape a literal for use inside a RegExp.
 const escapeRe = s => `${s}`.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
-// find the send / recv lines of one loop in log events → `{ send, recv, latency }`.
+// the ` tid=<tid>` of a loop line (a safe id only: word, dot, colon, dash; max 128), or null.
+const TID_RE = / tid=([\w.:-]{1,128})(?=\s|$)/;
+
+// the tid of a loop line, or null (none, or not a safe id).
+export const tidOf = text => {
+    const m = `${text ?? ''}`.match(TID_RE);
+    return m ? m[1] : null;
+};
+
+// find the send / recv lines of one loop in log events → `{ send, recv, latency, sendTid, recvTid }`.
 export const findLines = (events, kind, loopId) => {
     const id = escapeRe(loopId);
     const sendRe = new RegExp(`\\[LOOP\\] send kind=${kind} loop=${id} message=`);
     const recvRe = new RegExp(`\\[LOOP\\] recv kind=${kind} loop=${id} latency=(\\d+)ms`);
-    const found = { send: false, recv: false, latency: null };
+    const found = { send: false, recv: false, latency: null, sendTid: null, recvTid: null };
     // ANSI color codes of the lemon-core logger are stripped first.
     for (const ev of events || []) {
         const text = stripControl(ev?.message ?? '');
-        if (sendRe.test(text)) found.send = true;
+        if (sendRe.test(text)) {
+            found.send = true;
+            found.sendTid = tidOf(text);
+        }
         const m = text.match(recvRe);
         if (m) {
             found.recv = true;
             found.latency = Number(m[1]);
+            found.recvTid = tidOf(text);
         }
     }
     return found;
@@ -256,7 +277,7 @@ export const waitForLines = async (
     },
 ) => {
     const t0 = now();
-    const state = { send: false, recv: false, latency: null };
+    const state = { send: false, recv: false, latency: null, sendTid: null, recvTid: null };
     const filterPattern = `"${loopId}"`;
     // one query of a group (a missing group is empty).
     const query = group =>
@@ -271,8 +292,10 @@ export const waitForLines = async (
         const need = [...new Set([!state.send && groups.send, !state.recv && groups.recv].filter(Boolean))];
         for (const group of need) {
             const got = findLines(await query(group), kind, loopId);
-            if (group === groups.send && got.send) state.send = true;
-            if (group === groups.recv && got.recv) Object.assign(state, { recv: true, latency: got.latency });
+            if (group === groups.send && got.send) Object.assign(state, { send: true, sendTid: got.sendTid });
+            if (group === groups.recv && got.recv) {
+                Object.assign(state, { recv: true, latency: got.latency, recvTid: got.recvTid });
+            }
         }
         if (state.send && state.recv) return { ...state, timedOut: false, polls };
         // the hard timeout: stop when the next poll would pass it.
@@ -281,11 +304,29 @@ export const waitForLines = async (
     }
 };
 
+// the tid issues of one kind (relay kinds only, both lines seen): a tid on each line, and the same tid.
+export const tidIssues = (kind, seen) => {
+    if (!TRACE_KINDS.includes(kind) || !seen.send || !seen.recv) return [];
+    if (!seen.sendTid) return ['no tid on the [LOOP] send line'];
+    if (!seen.recvTid) return ['no tid on the [LOOP] recv line'];
+    return seen.sendTid === seen.recvTid ? [] : [`tid mismatch: send=${seen.sendTid} recv=${seen.recvTid}`];
+};
+
 // check one kind: one invoke, then the log poll → result record.
 export const checkKind = async (kind, { stage, names, timeoutMs, invoke, fetch, sleep, now, intervalMs }) => {
     const clock = now || Date.now;
     const startTime = clock() - LOOKBACK_MS;
-    const base = { kind, loopId: null, messageId: null, http: null, send: false, recv: false, latency: null };
+    const base = {
+        kind,
+        loopId: null,
+        messageId: null,
+        http: null,
+        send: false,
+        recv: false,
+        latency: null,
+        tid: null,
+        recvTid: null,
+    };
     // exactly one invoke per kind (never retried).
     const res = readResponse(await invoke(triggerEvent(kind, stage)));
     if (res.issue) return { ...base, http: res.http, issues: [res.issue] };
@@ -299,7 +340,9 @@ export const checkKind = async (kind, { stage, names, timeoutMs, invoke, fetch, 
     if (!seen.send) issues.push(`no [LOOP] send line in ${groups.send}`);
     if (!seen.recv) issues.push(`no [LOOP] recv line in ${groups.recv}`);
     if (seen.timedOut) issues.push(`timeout after ${timeoutMs}ms`);
-    return { ...record, send: seen.send, recv: seen.recv, latency: seen.latency, issues };
+    issues.push(...tidIssues(kind, seen));
+    const tids = { tid: seen.sendTid, recvTid: seen.recvTid };
+    return { ...record, send: seen.send, recv: seen.recv, latency: seen.latency, ...tids, issues };
 };
 
 // check one kind on the local express server: one POST, then the answer (`mock: true`, `recv` with the loop id).
@@ -342,10 +385,20 @@ export const checkExpressKind = async (kind, { base, fetchFn }) => {
     };
 };
 
-// one result line: `loop kind=<k> loop=<id> send=<ok|missing> recv=<ok|missing> latency=<ms|->`.
+// the trace tail of a lambda result: ` tid=<send tid|->`, and for the relay kinds ` recv-tid=<same|differs|missing>`.
+// an express result has no `tid` key → ''.
+const traceTail = r => {
+    if (!('tid' in r)) return '';
+    const head = ` tid=${r.tid || '-'}`;
+    if (!TRACE_KINDS.includes(r.kind)) return head;
+    const same = !r.recvTid ? 'missing' : r.recvTid === r.tid ? 'same' : 'differs';
+    return `${head} recv-tid=${same}`;
+};
+
+// one result line: `loop kind=<k> loop=<id> send=<ok|missing> recv=<ok|missing> latency=<ms|->` (+ the trace tail).
 export const resultLine = r =>
     `loop kind=${r.kind} loop=${r.loopId || '-'} send=${r.send ? 'ok' : 'missing'} recv=${r.recv ? 'ok' : 'missing'}` +
-    ` latency=${r.latency === null || r.latency === undefined ? '-' : r.latency}`;
+    ` latency=${r.latency === null || r.latency === undefined ? '-' : r.latency}${traceTail(r)}`;
 
 // a kind passes with no issue and both lines seen.
 export const passed = r => r.send && r.recv && r.issues.length === 0;

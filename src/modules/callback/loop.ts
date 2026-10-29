@@ -11,12 +11,16 @@
  * - infinite-loop guards: receivers only log and return (never send), a nested trigger is refused,
  *   `hop` must be exactly 1 (never forwarded), no callback on notify/enqueue, and the SNS/SQS listener and
  *   the protocol receiver (via the protocol channel) never throw (no retry, no redrive).
+ * - lemon-core B13: a protocol hop carries the relay (identity summary + trace), not the caller context.
+ *   the receiver context has `channel` and `trace { tid, hop }`; `trace.hop > 0` marks a protocol re-entry.
+ *   the `send`/`recv`/`done` lines carry ` tid=<trace.tid> hop=<trace.hop>`, so one `tid` joins send and recv.
  *
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2026-10-30 initial version (SNS/SQS/protocol loop test).
  * @date        2026-10-30 add `notify` and `enqueue` (protocol service over SNS/SQS).
  * @date        2026-10-30 local transport (`LOCAL_TRANSPORT=mock`): keep each receiver result for `doPostLoop()`.
+ * @date        2026-10-30 lemon-core B13: nested trigger by `trace.hop`, ` tid=… hop=…` on the loop lines.
  *
  * @copyright   (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
@@ -208,14 +212,49 @@ export const sourcePath = (source: any): string => {
     return (m && m[1]) || '';
 };
 
+//* max length of a `tid` in a log line.
+const MAX_TID = 128;
+
+/**
+ * the trace of a context as lemon-core's relay carries it to the next hop (B13 `buildRelay()`).
+ * - `tid` = `trace.tid`, else `requestId`, else '' (none). `hop` = `trace.hop` (an integer >= 0), else 0.
+ * - a hand-raised `depth` is not read: the relay never carries it.
+ */
+export const traceOf = (context: NextContext): { tid: string; hop: number } => {
+    const trace = context?.trace;
+    const hop = Number.isInteger(trace?.hop) && trace.hop >= 0 ? trace.hop : 0;
+    //* the first non-empty string of `trace.tid` and `requestId`.
+    const tid = [trace?.tid, context?.requestId].find(v => typeof v === 'string' && v) ?? '';
+    return { tid, hop };
+};
+
+/**
+ * the log tail of a context: ` tid=<tid|-> hop=<hop>` (the tid has no whitespace and is cut at 128 chars).
+ */
+export const traceTag = (context: NextContext): string => {
+    const { tid, hop } = traceOf(context);
+    const safe = tid.replace(/\s/g, '_').substring(0, MAX_TID) || '-';
+    return ` tid=${safe} hop=${hop}`;
+};
+
+/**
+ * true if the context came through the protocol channel (lemon-core B13): `trace.hop > 0` and not external.
+ * - lemon-core sets `trace.hop` from the relay only (web `x-lemon-relay`, SNS/SQS `relay`); an external request
+ *   (`channel: 'external'`) ignores the relay, so its hop is 0. `external` is checked too, as a second fence.
+ * - a direct invoke (`internal`, hop 0) and a local request (`local`, hop 0) are not via the protocol channel.
+ */
+export const isViaProtocol = (context: NextContext): boolean =>
+    context?.channel !== 'external' && traceOf(context).hop > 0;
+
 /**
  * true if this trigger request did not come straight from a client (re-entry through the protocol channel).
- * - `depth > 0`: lemon-core raises `context.depth` per protocol hop, and our protocol send raises it too.
- * - a protocol call carries the caller's context, so its `source` path is the caller's route, not this one.
+ * - `trace.hop > 0`: a relay hop (web, SNS, SQS). lemon-core counts the hop; nobody raises it by hand.
+ * - else a `source` path of another route: a legacy `x-protocol-context` call (v4 caller, accepted by
+ *   `PROTOCOL_LEGACY_ACCEPT`) arrives with hop 0 and the caller's `source`, so the hop alone misses it.
  *   (lemon-core sets `source` to this request's own `/<type>/<id>/<cmd>` for a direct request.)
  */
 export const isNestedTrigger = (context: NextContext, type: string, id: string): boolean => {
-    if ($U.N(context?.depth, 0) > 0) return true;
+    if (traceOf(context).hop > 0) return true;
     const path = sourcePath(context?.source);
     return !!path && path !== `/${type}/${encodeURIComponent(id)}/${LOOP_CMD}`;
 };
@@ -274,11 +313,18 @@ export const onLoopMessage = (type: string, param: any, body: any): string => {
  * - `body.loop` is the kind that delivered it: `protocol` (execute), `notify` (SNS), or `enqueue` (SQS).
  * - never throws: a bad message (loop, loop id, sent time, `hop !== 1`) or any error logs `[LOOP] bad` and returns ''.
  *
- * @param loopId the loop id (path id)
- * @param body   the payload `{ loop, loopId, sentAt, hop }`
+ * - the recv line ends with ` tid=<trace.tid> hop=<trace.hop>` of the receiver context (the body hop is always 1).
+ *
+ * @param loopId  the loop id (path id)
+ * @param body    the payload `{ loop, loopId, sentAt, hop }`
+ * @param context (optional) the receiver context (for `tid` and `hop`)
  * @returns `{ loopId, recvAt, hop }` on success, else ''
  */
-export const onLoopRecv = (loopId: string, body: any): { loopId: string; recvAt: number; hop: number } | '' => {
+export const onLoopRecv = (
+    loopId: string,
+    body: any,
+    context?: NextContext,
+): { loopId: string; recvAt: number; hop: number } | '' => {
     const kind = loopKindOf(body);
     try {
         const reason = isProtocolKind(body?.loop) ? badReason(body, loopId) : 'loop';
@@ -287,7 +333,8 @@ export const onLoopRecv = (loopId: string, body: any): { loopId: string; recvAt:
             return '';
         }
         const recvAt = Date.now();
-        loopLog.inf(`[LOOP] recv kind=${kind} loop=${loopId} latency=${recvAt - body.sentAt}ms hop=${body.hop}`);
+        const latency = recvAt - body.sentAt;
+        loopLog.inf(`[LOOP] recv kind=${kind} loop=${loopId} latency=${latency}ms${traceTag(context)}`);
         localRecv.add({ kind, loopId, recvAt, hop: body.hop });
         return { loopId, recvAt, hop: body.hop };
     } catch (e) {

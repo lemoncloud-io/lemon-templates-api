@@ -9,6 +9,7 @@
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2026-10-30 initial version.
+ * @date        2026-10-30 lemon-core B13: one `tid` from send to recv (relay, hop 1); no `x-protocol-context` sent.
  *
  * @copyright   (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
@@ -29,6 +30,7 @@ const ENV: { [key: string]: string | undefined } = {
     REPORT_ERROR_ARN: '',
     MY_SNS_ENDPOINT: 'arn:aws:sns:ap-northeast-2:000000000000:loop-mock-sns',
     MY_SQS_ENDPOINT: 'https://sqs.ap-northeast-2.amazonaws.com/000000000000/loop-mock-sqs',
+    PROTOCOL_LEGACY_CONTEXT: undefined, //* lemon-core B13 default `off`: the relay only (no `x-protocol-context`).
 };
 //! set (or delete) each name of a map in `process.env`.
 const setEnv = (M: { [key: string]: string | undefined }) =>
@@ -85,6 +87,19 @@ import request from 'supertest';
 import { app } from '../../express';
 import { CallbackAPIController } from './api-callback';
 import { LOOP_KINDS, LoopTransports, loopLog, localRecv } from './loop';
+import { decodeRelay, HEADER_LEMON_RELAY } from 'lemon-core/dist/cores/protocol/protocol-relay';
+
+//! the kinds that go through the protocol service (relay) to `loop-recv`.
+const PROTOCOL_KINDS = ['protocol', 'notify', 'enqueue'];
+
+//! the deprecated full-context header (lemon-core `HEADER_PROTOCOL_CONTEXT`).
+const HEADER_PROTOCOL_CONTEXT = 'x-protocol-context';
+
+//! ` tid=<tid> hop=<hop>` of a loop line (`null` if none).
+const traceIn = (line: string): { tid: string; hop: number } => {
+    const m = `${line ?? ''}`.match(/ tid=(\S+) hop=(\d+)(?: |$)/);
+    return m ? { tid: m[1], hop: Number(m[2]) } : null;
+};
 
 //! a UUID v4 shape (as `crypto.randomUUID()`).
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/;
@@ -155,10 +170,18 @@ describe('callback loop test - local transport (mock)', () => {
         const lines: string[] = info.mock.calls.map(c => c[0]);
         LOOP_KINDS.forEach((kind, i) => {
             const id = loopIds[i];
-            expect(lines.filter(l => l.startsWith(`[LOOP] send kind=${kind} loop=${id} `))).toEqual([
-                expect.stringMatching(/ mock=1$/),
-            ]);
-            expect(lines.filter(l => l.startsWith(`[LOOP] recv kind=${kind} loop=${id} `)).length).toEqual(1);
+            const sends = lines.filter(l => l.startsWith(`[LOOP] send kind=${kind} loop=${id} `));
+            const recvs = lines.filter(l => l.startsWith(`[LOOP] recv kind=${kind} loop=${id} `));
+            expect(sends).toEqual([expect.stringMatching(/ tid=\S+ hop=0 mock=1$/)]);
+            expect(recvs.length).toEqual(1);
+            //* B13: the protocol kinds carry the sender's `tid` in the relay; the receiver is hop 1.
+            const send = traceIn(sends[0]);
+            if (PROTOCOL_KINDS.includes(kind)) {
+                expect({ kind, ...traceIn(recvs[0]) }).toEqual({ kind, tid: send.tid, hop: 1 });
+                expect(send.tid).not.toEqual('-');
+            } else {
+                expect(traceIn(recvs[0])).toBeNull(); //* a raw SNS/SQS message has no relay (no context in the listener).
+            }
         });
         expect(lines.filter(l => l.startsWith('[LOOP] bad'))).toEqual([]);
         //* deliveries: one per kind, no error, SQS records never failed.
@@ -183,8 +206,55 @@ describe('callback loop test - local transport (mock)', () => {
         const api = new CallbackAPIController(undefined, () => $aws);
         const res: any = await api.doPostLoop('sns', {}, {}, { identity: { roles: ['admin'] } } as any);
         expect(Object.keys(res)).toEqual(['kind', 'loopId', 'messageId', 'sentAt']);
-        expect(info.mock.calls.map(c => c[0])).toEqual([`[LOOP] send kind=sns loop=${res.loopId} message=sns-mid-1`]);
+        expect(info.mock.calls.map(c => c[0])).toEqual([
+            `[LOOP] send kind=sns loop=${res.loopId} message=sns-mid-1 tid=- hop=0`,
+        ]);
         expect(drained).toEqual([]);
         expect(sdkCalls).toEqual([]);
+    });
+
+    //* B13: the protocol kinds send the relay only — no `x-protocol-context` header, no `context` field (default).
+    it('should send the relay and no x-protocol-context by default (protocol, notify, enqueue)', async () => {
+        const proto: any = $cores.cores.protocol.service;
+        const web = jest.spyOn(proto.web, 'transformToEvent');
+        const sns = jest.spyOn(proto.sns, 'transformToEvent');
+        const sqs = jest.spyOn(proto.sqs, 'transformToEvent');
+        const sent: { [kind: string]: { tid: string; relay: string; legacy: boolean } } = {};
+        for (const kind of PROTOCOL_KINDS) {
+            const res = await request(app).post(`/callback/${kind}/loop`).send({});
+            expect({ kind, status: res.status }).toEqual({ kind, status: 200 });
+            const line = info.mock.calls.map(c => c[0]).find(l => l.startsWith(`[LOOP] send kind=${kind} `));
+            //* the built event of this kind: web headers, or the SNS `Message` / SQS `MessageBody` param.
+            const spy = kind === 'protocol' ? web : kind === 'notify' ? sns : sqs;
+            expect(spy).toHaveBeenCalledTimes(1);
+            const event: any = spy.mock.results[0].value;
+            if (kind === 'protocol') {
+                const headers = event.headers;
+                sent[kind] = {
+                    tid: traceIn(line).tid,
+                    relay: headers[HEADER_LEMON_RELAY],
+                    legacy: HEADER_PROTOCOL_CONTEXT in headers,
+                };
+            } else {
+                const text = kind === 'notify' ? JSON.parse(event.Message).default : event.MessageBody;
+                const param = JSON.parse(text);
+                sent[kind] = { tid: traceIn(line).tid, relay: param.relay, legacy: 'context' in param };
+            }
+            spy.mockClear();
+        }
+        for (const kind of PROTOCOL_KINDS) {
+            const { tid, relay, legacy } = sent[kind];
+            expect({ kind, legacy }).toEqual({ kind, legacy: false });
+            //* the relay: the sender's tid, hop 1, and the admin claim in the whitelisted identity only.
+            const R = decodeRelay(relay);
+            //* (the log line writes whitespace as `_`: the local express `requestId` is a time text with a space.)
+            expect({ kind, tid: R.tid.replace(/\s/g, '_'), hop: R.hop }).toEqual({ kind, tid, hop: 1 });
+            expect(R.idt.roles).toContain('admin');
+            expect(
+                Object.keys(R.idt).every(k => ['sid', 'uid', 'gid', 'roles', 'identityId', 'lang'].includes(k)),
+            ).toBe(true);
+        }
+        expect(sdkCalls).toEqual([]);
+        expect(fetch).not.toHaveBeenCalled();
     });
 });

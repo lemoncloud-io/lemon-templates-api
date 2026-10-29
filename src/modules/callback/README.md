@@ -35,18 +35,34 @@ $ npm run test:watch /backend- /transformer. /callback/
 | 경로 | 하는 일 | 권한 |
 |---|---|---|
 | `POST /callback/<kind>/loop` | `kind`(`sns`·`sqs`·`protocol`·`notify`·`enqueue`)로 메시지 1건을 보낸다. `[LOOP] send` 줄을 남긴다. | admin만 |
-| `POST /callback/<loopId>/loop-recv` | protocol 수신부(`protocol`은 `lambda`, `notify`·`enqueue`는 `backend`). `[LOOP] recv` 줄을 남기고 돌려준다. | protocol 경유(`depth > 0`) 또는 admin |
+| `POST /callback/<loopId>/loop-recv` | protocol 수신부(`protocol`은 `lambda`, `notify`·`enqueue`는 `backend`). `[LOOP] recv` 줄을 남기고 돌려준다. | protocol 경유(`trace.hop > 0`, `external` 아님) 또는 admin |
 | `onLoopMessage()` | SNS·SQS 수신부(`src/engine.ts`가 등록). `[LOOP] recv` 줄을 남긴다. | 제목 `x-loop-test`만 |
 
 루프 테스트 수신부는 로그만 남긴다. 재발신하지 않는다.
 
 - 수신부(SNS·SQS 리스너, `loop-recv`)는 로그만 남기고 돌아간다. publish·send·enqueue·notify·execute를 부르지 않는다.
 - 트리거는 protocol 경유 재진입을 거부한다. `400 INVALID LOOP - nested trigger`.
+  - relay hop은 `trace.hop > 0`이다. web·SNS·SQS 모두 같다.
+  - legacy `x-protocol-context` 호출(v4 호출자)은 `hop` 0으로 온다. 이 호출은 호출자 `source`를 가진다. 그래서 다른 경로의 `source`도 거부한다.
 - payload의 `hop`은 1이어야 한다. 다른 값은 `[LOOP] bad`로 남기고 버린다. 수신부는 `hop`을 올려 다시 보내지 않는다.
 - SNS·SQS 수신부는 throw 하지 않는다. protocol 경유 `loop-recv`도 throw 하지 않는다. 재시도·재전달이 생기지 않는다.
 - `notify`·`enqueue`는 callback을 넘기지 않는다. callback이 있으면 수신 뒤 한 번 더 호출된다.
+- `loop-recv`의 protocol 경유 판정은 `trace.hop > 0`이다. `channel`이 `external`이면 protocol 경유가 아니다. 손으로 올린 `depth`는 보지 않는다.
 - 서명 검증 실패(`PROTOCOL_VERIFY=enforce`)는 lemon-core가 우리 핸들러 전에 던진다. SQS는 보존 기간(30분) 동안 재전달된다. 큐에 DLQ가 없다.
 - 앱 코드에 cron·재시도 루프가 없다. 점검 스크립트 `npm run loop:check`는 kind마다 한 번만 호출한다.
+
+### relay와 trace (lemon-core B13)
+
+- protocol 송신(`execute`·`notify`·`enqueue`)은 relay만 싣는다. relay는 identity 요약과 trace다. 호출자 context 전체(`cookie`·`domain`·`clientIp` 등)는 가지 않는다.
+- 트리거는 `identity.roles`에 `admin`을 더해 보낸다. `roles`는 relay 화이트리스트에 있다. `depth`는 올리지 않는다.
+- 수신 context: `channel`은 `internal`, `trace`는 `{ tid, hop: 1, via, pid }`, `depth`는 `hop`이다. `requestId`는 수신 함수 자기 값이다.
+- 로그 줄:
+  - `[LOOP] send … tid=<tid> hop=0`: 트리거 요청의 trace다.
+  - `[LOOP] recv kind=<protocol|notify|enqueue> … latency=<ms>ms tid=<tid> hop=1`: 송신과 같은 `tid`다.
+  - `[LOOP] done kind=protocol … rtt=<ms>ms tid=<tid> hop=0`.
+  - `sns`·`sqs`는 raw 메시지다. relay가 없다. 리스너는 context를 받지 않는다. 그래서 `recv` 줄에 `tid`가 없다.
+- `loop:check --target lambda`는 kind마다 send 줄의 `tid`를 출력한다. `protocol`·`notify`·`enqueue`는 recv 줄의 `tid`가 같아야 한다. 다르거나 없으면 exit 1이다.
+- `proxy.ts` `doRequest()`의 callback 요청(`enqueue`)도 relay로 간다. `admin` 주장은 `identity.roles`에 실린다.
 
 ### 로컬 점검 (`LOCAL_TRANSPORT=mock`)
 
@@ -57,9 +73,10 @@ $ npm run test:watch /backend- /transformer. /callback/
 - 대상은 이 서비스만이다. 다른 토픽·큐·함수는 `501 NOT SUPPORTED`다.
 - 트리거는 전달이 끝날 때까지 기다린다(`$localTransport.drain()`). 응답에 `mock: true`와 `recv`를 더한다.
 - `recv`는 이 `loopId`의 수신 결과 목록이다. 항목은 `{ kind, loopId, recvAt, hop }`이다. 정상이면 1개다.
-- `[LOOP] send` 줄 끝에 ` mock=1`이 붙는다. Lambda 동작은 바뀌지 않는다.
+- `[LOOP] send` 줄 끝에 ` mock=1`이 붙는다(` tid=… hop=0` 뒤). Lambda 동작은 바뀌지 않는다.
+- 로컬 express의 `requestId`는 시각 문자열이다. 공백이 있다. 로그 줄은 공백을 `_`로 쓴다.
 - 수신 결과는 로컬 전송이 켜졌을 때만 메모리에 둔다(`localRecv`, loop id 최대 100개).
 - 점검: `npm run loop:check -- --target express`. 기대: 다섯 줄 모두 `send=ok recv=ok`, exit 0.
 - 실제 AWS로 보내려면 `npm run express.lemon.aws`로 띄운다.
 
-spec: `api-callback-loop.spec.ts`, `api-callback-loop-mock.spec.ts`(로컬 전송 끝-끝, AWS SDK 호출 0). 점검: [bin/README.md](../../../bin/README.md#loopcheck).
+spec: `api-callback-loop.spec.ts`, `api-callback-loop-mock.spec.ts`(로컬 전송 끝-끝, AWS SDK 호출 0, `tid` 이음, `x-protocol-context` 미송신), `proxy.spec.ts`(callback 요청 relay). 점검: [bin/README.md](../../../bin/README.md#loopcheck).
