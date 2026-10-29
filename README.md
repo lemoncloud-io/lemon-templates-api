@@ -224,7 +224,7 @@ npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'
 
 | Version   | Description
 |--         |--
-| 5.26.xxx  | optimized `lemon-core@5.0.4` since 2026. (`^5.0.4`, see [docs/dependency-audit.md](docs/dependency-audit.md))
+| 5.26.xxx  | optimized `lemon-core@5.0.5` since 2026. (`^5.0.5` — local transport, see [docs/dependency-audit.md](docs/dependency-audit.md))
 | 0.25.808  | optimized `lemon-core@4.0.6` initially.
 
 <!-- lemon-devkit:proxy-doc:start -->
