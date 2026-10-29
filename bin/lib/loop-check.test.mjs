@@ -194,7 +194,7 @@ describe('loop-check run', () => {
         );
         for (const e of invoke.events) {
             assert.ok(!Object.keys(e.headers).some(k => k.toLowerCase() === 'host'));
-            assert.equal(e.headers['x-lemon-identity'], '{"roles":["admin"]}');
+            assert.equal(e.headers['x-lemon-identity'], '{"sid":"loop-check","roles":["admin"]}');
             assert.deepEqual(e.pathParameters, { id: e.path.split('/')[2], cmd: 'loop' });
             assert.equal(e.resource, '/callback/{id}/{cmd}');
         }

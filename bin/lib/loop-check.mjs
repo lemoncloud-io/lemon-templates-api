@@ -32,7 +32,8 @@ import { webEvent } from './event.mjs';
 export const KINDS = ['sns', 'sqs', 'protocol', 'notify', 'enqueue'];
 
 // identity of the admin trigger (lemon-core reads it on internal calls only).
-export const ADMIN_IDENTITY = '{"roles":["admin"]}';
+// lemon-core accepts a JSON identity only with a non-empty `sid` (else the identity is dropped → 403).
+export const ADMIN_IDENTITY = '{"sid":"loop-check","roles":["admin"]}';
 
 // note sent in the trigger body (echoed in the loop payload).
 export const NOTE = 'loop:check';

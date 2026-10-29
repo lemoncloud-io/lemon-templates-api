@@ -210,7 +210,7 @@ export class CallbackAPIController extends AbstractCRUDController<
      *   they never pass a callback (a callback would be one more call after the receiver).
      *
      * ```sh
-     * $ npm run lambda:invoke -- --stage dev --internal --identity '{"roles":["admin"]}' --method POST --path /callback/sns/loop
+     * $ npm run lambda:invoke -- --stage dev --internal --identity '{"sid":"loop-check","roles":["admin"]}' --method POST --path /callback/sns/loop
      * $ http POST ':8800/callback/sqs/loop' note=hi     # local mode (LOCAL_MODE=1)
      * ```
      * - with lemon-core's local transport (`LOCAL_TRANSPORT=mock`, `npm run express.lemon`): the send is delivered
