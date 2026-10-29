@@ -9,6 +9,7 @@
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2026-10-30 initial version (SNS/SQS/protocol loop test).
  * @date        2026-10-30 add `notify` and `enqueue` (protocol service over SNS/SQS).
+ * @date        2026-10-30 12-digit placeholder account for the protocol events (lemon-core B10-6), local transport off.
  *
  * @copyright   (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
@@ -42,10 +43,15 @@ const ENV: { [key: string]: string | undefined } = {
     AWS_PROFILE: undefined,
     AWS_CONFIG_FILE: NO_FILE,
     AWS_SHARED_CREDENTIALS_FILE: NO_FILE,
+    AWS_EC2_METADATA_DISABLED: 'true', //* a stray credential lookup fails fast (no instance-metadata wait).
     LOCAL_MODE: undefined,
+    LOCAL_TRANSPORT: undefined, //* lemon-core's local transport is off here (see `api-callback-loop-mock.spec.ts`).
     AWS_LAMBDA_FUNCTION_NAME: undefined,
     REPORT_ERROR_ARN: '', //* `getHelloArn()` then builds from `context.accountId` (no real topic in this spec).
 };
+
+//! a placeholder account: `getHelloArn()` takes a 12-digit account only (lemon-core B10-6).
+const ACCOUNT = '000000000000';
 
 //! set (or delete) each name of a map in `process.env`.
 const setEnv = (M: { [key: string]: string | undefined }) =>
@@ -81,7 +87,7 @@ const protoParam = (kind: string, more?: any) => ({
     id: LOOP_ID,
     cmd: RECV_CMD,
     body: message(kind, more),
-    context: { accountId: 'acct', requestId: 'r-1', depth: 1, identity: { roles: ['admin'] } },
+    context: { accountId: ACCOUNT, requestId: 'r-1', depth: 1, identity: { roles: ['admin'] } },
 });
 
 //! the SNS Lambda event of a protocol param, built by the lemon-core transformer (signed as in production).

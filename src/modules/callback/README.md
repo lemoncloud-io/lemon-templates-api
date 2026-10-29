@@ -48,4 +48,18 @@ $ npm run test:watch /backend- /transformer. /callback/
 - 서명 검증 실패(`PROTOCOL_VERIFY=enforce`)는 lemon-core가 우리 핸들러 전에 던진다. SQS는 보존 기간(30분) 동안 재전달된다. 큐에 DLQ가 없다.
 - 앱 코드에 cron·재시도 루프가 없다. 점검 스크립트 `npm run loop:check`는 kind마다 한 번만 호출한다.
 
-spec: `api-callback-loop.spec.ts`. 점검: [bin/README.md](../../../bin/README.md#loopcheck).
+### 로컬 점검 (`LOCAL_TRANSPORT=mock`)
+
+로컬 서버에서도 다섯 경로를 돌린다. AWS를 부르지 않는다.
+
+- `npm run express.lemon`으로 서버를 띄운다. 이 명령은 `LOCAL_TRANSPORT=mock`을 켠다.
+- lemon-core 로컬 전송이 발신을 같은 프로세스에서 전달한다. Lambda 레코드를 만들고 `LambdaHandler.handle()`로 돌린다.
+- 대상은 이 서비스만이다. 다른 토픽·큐·함수는 `501 NOT SUPPORTED`다.
+- 트리거는 전달이 끝날 때까지 기다린다(`$localTransport.drain()`). 응답에 `mock: true`와 `recv`를 더한다.
+- `recv`는 이 `loopId`의 수신 결과 목록이다. 항목은 `{ kind, loopId, recvAt, hop }`이다. 정상이면 1개다.
+- `[LOOP] send` 줄 끝에 ` mock=1`이 붙는다. Lambda 동작은 바뀌지 않는다.
+- 수신 결과는 로컬 전송이 켜졌을 때만 메모리에 둔다(`localRecv`, loop id 최대 100개).
+- 점검: `npm run loop:check -- --target express`. 기대: 다섯 줄 모두 `send=ok recv=ok`, exit 0.
+- 실제 AWS로 보내려면 `npm run express.lemon.aws`로 띄운다.
+
+spec: `api-callback-loop.spec.ts`, `api-callback-loop-mock.spec.ts`(로컬 전송 끝-끝, AWS SDK 호출 0). 점검: [bin/README.md](../../../bin/README.md#loopcheck).

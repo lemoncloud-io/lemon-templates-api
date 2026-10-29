@@ -16,12 +16,13 @@
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2026-10-30 initial version (SNS/SQS/protocol loop test).
  * @date        2026-10-30 add `notify` and `enqueue` (protocol service over SNS/SQS).
+ * @date        2026-10-30 local transport (`LOCAL_TRANSPORT=mock`): keep each receiver result for `doPostLoop()`.
  *
  * @copyright   (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import $cores, { $U, _log, _inf, _err, $protocol, NextContext } from 'lemon-core';
+import $cores, { $U, _log, _inf, _err, $protocol, $localTransport, NextContext } from 'lemon-core';
 import { randomUUID } from 'crypto';
 const NS = $U.NS('loop', 'yellow'); // NAMESPACE TO BE PRINTED.
 
@@ -128,6 +129,45 @@ export const loopLog = {
     inf: (line: string): void => _inf(NS, line),
 };
 
+/**
+ * one receiver result of a loop (kept only with the local transport).
+ */
+export interface LoopRecv {
+    /** the kind that delivered it */
+    kind: string;
+    /** the loop id */
+    loopId: string;
+    /** received time (epoch ms) */
+    recvAt: number;
+    /** hop count (always 1) */
+    hop: number;
+}
+
+//* max loop ids kept by `localRecv` (the oldest is dropped first).
+const MAX_LOCAL_RECV = 100;
+
+/**
+ * receiver results by loop id, kept only while lemon-core's local transport is active (`LOCAL_TRANSPORT=mock`).
+ * - `doPostLoop()` takes the results of its loop id after `$localTransport.drain()`. never kept in Lambda.
+ */
+export const localRecv = {
+    map: new Map<string, LoopRecv[]>(),
+    //* keep one result (no-op unless the local transport is active).
+    add(recv: LoopRecv): void {
+        if (!$localTransport.isActive()) return;
+        const list = this.map.get(recv.loopId) ?? [];
+        this.map.set(recv.loopId, [...list, recv]);
+        //* drop the oldest loop id over the cap.
+        if (this.map.size > MAX_LOCAL_RECV) this.map.delete(this.map.keys().next().value);
+    },
+    //* take (and remove) the results of a loop id.
+    take(loopId: string): LoopRecv[] {
+        const list = this.map.get(loopId) ?? [];
+        this.map.delete(loopId);
+        return list;
+    },
+};
+
 //* UUID shape of a loop id (`crypto.randomUUID()`).
 const LOOP_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -219,7 +259,9 @@ export const onLoopMessage = (type: string, param: any, body: any): string => {
             return '';
         }
         //* the proof line: received by this function, with the end-to-end latency.
-        loopLog.inf(`[LOOP] recv kind=${kind} loop=${body.loopId} latency=${Date.now() - body.sentAt}ms`);
+        const recvAt = Date.now();
+        loopLog.inf(`[LOOP] recv kind=${kind} loop=${body.loopId} latency=${recvAt - body.sentAt}ms`);
+        localRecv.add({ kind, loopId: body.loopId, recvAt, hop: body.hop });
         return `loop:${kind}:${body.loopId}`;
     } catch (e) {
         //* never throw out of a listener.
@@ -246,6 +288,7 @@ export const onLoopRecv = (loopId: string, body: any): { loopId: string; recvAt:
         }
         const recvAt = Date.now();
         loopLog.inf(`[LOOP] recv kind=${kind} loop=${loopId} latency=${recvAt - body.sentAt}ms hop=${body.hop}`);
+        localRecv.add({ kind, loopId, recvAt, hop: body.hop });
         return { loopId, recvAt, hop: body.hop };
     } catch (e) {
         //* never throw out of a receiver.

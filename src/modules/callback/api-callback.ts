@@ -7,12 +7,13 @@
  * @date        2025-03-26 initial version.
  * @date        2026-10-30 loop test: `POST /callback/<kind>/loop`, `POST /callback/<loopId>/loop-recv` (see `loop.ts`).
  * @date        2026-10-30 loop test: `notify` and `enqueue` kinds (protocol service over SNS/SQS).
+ * @date        2026-10-30 loop test: with lemon-core's local transport (`LOCAL_TRANSPORT=mock`), wait and answer `recv`.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _log, _inf, _err, NextHandler, SearchQuery, $protocol, $slack } from 'lemon-core';
+import { $U, _log, _inf, _err, NextHandler, SearchQuery, $protocol, $slack, $localTransport } from 'lemon-core';
 import { $T, AbstractCRUDController, MyManagerProxy, onlyDefined } from 'lemon-core';
 import { Model, CallbackModel, CallbackRequest } from './model';
 import { CallbackModelManager } from './service';
@@ -20,6 +21,7 @@ import { $trans, CallbackTransformer } from './transformer';
 import $LUT, { CallbackBody, CallbackView } from './views';
 import { LoopTransports, defaultTransports, loopLog, isLoopKind, isNestedTrigger } from './loop';
 import { asLoopPayload, onLoopRecv, onLoopError, loopKindOf, LOOP_SUBJECT, RECV_CMD, PROTOCOL_OPTIONS } from './loop';
+import { localRecv } from './loop';
 
 //WARN - use `BackendService` from main service due to proper `BackendProxy`.
 import $service, { BackendService, ModelType } from '../../service/backend-service';
@@ -211,6 +213,8 @@ export class CallbackAPIController extends AbstractCRUDController<
      * $ npm run lambda:invoke -- --stage dev --internal --identity '{"roles":["admin"]}' --method POST --path /callback/sns/loop
      * $ http POST ':8800/callback/sqs/loop' note=hi     # local mode (LOCAL_MODE=1)
      * ```
+     * - with lemon-core's local transport (`LOCAL_TRANSPORT=mock`, `npm run express.lemon`): the send is delivered
+     *   in-process; it waits (`$localTransport.drain()`) and answers `mock: true` and `recv` (results of this loop id).
      */
     public doPostLoop: NextHandler = async (id, param, body, $ctx) => {
         const errScope = `doPostLoop(${this.type()}/${id ?? ''})`;
@@ -224,19 +228,28 @@ export class CallbackAPIController extends AbstractCRUDController<
             const payload = asLoopPayload(id, body);
             const { loopId, sentAt } = payload;
             const $aws = this.transports();
+            //* local transport (lemon-core `LOCAL_TRANSPORT=mock`, local mode only): ` mock=1` on the send line.
+            const mock = $localTransport.isActive();
+            const tag = mock ? ' mock=1' : '';
+            //* with the local transport: wait for the in-process delivery, then add the receiver result(s).
+            const done = async (res: any) => {
+                if (!mock) return res;
+                await $localTransport.drain();
+                return { ...res, mock: true, recv: localRecv.take(loopId) };
+            };
 
             //* sns: '' → the default topic (env `MY_SNS_ENDPOINT`).
             if (id === 'sns') {
                 const messageId = await $aws.sns.publish('', LOOP_SUBJECT, payload);
-                loopLog.inf(`[LOOP] send kind=sns loop=${loopId} message=${messageId}`);
-                return { kind: id, loopId, messageId, sentAt };
+                loopLog.inf(`[LOOP] send kind=sns loop=${loopId} message=${messageId}${tag}`);
+                return done({ kind: id, loopId, messageId, sentAt });
             }
             //* sqs: the default queue (env `MY_SQS_ENDPOINT`); attributes carry the subject and the loop id.
             if (id === 'sqs') {
                 const attr = { Subject: LOOP_SUBJECT, loop: id, loopId };
                 const messageId = await $aws.sqs.sendMessage(payload, attr);
-                loopLog.inf(`[LOOP] send kind=sqs loop=${loopId} message=${messageId}`);
-                return { kind: id, loopId, messageId, sentAt };
+                loopLog.inf(`[LOOP] send kind=sqs loop=${loopId} message=${messageId}${tag}`);
+                return done({ kind: id, loopId, messageId, sentAt });
             }
             //* protocol kinds: a signed protocol call to `//self/callback/<loopId>/loop-recv`; the payload is the body.
             //* the context claims `admin` (like `proxy.ts`) and raises `depth`, which marks it as a protocol hop.
@@ -249,20 +262,20 @@ export class CallbackAPIController extends AbstractCRUDController<
             //* notify: SNS topic of this service (`x-protocol-service`) → `backend`.
             if (id === 'notify') {
                 const messageId = await $proto.notify(null, payload, 'POST', noCallback);
-                loopLog.inf(`[LOOP] send kind=notify loop=${loopId} message=${messageId || '-'}`);
-                return { kind: id, loopId, messageId, sentAt };
+                loopLog.inf(`[LOOP] send kind=notify loop=${loopId} message=${messageId || '-'}${tag}`);
+                return done({ kind: id, loopId, messageId, sentAt });
             }
             //* enqueue: SQS queue of this service (`x-protocol-service`) → `backend`, no delay.
             if (id === 'enqueue') {
                 const messageId = await $proto.enqueue(null, payload, 'POST', noCallback, 0);
-                loopLog.inf(`[LOOP] send kind=enqueue loop=${loopId} message=${messageId || '-'}`);
-                return { kind: id, loopId, messageId, sentAt };
+                loopLog.inf(`[LOOP] send kind=enqueue loop=${loopId} message=${messageId || '-'}${tag}`);
+                return done({ kind: id, loopId, messageId, sentAt });
             }
             //* protocol: synchronized call to this service's `lambda` function (`//self`), waits for the result.
-            loopLog.inf(`[LOOP] send kind=protocol loop=${loopId} message=-`);
+            loopLog.inf(`[LOOP] send kind=protocol loop=${loopId} message=-${tag}`);
             const result = await $proto.execute(null, payload, 'POST');
             loopLog.inf(`[LOOP] done kind=protocol loop=${loopId} rtt=${Date.now() - sentAt}ms`);
-            return { kind: id, loopId, sentAt, result };
+            return done({ kind: id, loopId, sentAt, result });
         });
     };
 

@@ -6,9 +6,13 @@
  *   - `protocol`: send and recv both in the `lambda` log group (`//self` is the `lambda` function).
  *   - `notify`, `enqueue`: protocol service over SNS / SQS; send in `lambda`, recv (`loop-recv`) in `backend`.
  * - exactly one invoke per kind, no retry; the log poll stops at `--timeout`.
+ * - `--target express`: the same trigger on a local express server run with lemon-core's local transport
+ *   (`npm run express.lemon`, `LOCAL_TRANSPORT=mock`): `POST /callback/<kind>/loop`, and the answer must hold
+ *   `mock: true` and `recv` with the same loop id (no AWS, no log poll).
  * - all logic of `bin/loop-check.mjs`: no `process.exit`; the Lambda invoker, the log fetch, the STS banner,
- *   the clock, and the printers are injectable, so the tests run offline.
+ *   `fetch`, the clock, and the printers are injectable, so the tests run offline.
  */
+import { readFileSync } from 'node:fs';
 import {
     parseArgs,
     resolveAws,
@@ -56,15 +60,23 @@ export const HELP = [
     '  protocol:                   [LOOP] send and [LOOP] recv both in the lambda log group',
     '',
     'options:',
+    '  --target <t>            lambda | express (default: lambda)',
     '  --kind <k>              sns | sqs | protocol | notify | enqueue | all (default: all)',
+    '  --json                  print { stage, functions, results } (express: { target, url, results }) only',
+    '  --help                  show this help',
+    '',
+    'lambda (the deployed service; IAM credentials):',
     '  --stage <stage>         deploy stage (default: dev)',
     '  --confirm-stage <stage> required for any stage other than dev (same value as the stage)',
     `  --region <region>       AWS region (default: $AWS_REGION or ${DEFAULT_REGION})`,
     '  --profile <name>        named profile from ~/.aws (default: SDK default chain)',
     `  --timeout <ms>          max wait for the log lines per kind, ${MIN_TIMEOUT_MS}-${MAX_TIMEOUT_MS} (default: ${DEFAULT_TIMEOUT_MS})`,
-    '  --json                  print { stage, functions, results } only',
     '  --dry                   print the targets and the events, do not call AWS',
-    '  --help                  show this help',
+    '',
+    'express (a local server run by `npm run express.lemon`: LOCAL_MODE=1 and LOCAL_TRANSPORT=mock):',
+    '  --port <n>              server port on 127.0.0.1 (default: "port" of package.json)',
+    '  per kind: one POST /callback/<kind>/loop; the answer must be http 200 with mock: true and',
+    '  recv holding the same loopId exactly once (no AWS call, no log poll)',
     '',
     'exit codes: 0 = every kind received; 1 = any missing, timeout, non-200, or AWS error; 2 = bad arguments.',
 ];
@@ -72,8 +84,17 @@ export const HELP = [
 // flags that never take a value.
 const BOOLEANS = ['json', 'dry', 'help'];
 
+// options for `--target lambda` only.
+const LAMBDA_ONLY = ['stage', 'confirm-stage', 'region', 'profile', 'timeout', 'dry'];
+
+// options for `--target express` only.
+const EXPRESS_ONLY = ['port'];
+
 // every accepted option.
-const KNOWN = ['kind', 'stage', 'confirm-stage', 'region', 'profile', 'timeout', ...BOOLEANS];
+const KNOWN = ['target', 'kind', ...LAMBDA_ONLY, ...EXPRESS_ONLY, 'json', 'help'];
+
+// the repo root, for `package.json`.
+const ROOT = new URL('../../', import.meta.url);
 
 // UUID shape of a loop id.
 const LOOP_ID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -85,6 +106,19 @@ const MESSAGE_ID_RE = /^[\w-]{1,128}$/;
 export const parseOptions = argv => {
     const opts = parseArgs(argv, { booleans: BOOLEANS, known: KNOWN, maxPositional: 0 });
     if (opts.help) return opts;
+    // `--target`: lambda (default) or express; it decides which options apply.
+    const target = opts.target === undefined ? 'lambda' : opts.target;
+    if (!['express', 'lambda'].includes(target)) {
+        throw new ArgError(`--target must be express or lambda (got: ${target})`);
+    }
+    const [others, owner] = target === 'express' ? [LAMBDA_ONLY, 'lambda'] : [EXPRESS_ONLY, 'express'];
+    const wrong = others.find(k => opts[k] !== undefined);
+    if (wrong) throw new ArgError(`--${wrong} applies to --target ${owner} only`);
+    // `--port`: an integer 1-65535.
+    const p = opts.port;
+    if (p !== undefined && !(typeof p === 'string' && /^\d+$/.test(p) && +p >= 1 && +p <= 65535)) {
+        throw new ArgError(`--port needs an integer 1-65535 (got: ${p})`);
+    }
     // `--kind`: one kind or all.
     const kind = opts.kind === undefined ? 'all' : opts.kind;
     if (!(kind === 'all' || KINDS.includes(kind))) {
@@ -97,9 +131,22 @@ export const parseOptions = argv => {
     if (!okT) throw new ArgError(`--timeout needs an integer ${MIN_TIMEOUT_MS}-${MAX_TIMEOUT_MS} (got: ${t})`);
     return {
         ...opts,
+        target,
         kinds: kind === 'all' ? [...KINDS] : [kind],
         timeoutMs: t === undefined ? DEFAULT_TIMEOUT_MS : Number(t),
     };
+};
+
+// default express port from `"port"` in `package.json` (throws `ArgError`).
+export const defaultPort = () => {
+    let port;
+    try {
+        port = JSON.parse(readFileSync(new URL('package.json', ROOT), 'utf8')).port;
+    } catch (e) {
+        throw new ArgError(`cannot read package.json (${e.message}); pass --port <n>`);
+    }
+    if (!port) throw new ArgError('no "port" in package.json; pass --port <n>');
+    return Number(port);
 };
 
 // the trigger event of one kind: internal web event (no Host) with the admin identity.
@@ -254,6 +301,46 @@ export const checkKind = async (kind, { stage, names, timeoutMs, invoke, fetch, 
     return { ...record, send: seen.send, recv: seen.recv, latency: seen.latency, issues };
 };
 
+// check one kind on the local express server: one POST, then the answer (`mock: true`, `recv` with the loop id).
+// transport errors throw `HarnessError` code 1 (the server is not running).
+export const checkExpressKind = async (kind, { base, fetchFn }) => {
+    const url = `${base}/callback/${kind}/loop`;
+    const record = { kind, loopId: null, messageId: null, http: null, send: false, recv: false, latency: null };
+    let resp;
+    try {
+        // exactly one POST per kind (never retried); local mode makes the request admin.
+        const headers = { 'Content-Type': 'application/json', Accept: 'application/json' };
+        resp = await fetchFn(url, { method: 'POST', headers, body: JSON.stringify({ note: NOTE }) });
+    } catch (e) {
+        // `fetch failed` hides the reason in `cause` (ex: ECONNREFUSED).
+        throw new HarnessError(`cannot reach ${url} (${e?.cause?.code || e?.cause?.message || e?.message || e})`, 1);
+    }
+    const text = await resp.text();
+    const http = resp.status;
+    if (http !== 200) return { ...record, http, issues: [`expected http 200 got ${http}: ${`${text ?? ''}`.trim()}`] };
+    const body = tryJson(text);
+    const answer = checkAnswer(kind, body);
+    const issues = [...answer.issues];
+    const B = body && typeof body === 'object' ? body : {};
+    if (B.mock !== true) issues.push('no mock: true in the response (run the server with npm run express.lemon)');
+    // the receiver results of this loop id: exactly one.
+    const recv = Array.isArray(B.recv) ? B.recv.filter(r => answer.loopId && r?.loopId === answer.loopId) : [];
+    if (recv.length !== 1) issues.push(`expected 1 recv for the loopId got ${recv.length}`);
+    const ms = recv.length ? Number(recv[0].recvAt) - Number(B.sentAt) : NaN;
+    const latency = Number.isFinite(ms) ? ms : null;
+    const send = !!answer.loopId;
+    return {
+        ...record,
+        http,
+        loopId: answer.loopId,
+        messageId: answer.messageId,
+        send,
+        recv: recv.length === 1,
+        latency,
+        issues,
+    };
+};
+
 // one result line: `loop kind=<k> loop=<id> send=<ok|missing> recv=<ok|missing> latency=<ms|->`.
 export const resultLine = r =>
     `loop kind=${r.kind} loop=${r.loopId || '-'} send=${r.send ? 'ok' : 'missing'} recv=${r.recv ? 'ok' : 'missing'}` +
@@ -296,6 +383,27 @@ export const run = async (argv, deps = {}) => {
             log(HELP.join('\n'));
             return 0;
         }
+        // express: the local server (no AWS, no STS banner, no log poll).
+        if (opts.target === 'express') {
+            const base = `http://127.0.0.1:${opts.port === undefined ? defaultPort() : Number(opts.port)}`;
+            if (!opts.json) log(`loop-check target=express url=${base}`);
+            const fetchFn = deps.fetch || globalThis.fetch;
+            const results = [];
+            for (const kind of opts.kinds) {
+                const r = await checkExpressKind(kind, { base, fetchFn });
+                results.push(r);
+                if (!opts.json) {
+                    log(resultLine(r));
+                    r.issues.forEach(s => log(`  - ${out.text(s)}`));
+                }
+            }
+            if (opts.json) {
+                const safe = results.map(r => ({ ...r, issues: r.issues.map(s => out.text(s)) }));
+                log(JSON.stringify({ target: 'express', url: base, results: safe }));
+            }
+            return exitCode(results);
+        }
+
         // stage guard before anything else touches the target.
         const stage = checkStage({ stage: opts.stage, confirm: opts['confirm-stage'] });
         const aws = resolveAws(opts);
