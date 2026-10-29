@@ -42,6 +42,7 @@
     "lambda:test": "node --test bin/lib/*.test.mjs",
     "perf:lambda": "node bin/perf-lambda.mjs",
     "fields:admin": "node bin/fields-admin.mjs",
+    "fields:types": "node bin/fields-types.mjs",
     "loop:check": "node bin/loop-check.mjs",
     "!remove": "----- sls remove by profile -----",
     "remove": "sls remove --stage prod",

@@ -1,4 +1,4 @@
-# bin/ — invoke the deployed Lambda, watch its logs, check `fields/admin`, and check the loop test
+# bin/ — invoke the deployed Lambda, watch its logs, check `fields/admin`, check field types, and check the loop test
 
 Small Node scripts for test-env and prod verification after `sls deploy`.
 They call AWS directly with the SDK (no `sls`), so they work on any machine with AWS credentials.
@@ -7,6 +7,7 @@ They call AWS directly with the SDK (no `sls`), so they work on any machine with
 - `lambda-logs.mjs` — print or follow the function's CloudWatch logs (polling `FilterLogEvents`).
 - `perf-lambda.mjs` — invoke the deployed function several times and summarize cold / warm timings from the log tail, or from the full CloudWatch log with `--logs`. See [perf:lambda](#perflambda).
 - `fields-admin.mjs` — check `GET /<type>/fields/admin` on the local express server or the deployed Lambda with `checkFieldsAdmin()` of lemon-core. See [fields:admin](#fieldsadmin).
+- `fields-types.mjs` — check that one field name has one type across the stored models of one OpenSearch index (reads the TypeScript types only; no AWS). See [fields:types](#fieldstypes).
 - `loop-check.mjs` — check the SNS / SQS / protocol / notify / enqueue loop test of the deployed service from its CloudWatch log lines. See [loop:check](#loopcheck).
 
 The Lambda call itself (`lambda:Invoke`) is shared in `lib/invoke.mjs` by `lambda-invoke.mjs`, `fields-admin.mjs`, `perf-lambda.mjs`, and `loop-check.mjs`.
@@ -218,6 +219,111 @@ npm run fields:admin -- --target lambda --stage dev --dry
 # another type: structural and content checks only, or with your own expectations
 npm run fields:admin -- --target express --type tests
 npm run fields:admin -- --target express --type tests --expect path/to/tests.expected.json
+```
+
+## fields:types
+
+```sh
+npm run fields:types -- [options]
+```
+
+lemon-core v5 syncs the models of a service into one OpenSearch index with dynamic mapping, so the first document that writes a field fixes the type of that field.
+A later model that writes the same field name with another type gets `400 mapper_parsing_exception`, and that document does not reach the index.
+This script reads the declared TypeScript types of the stored models and reports every field name that has two or more types. It compiles nothing, runs nothing, and calls no AWS or OpenSearch.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--root <dir>` | cwd | Repo to check. Reads `<dir>/src/**/*.ts` (not `*.spec.ts`, `*.test.ts`) and `<dir>/tsconfig.json` (default compiler options when it is missing). `strictNullChecks` is always on. |
+| `--deep <n>` | `2` | Nesting depth of object fields (`a.b.c` is depth 2). `0`–`10`. |
+| `--models R\|RH` | `R` | `R`: the models in a `$FIELD = { k: ... }` object literal (`keys<T>()`, `fieldKeys.x<T>()`, or `fieldsOf(Class)` inside the entry), that is, the stored models. A repo with no `$FIELD` entry falls back to `H`. `RH`: also every interface or class with the CoreModel shape (`ns`, `sid`, `uid`, `lock`, `next`, `createdAt`), views and request bodies included. |
+| `--fail-on <level>` | `hard` | `hard`, `order`, or `none`. See the exit codes. |
+| `--json` | | Print the full report as JSON only (`repo`, `deep`, `rule`, `models` with their flattened `fields`, `conflicts`, `any`, `mixed`, `other`, `unresolved`). |
+| `--with <report.json>` | | Merge a report of another repo (from `--json`) and check both as one index. Repeatable. |
+| `--fallback <dir>` | | Extra `node_modules` directory for packages the repo cannot resolve (for example a checkout with no `npm install`). Repeatable. |
+| `--help` | | Show help. |
+
+### What is compared
+
+- Fields: the stored top-level names of each model (a lowercase first letter and at least two letters; not `_id`, `_*`, or `$*`), CoreModel fields included, and the members of object fields as dotted paths up to `--deep`.
+- Each declared type is normalized to the kind OpenSearch maps it to:
+
+| Declared type | Kind |
+|---|---|
+| `string`, string literals and their unions, string enums | `string` |
+| `number`, `bigint`, number literals and their unions (ex: `0 \| 1`), numeric enums | `number` |
+| `boolean` | `boolean` |
+| `Date` | `date` |
+| `T[]`, tuples | the element kind |
+| `A \| null \| undefined` | the kind of `A` (nullish members dropped); two kinds left = `mixed` |
+| objects, intersections, `object` | `object` (flattened up to `--deep`) |
+| an index signature (`{ [k: string]: T }`, `Record<string, T>`) | `<path>.*` = `dynamic`, not compared |
+| a type parameter | its constraint |
+| `any`, `unknown`, `never` | `any`, not compared |
+
+- A conflict is one field path with two or more kinds among `string`, `number`, `boolean`, `date`, and `object`. `any` and `mixed` fields are counted, not compared.
+
+### Severity
+
+From a probe on a local OpenSearch 2.17 index with dynamic mapping (first write, then second write of the same field):
+
+| First write | Second write | Result |
+|---|---|---|
+| `number` | `"abc"` | 400 |
+| `number` | `"123"` | 200 (coerced) |
+| `string` | `123` | 200 |
+| `boolean` | `number`, and `number` then `boolean` | 400 |
+| `object` | a scalar, and a scalar then `object` | 400 |
+| `date` (ISO date string) | `"abc"` | 400 |
+
+- `hard`: fails in both orders. `object` vs any scalar, `boolean` vs `number`, `boolean` vs `date`.
+- `order`: fails only when the stricter kind is mapped first. `string` vs `number`, `string` vs `boolean`, `string` vs `date`, `number` vs `date`. Which model writes first decides it, so it is still a risk.
+
+### Output
+
+One summary line:
+
+```text
+fields-types repo=<basename> models=<n> fields=<n> conflicts=<n> (hard=<n> order=<n>) any=<n> mixed=<n> unresolved=<n>
+```
+
+- `models`: the checked models. `fields`: distinct field paths (dotted paths included, `.*` excluded).
+- `any`, `mixed`: field declarations of that kind (not compared). `unresolved`: packages the TS program could not resolve.
+
+Then one line per conflict, `hard` first, then by name:
+
+```text
+  - <hard|order> <name>: <kind>[<Model>(<file>:<line>), ...] vs <kind>[...]
+```
+
+A field inherited from a package shows `<package>:<file name>` (ex: `lemon-model:core-storage.d.ts:115`). More than three models of one kind end with `, +<n>`. In a merged report, each model is `<repo>:<Model>`.
+
+Exit codes: 0 = no conflict at or above `--fail-on` (also `--help`); 1 = a `hard` conflict (`--fail-on hard`) or any conflict (`--fail-on order`); 2 = bad arguments, no `src/`, an unreadable tsconfig or `--with` report, or no TypeScript program.
+
+### Other repos as the same index
+
+Two services that write into one index must agree too. Write the report of each repo, then merge:
+
+```sh
+# the other repo (use node directly: `npm run` would add its banner to the JSON)
+node bin/fields-types.mjs --root ../other-api --json > other.json
+
+# this repo + the other one, as one index
+npm run fields:types -- --with other.json
+```
+
+### Limits
+
+- Declared types only. A runtime value that does not match its type (ex: a number written into a `string` field) is not seen.
+- `meta` (`string | any`) and other `any` fields are not compared. `Record` and index-signature members (`.*`) are not compared.
+- A package that does not resolve makes its types `any`, so its fields drop out of the check. Check `unresolved=`; install the dependencies or pass `--fallback`.
+- Sync opt-in is not read. A model in `$FIELD` is checked even when its service does not sync it (`enableSync` defaults to false in lemon-core v5).
+- Field filters in code (ex: `.filter(...)` on the field list) are not evaluated. Only the fixed stored-name rule above applies.
+- `--models RH` also checks views and request bodies. They are not stored, so a conflict there can be a false positive (ex: a `0 | 1` flag in the model and `boolean` in a view).
+
+Example (this repo, v5):
+
+```text
+fields-types repo=lemon-templates-api models=5 fields=55 conflicts=0 (hard=0 order=0) any=4 mixed=0 unresolved=0
 ```
 
 ## perf:lambda
@@ -536,6 +642,8 @@ All scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target
 `lambda:invoke` exit codes reflect the Lambda call only. An `http 4xx/5xx` from the web handler still exits 0; check the printed `http` line.
 
 `fields:admin` exit codes are in its own section: unlike `lambda:invoke`, a non-200 `http` code or a failed check exits 1.
+
+`fields:types` exit codes are in its own section: 1 = a conflict at or above `--fail-on`.
 
 `loop:check` exit codes are in its own section: 0 only when every kind received both lines.
 
