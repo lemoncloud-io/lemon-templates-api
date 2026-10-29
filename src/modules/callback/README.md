@@ -27,3 +27,25 @@ $ npm run test:watch /backend- /transformer. /callback/
     - 콜백 보안 강화목적으로 `T`에서 callback 주소 검증 (`/callback/<id>/cmd?`만 가능함)
     - 콜백 요청시 `SQS` 이용 -> 보안 트래킹
     - `@param.signature` 에 콜백 보안 토큰 확인함. (signature := hash(id + nonce))
+
+## 루프 테스트
+
+배포 후 SNS·SQS·protocol·notify·enqueue 경로가 실제로 도는지 로그 줄로 확인한다. 코드는 `loop.ts`와 `api-callback.ts`에 있다.
+
+| 경로 | 하는 일 | 권한 |
+|---|---|---|
+| `POST /callback/<kind>/loop` | `kind`(`sns`·`sqs`·`protocol`·`notify`·`enqueue`)로 메시지 1건을 보낸다. `[LOOP] send` 줄을 남긴다. | admin만 |
+| `POST /callback/<loopId>/loop-recv` | protocol 수신부(`protocol`은 `lambda`, `notify`·`enqueue`는 `backend`). `[LOOP] recv` 줄을 남기고 돌려준다. | protocol 경유(`depth > 0`) 또는 admin |
+| `onLoopMessage()` | SNS·SQS 수신부(`src/engine.ts`가 등록). `[LOOP] recv` 줄을 남긴다. | 제목 `x-loop-test`만 |
+
+루프 테스트 수신부는 로그만 남긴다. 재발신하지 않는다.
+
+- 수신부(SNS·SQS 리스너, `loop-recv`)는 로그만 남기고 돌아간다. publish·send·enqueue·notify·execute를 부르지 않는다.
+- 트리거는 protocol 경유 재진입을 거부한다. `400 INVALID LOOP - nested trigger`.
+- payload의 `hop`은 1이어야 한다. 다른 값은 `[LOOP] bad`로 남기고 버린다. 수신부는 `hop`을 올려 다시 보내지 않는다.
+- SNS·SQS 수신부는 throw 하지 않는다. protocol 경유 `loop-recv`도 throw 하지 않는다. 재시도·재전달이 생기지 않는다.
+- `notify`·`enqueue`는 callback을 넘기지 않는다. callback이 있으면 수신 뒤 한 번 더 호출된다.
+- 서명 검증 실패(`PROTOCOL_VERIFY=enforce`)는 lemon-core가 우리 핸들러 전에 던진다. SQS는 보존 기간(30분) 동안 재전달된다. 큐에 DLQ가 없다.
+- 앱 코드에 cron·재시도 루프가 없다. 점검 스크립트 `npm run loop:check`는 kind마다 한 번만 호출한다.
+
+spec: `api-callback-loop.spec.ts`. 점검: [bin/README.md](../../../bin/README.md#loopcheck).

@@ -1,4 +1,4 @@
-# bin/ — invoke the deployed Lambda, watch its logs, and check `fields/admin`
+# bin/ — invoke the deployed Lambda, watch its logs, check `fields/admin`, and check the loop test
 
 Small Node scripts for test-env and prod verification after `sls deploy`.
 They call AWS directly with the SDK (no `sls`), so they work on any machine with AWS credentials.
@@ -7,9 +7,10 @@ They call AWS directly with the SDK (no `sls`), so they work on any machine with
 - `lambda-logs.mjs` — print or follow the function's CloudWatch logs (polling `FilterLogEvents`).
 - `perf-lambda.mjs` — invoke the deployed function several times and summarize cold / warm timings from the log tail, or from the full CloudWatch log with `--logs`. See [perf:lambda](#perflambda).
 - `fields-admin.mjs` — check `GET /<type>/fields/admin` on the local express server or the deployed Lambda with `checkFieldsAdmin()` of lemon-core. See [fields:admin](#fieldsadmin).
+- `loop-check.mjs` — check the SNS / SQS / protocol / notify / enqueue loop test of the deployed service from its CloudWatch log lines. See [loop:check](#loopcheck).
 
-The Lambda call itself (`lambda:Invoke`) is shared in `lib/invoke.mjs` by `lambda-invoke.mjs`, `fields-admin.mjs`, and `perf-lambda.mjs`.
-The paged `FilterLogEvents` read is shared in `lib/logs.mjs` by `lambda-logs.mjs` and `perf-lambda.mjs --logs`.
+The Lambda call itself (`lambda:Invoke`) is shared in `lib/invoke.mjs` by `lambda-invoke.mjs`, `fields-admin.mjs`, `perf-lambda.mjs`, and `loop-check.mjs`.
+The paged `FilterLogEvents` read is shared in `lib/logs.mjs` by `lambda-logs.mjs`, `perf-lambda.mjs --logs`, and `loop-check.mjs`.
 
 The target function name is `<service>-<stage>-<function>` (Serverless default).
 `service` is read from the `service:` line of `serverless.yml`.
@@ -367,9 +368,146 @@ npm run perf:lambda -- --stage dev --profile <name> --logs
 npm run perf:lambda -- --stage dev --runs 3 --dry
 ```
 
+## loop:check
+
+```sh
+npm run loop:check -- [options]
+```
+
+The loop test proves that a message really goes around the deployed service.
+An admin request to the `lambda` function sends one message. The receiver writes one log line.
+The code is in the callback module: `src/modules/callback/loop.ts` and `src/modules/callback/api-callback.ts`.
+
+| Kind | Trigger (function `lambda`) | Path of the message | Receiver | `[LOOP] recv` line in |
+|---|---|---|---|---|
+| `sns` | `POST /callback/sns/loop` | `sns.publish('', 'x-loop-test', payload)` to the topic of env `MY_SNS_ENDPOINT` | function `backend` → lemon-core `LambdaSNSHandler` → `onLoopMessage()` | `backend` log group |
+| `sqs` | `POST /callback/sqs/loop` | `sqs.sendMessage(payload, { Subject: 'x-loop-test', loop, loopId })` to the queue of env `MY_SQS_ENDPOINT` | function `backend` → lemon-core `LambdaSQSHandler` → `onLoopMessage()` | `backend` log group |
+| `protocol` | `POST /callback/protocol/loop` | `$protocol(context, '//self/callback/<loopId>/loop-recv').execute(null, payload, 'POST')` (signed; `//self` is the `lambda` function) | `POST /callback/<loopId>/loop-recv` → `onLoopRecv()` | `lambda` log group |
+| `notify` | `POST /callback/notify/loop` | `$protocol(…).notify(null, payload, 'POST')` → SNS, Subject `x-protocol-service` (signed), no callback | function `backend` → `LambdaSNSHandler` protocol path → `handleProtocol()` → `POST /callback/<loopId>/loop-recv` | `backend` log group |
+| `enqueue` | `POST /callback/enqueue/loop` | `$protocol(…).enqueue(null, payload, 'POST', undefined, 0)` → SQS, attribute Subject `x-protocol-service` (signed), no callback, no delay | function `backend` → `LambdaSQSHandler` protocol path → `handleProtocol()` → `POST /callback/<loopId>/loop-recv` | `backend` log group |
+
+`$protocol()` gets `{ isProd: false }`, so `//self` stays on the deployed stage.
+Without it, the helper switches to stage `prod` when env `NS` is `SS`.
+
+For `notify` and `enqueue`, lemon-core builds the target from the service name and the stage (`buildProtocolURI`).
+For this service it gives `sns://<code>-sns[-dev]` and `sqs://<code>-sqs[-dev]`.
+These are `custom.topicName` and `custom.queueName` of `serverless.yml`: the topic and the queue that `backend` subscribes to.
+The SNS / SQS transformers take the region and the account from `getHelloArn()` (env `REPORT_ERROR_ARN`) and put this topic or queue name in its place.
+The jest spec checks this mapping against `serverless.yml` for `dev` and `prod`.
+
+The payload is `{ loop, loopId, sentAt, hop: 1 }` (+ `note`, max 100 chars, from the request body).
+The trigger answers `{ kind, loopId, messageId, sentAt }` (`sns`, `sqs`, `notify`, `enqueue`) or `{ kind, loopId, sentAt, result }` (`protocol`; `result` is `{ loopId, recvAt, hop }` from the receiver).
+No ARN, queue URL, or function name is in a response or in a `[LOOP]` line.
+
+Log lines (lemon-core `_inf`):
+
+```text
+[LOOP] send kind=<sns|sqs|protocol|notify|enqueue> loop=<loopId> message=<messageId|->
+[LOOP] recv kind=<sns|sqs> loop=<loopId> latency=<ms>ms
+[LOOP] recv kind=<protocol|notify|enqueue> loop=<loopId> latency=<ms>ms hop=1
+[LOOP] done kind=protocol loop=<loopId> rtt=<ms>ms
+[LOOP] bad kind=<kind> [loop=<loopId>] reason=<loopId|sentAt|hop|loop|error>
+```
+
+`latency` is the receiver's `Date.now() - sentAt` (the clocks of two Lambda containers). `rtt` is the round trip of the `protocol` call, seen by the trigger.
+
+### Infinite-loop guards
+
+루프 테스트 수신부는 로그만 남긴다. 재발신하지 않는다.
+
+1. The receivers (SNS listener, SQS listener, protocol `loop-recv` for `protocol` / `notify` / `enqueue`) only log and return. They never publish, send, enqueue, notify, or execute.
+2. The trigger refuses re-entry through the protocol channel: `400 INVALID LOOP - nested trigger`. A protocol hop has `context.depth > 0` (lemon-core raises it per hop; the `protocol` trigger raises it too), or a `context.source` path of another route (a protocol call carries the caller's context).
+3. Hop cap: a receiver accepts only `hop === 1`. Any other value (missing, `2`, `'1'`) logs `[LOOP] bad … reason=hop` and returns `''`. Nothing increments `hop` and forwards.
+4. The SNS / SQS listener never throws. `loop-recv` never throws when it came through the protocol channel (`depth > 0`). A throw on an SQS path is a `batchItemFailures` redelivery; on an SNS path lemon-core reports the error. Any error logs `[LOOP] bad … reason=error` and returns `''`. Only a direct non-admin call to `loop-recv` still gets its 403.
+5. lemon-core error reports go to the `REPORT_ERROR_ARN` topic with the subject `error`. That topic is not the one `backend` subscribes to, and the listener acts only on the subject `x-loop-test`.
+6. No cron, no schedule, no retry loop in app code. `loop:check` sends exactly one invoke per kind and polls the logs with a hard timeout. It never retries an invoke.
+7. `notify` and `enqueue` never pass a callback. With a callback, the receiving handler would call one more target after `loop-recv`.
+
+Limit — a failed signature: in `PROTOCOL_VERIFY=enforce` mode, lemon-core checks the signature of a protocol message before it calls our handler.
+A bad signature on the SNS path is reported and dropped (the v5 SNS handler does not rethrow).
+On the SQS path the record goes to `batchItemFailures`, and SQS delivers it again after each `VisibilityTimeout`.
+The queue in `serverless.yml` (`MyQueue`) has no redrive policy and no dead-letter queue.
+So a failing message comes back every 300 s (`VisibilityTimeout`) until `MessageRetentionPeriod` (1800 s) ends: about 6 receives, each with an error report.
+The queue also has `MaximumMessageSize: 4096`; an `enqueue` message carries the whole protocol param (context and body), so a large context can be refused.
+
+The jest spec `src/modules/callback/api-callback-loop.spec.ts` covers each guard.
+
+### Access
+
+- The trigger is admin only: `403 NOT ALLOWED - only for admin @doPostLoop(callback/<kind>)` otherwise. lemon-core `hasAdminRole()` is true in local mode (`LOCAL_MODE=1`), for a signed access key, for an authed `admin` role, or when `context.identity.roles` has `admin`.
+- `loop:check` sends an internal web event (no `Host`, like `lambda:invoke --internal`) with `x-lemon-identity: {"roles":["admin"]}` (like `--identity`).
+- An unknown kind answers `404 NOT FOUND - callback/<kind>/loop`.
+- `loop-recv` takes a protocol call (`depth > 0`: `protocol`, `notify`, `enqueue`) or an admin. A direct non-admin request answers 403.
+- Limit: lemon-core verifies the signature of a host-less identity. In `PROTOCOL_VERIFY=enforce` mode the unsigned `x-lemon-identity` of `loop:check` answers 403 (the run exits 1). In `warn` mode it passes with one `PROTOCOL unsigned web` log line.
+
+### Options
+
+| Option | Default | Meaning |
+|---|---|---|
+| `--kind <k>` | `all` | `sns`, `sqs`, `protocol`, `notify`, `enqueue`, or `all` (= `sns,sqs,protocol,notify,enqueue`, in this order). |
+| `--stage <stage>` | `dev` | Deploy stage. Any stage other than `dev` needs `--confirm-stage`. |
+| `--confirm-stage <stage>` | | The same value as the stage. See [Safety](#safety). |
+| `--region <region>` | `AWS_REGION` or `ap-northeast-2` | AWS region. |
+| `--profile <name>` | SDK default chain | Named profile. |
+| `--timeout <ms>` | `60000` | Longest wait for the log lines, per kind. `1000`–`600000`, else exit 2. |
+| `--json` | | Print `{ stage, functions: { lambda, backend }, results: [...] }` only. Each result is `{ kind, loopId, messageId, http, send, recv, latency, issues }`. The issue texts are redacted. |
+| `--dry` | | Print the targets, the log groups, and the event of each kind (`x-lemon-identity` as `<redacted>`). Do not call AWS (no STS call either). |
+| `--help` | | Show help. |
+
+The functions are `<service>-<stage>-lambda` and `<service>-<stage>-backend`. `--name`, `--fn`, `--raw`, and `--max-bytes` are not accepted (exit 2).
+
+### Flow per kind
+
+1. Invoke `lambda` once with `POST /callback/<kind>/loop` (internal, admin identity, body `{"note":"loop:check"}`).
+2. Expect `statusCode` 200, a UUID `loopId`, and the `kind`. `sns` / `sqs` / `notify` / `enqueue` also need a `messageId`. `protocol` also needs `result.loopId` equal to `loopId`.
+3. Poll `FilterLogEvents` with the filter `"<loopId>"` from 60 seconds before the invoke, every 2 seconds, until both lines are seen or `--timeout` has passed. The send line is read from the `lambda` log group. The recv line is read from the `backend` log group (`sns`, `sqs`, `notify`, `enqueue`) or the `lambda` log group (`protocol`). A log group that does not exist yet reads as empty.
+4. A non-200 answer or a failed invoke skips the poll.
+
+Needs `lambda:InvokeFunction` on the `lambda` function and `logs:FilterLogEvents` on both log groups.
+
+### Output
+
+The identity line goes to stderr first (see [Safety](#safety)). Then one line per kind, and one `  - <issue>` line per issue (redacted):
+
+```text
+loop-check stage=dev lambda=<service>-dev-lambda backend=<service>-dev-backend
+loop kind=sns loop=<loopId> send=ok recv=ok latency=120
+loop kind=sqs loop=<loopId> send=ok recv=missing latency=-
+  - no [LOOP] recv line in /aws/lambda/<service>-dev-backend
+  - timeout after 60000ms
+loop kind=protocol loop=<loopId> send=ok recv=ok latency=7
+loop kind=notify loop=<loopId> send=ok recv=ok latency=250
+loop kind=enqueue loop=<loopId> send=ok recv=ok latency=3100
+```
+
+Exit codes: 0 = every kind received (http 200, both lines, no issue); 1 = any line missing, a timeout, a non-200 answer, a failed invoke, an AWS error, or no AWS identity (STS); 2 = bad arguments, an unknown option, or the stage guard.
+
+### Manual equivalent
+
+```sh
+# 1. trigger (prints the loopId in the http body)
+npm run lambda:invoke -- --stage dev --internal --identity '{"roles":["admin"]}' --method POST --path /callback/sns/loop
+
+# 2. the recv line of that loop (sns, sqs, notify, enqueue: --fn backend; protocol: --fn lambda)
+npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'
+```
+
+Examples:
+
+```sh
+# all five loops on dev
+npm run loop:check -- --stage dev --profile <name>
+
+# one kind, longer wait, machine-readable
+npm run loop:check -- --stage dev --kind sqs --timeout 120000 --json
+
+# show the targets and the events first, no AWS call
+npm run loop:check -- --stage dev --dry
+```
+
 ## Safety
 
-All scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target lambda`; rule 7 applies to `perf:lambda --internal`).
+All scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target lambda`; rule 7 applies to `perf:lambda --internal` and `loop:check`).
 
 1. **Strict options.** An option that is not in the table above (and not an alias) stops the run: `ERROR: unknown option --foo (see --help)`, exit 2. An extra positional argument stops it the same way (`unknown argument <arg>`). `--help` still works with any other argument.
 2. **Stage guard.** Only `dev` (the default) runs without confirmation. Any other stage needs `--confirm-stage <stage>` with the exact same value: `ERROR: stage "prod" needs --confirm-stage prod`, exit 2. A `--confirm-stage` that differs from the stage is also an error. `--name` (and `--group /aws/lambda/<name>` for `lambda:logs`) gives the stage when the name has the shape `<service>-<stage>-<fn>`. If the stage cannot be derived (another service, or another log group), the run needs both `--stage <stage>` and `--confirm-stage <stage>`. The guard runs before `--dry`.
@@ -385,7 +523,7 @@ All scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target
 5. **Size cap.** A printed response body, a log tail, or a single log message longer than 64 KB is cut and ends with `…[truncated N bytes]`. With `--json`, each string value is cut instead, so the JSON stays valid. `--raw` does not lift the cap. `--max-bytes <n>` sets it; `--max-bytes 0` removes it.
 6. **Header echo.** `--dry` prints `<redacted>` for the values of the sensitive headers in rule 4 (`headers` and `multiValueHeaders`). Other headers print as given. The event sent to Lambda keeps the real values. This covers `--identity` (`x-lemon-identity`).
 7. **Internal events.** `--internal` only changes the shape of the web event (no `Host` header). It does not bypass the stage guard or the identity line.
-8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/*.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, the web event builder (`--internal`, `--identity`), the shared invoke call, and `fields:admin` with a fake `fetch` and a fake invoker (arguments, both targets, the gate, `--json`, `--no-gate`, `--dry`), and `perf:lambda` (the log-tail parser with cold, warm, failed, and cut tails, the summary statistics, the tables, the exit code, and the CLI with `--dry`, `--help`, and bad arguments), and `perf:lambda --logs` (`lib/logs.mjs` with a fake `fetch` and a fake clock: polling until `REPORT`, the timeout, the INIT query of a cold run, the full-log parse, the merge with the tail, and the request id). They need no AWS access and no server; the scripts run with `--dry` or `--help` only.
+8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/*.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, the web event builder (`--internal`, `--identity`), the shared invoke call, and `fields:admin` with a fake `fetch` and a fake invoker (arguments, both targets, the gate, `--json`, `--no-gate`, `--dry`), and `perf:lambda` (the log-tail parser with cold, warm, failed, and cut tails, the summary statistics, the tables, the exit code, and the CLI with `--dry`, `--help`, and bad arguments), and `perf:lambda --logs` (`lib/logs.mjs` with a fake `fetch` and a fake clock: polling until `REPORT`, the timeout, the INIT query of a cold run, the full-log parse, the merge with the tail, and the request id), and `loop:check` (a fake invoker, a fake log fetch, and a fake clock: arguments, the stage guard, one invoke per kind, the log groups and the filter, the poll until the timeout, a late line, non-200, `FunctionError`, a protocol result mismatch, a Logs error, `--json`, `--dry`). They need no AWS access and no server; the scripts run with `--dry` or `--help` only.
 
 ## Exit codes
 
@@ -398,5 +536,7 @@ All scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target
 `lambda:invoke` exit codes reflect the Lambda call only. An `http 4xx/5xx` from the web handler still exits 0; check the printed `http` line.
 
 `fields:admin` exit codes are in its own section: unlike `lambda:invoke`, a non-200 `http` code or a failed check exits 1.
+
+`loop:check` exit codes are in its own section: 0 only when every kind received both lines.
 
 `perf:lambda` exit codes: 0 = every run answered `http` 2xx with no `FunctionError` (also `--dry`, `--help`); 1 = any run did not, or an AWS error, or no AWS identity (STS); 2 = bad arguments (also `--runs` outside 1–100, `--interval` outside 0–60000, or `--logs-wait` outside 1000–120000), an unknown option, or the stage guard. With `--logs`, a Logs error or a log that does not arrive in time does not change the exit code (the run falls back to its tail).
