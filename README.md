@@ -1,18 +1,187 @@
 # lemon-templates-api
 
-- api microservice for supporting nothing.
+lemoncloud 백엔드 마이크로서비스(`<code>-<service>-api`)의 템플릿 저장소다.
+새 서비스는 이 저장소를 복제해서 만든다.
+이 README는 사람과 AI 에이전트의 진입점이다. 경로·명령·검증·금지 사항을 실제 파일 기준으로 적는다.
 
-## Description
+## 한눈에 보기
 
-Summarized specifications to design modeling
+| 항목 | 값 |
+|---|---|
+| 런타임 | Node `24.15.0` (`.nvmrc`), `engines.node` `>=24.0.0`. Lambda 런타임은 `serverless.yml` `provider.runtime`이 env 설정에서 읽는다. |
+| 언어·빌드 | TypeScript `^4.7.4`, `ttsc`(ttypescript)로 `src/` → `dist/` |
+| 테스트 | jest `^27.5.1` + ts-jest (`src/**/*.spec.ts`). `bin/`은 `node:test` |
+| 프레임워크 | `lemon-core` `^5.0.4`, `lemon-model` `^5.0.0`. 로컬 express는 `lemon-devkit` `^0.2.2`가 만든다. |
+| AWS SDK | v3 (`@aws-sdk/*` `^3.971.0`) |
+| 배포 | Serverless Framework v3 (`frameworkVersion: "3"`) → AWS Lambda |
+| 브랜치 | 기본 브랜치 `develop`. v5 라인은 `v5` 브랜치에 있다. |
+| 패키지 버전 | `package.json` `version` |
 
-## UPGRADE GUIDE: lemon-core V3 to V4
+## 저장소 지도
 
-[UPGRADE GUIDE: lemon-core V3 to V4](HOW_TO_UPGRADE_V4.md)
+| 경로 | 내용 | 누가 고치나 |
+|---|---|---|
+| `handler.js` | Lambda 진입점. `dist/index`의 `engine()`을 export 한다. | 거의 안 고침 |
+| `src/index.ts` | `engine()`·`express()` 로더. 직접 실행하면 express 서버를 띄운다. | 거의 안 고침 |
+| `src/engine.ts` | lemon-core 엔진. 웹 컨트롤러와 cron 리스너를 등록한다. | 기능 추가 시 |
+| `src/express.ts` | 로컬 express 서버. `POST /echo`를 더한다. | 거의 안 고침 |
+| `src/api/` | 모델 없는 컨트롤러(`hello-api.ts`, `crons-api.ts`)와 cron 목록(`cron-jobs.ts`) | 개발자 |
+| `src/modules/<name>/` | 모델 있는 기능 모듈. `mock`(골든 샘플), `callback`, `search` | 개발자 |
+| `src/service/` | `BackendService`·`BackendProxy`·`ModelType` 등 모듈 연결 지점 | 기능 추가 시 |
+| `src/view/` | 외부 공개 타입(`types.ts`)과 transformer 묶음 | 기능 추가 시 |
+| `src/test-helpers/` | 테스트용 컨텍스트 샘플(`loadSample`) | 개발자 |
+| `src/generated/field-registry.ts` | 필드 레지스트리. `lemon-fields gen`(lemon-devkit)이 만든다. | **손으로 고치지 않음** |
+| `bin/` | 배포된 Lambda 호출·로그·성능·`fields/admin` 점검 스크립트 | 개발자 |
+| `data/` | 더미 데이터(`dummy-data.yml` 등)와 배치 샘플(`batch/`). Lambda 패키지에 들어간다. | 개발자 |
+| `sample/` | 컨텍스트·응답 예시 JSON | 참고용 |
+| `swagger/documentation.yml` | `serverless-aws-documentation` 설정 | 개발자 |
+| `@types/` | 타입 패키지 `@lemoncloud/<name>`. `dist/`와 `package.json`은 `npm run types`가 다시 만든다. | **`dist/`는 손으로 고치지 않음** |
+| `serverless.yml` | 함수·이벤트·IAM·리소스 이름 맵. `serverless-vpc.yml`은 VPC 설정이 켜진 변형이다. | 사람 검토 필수 |
+| `env/` | 프로필·스테이지 설정 | **에이전트는 열지 않음** |
+| `docs/proxy-implementation-guide.md` | proxy 구현 가이드. lemon-devkit이 install/upgrade 때 다시 쓴다. | **손으로 고치지 않음** |
+| `README.md` 끝 `lemon-devkit:proxy-doc` 블록 | lemon-devkit이 다시 쓰는 블록 | **손으로 고치지 않음** |
 
-## OS2 GUIDE
+## 요청 흐름
 
-[OS2 GUIDE: how to use os2 with FGAC](HOW_TO_USE_OS2.md)
+```mermaid
+flowchart LR
+    APIGW["API Gateway http 이벤트"] --> FL["함수 lambda"]
+    SCH["schedule 1MIN (enabled: false)"] --> FL
+    DDB["DynamoDB stream"] --> FB["함수 backend"]
+    SNS["SNS"] --> FB
+    SQS["SQS"] --> FB
+    FL --> H["handler.js handler.lambda"]
+    FB --> H
+    H --> ENG["src/engine.ts lambda()"]
+    ENG --> LC["lemon-core lambda-handler: 이벤트 종류 판별"]
+    LC -- "web" --> WEB["$web 컨트롤러"]
+    LC -- "sns/sqs, Subject x-protocol-service" --> WEB
+    LC -- "cron" --> CRON["$cron 리스너: crons.handleEvent"]
+    CRON --> JOBS["src/api/cron-jobs.ts CRON_JOBS"]
+    LC -- "그 밖의 sns/sqs, dynamo stream" --> NONE["앱 리스너 미등록"]
+    LOCAL["로컬 express :8800"] --> EXP["src/express.ts buildExpress"]
+    EXP --> WEB
+    WEB --> API["src/api: hello, crons"]
+    WEB --> MOD["src/modules: callback, search, mocks, tests"]
+```
+
+- 두 함수 모두 같은 `handler.lambda`를 쓴다. 함수별 이벤트는 `serverless.yml` `functions:`에 있다.
+- `src/engine.ts`는 웹 컨트롤러 6개와 cron 리스너 1개만 등록한다. SNS·SQS·DynamoDB stream 리스너는 없다.
+- 일반 라우트 `/{type}/{id}/{cmd}`에는 `authorizer: aws_iam`이 붙는다. `/`·`/hello`·`/mocks` 명시 라우트에는 없다.
+
+## 기능을 어디에 넣나
+
+- **모델이 없으면** `src/api/<name>-api.ts`에 `GeneralWEBController`를 상속해 만든다. 예시는 `hello-api.ts`다.
+- **cron 작업이면** `src/api/cron-jobs.ts`의 `CRON_JOBS`에 항목을 더한다.
+- **모델이 있으면** `src/modules/<name>/`를 만든다. `src/modules/mock/`를 복사한다. `TestModel`이 골든 샘플이다.
+- 모듈 파일 세트: `types.ts`, `model.ts`, `views.ts`, `transformer.ts`, `service.ts`(ModelManager), `proxy.ts`(ManagerProxy), `api-<name>.ts`(`AbstractCRUDController`), 그리고 각 `*.spec.ts`.
+- `search`는 OS2 검색 모듈이다. `model.ts`·`service.ts`·`api-search.ts`만 있다. [HOW_TO_USE_OS2.md](HOW_TO_USE_OS2.md)를 본다.
+- 새 모듈은 다음 지점에 연결한다.
+  - `src/engine.ts`: `$web.addController(...)`
+  - `src/service/backend-types.ts`: `$LUT.ModelType`에 모듈 `ModelType` 병합
+  - `src/service/backend-service.ts`: `$<name>` 모델 매니저
+  - `src/service/backend-proxy.ts`: 매니저 proxy
+  - `src/view/types.ts`: 타입 패키지로 내보낼 view
+- 새 type은 일반 라우트(`aws_iam`)로 들어온다. 인증 없는 경로가 필요하면 `serverless.yml`에 명시 라우트를 둔다.
+- proxy를 추가·변경하면 [docs/proxy-implementation-guide.md](docs/proxy-implementation-guide.md)를 먼저 본다.
+- 모듈 규칙: [src/modules/mock/README.md](src/modules/mock/README.md), [src/modules/callback/README.md](src/modules/callback/README.md)
+
+## 명령
+
+| 명령 | 하는 일 | 주의 |
+|---|---|---|
+| `nvm use` | `.nvmrc`의 Node로 맞춘다 | |
+| `npm install` | 의존성 설치 | `package-lock.json` 사용 |
+| `npm run build` | `fields:gen` 후 `ttsc` → `dist/` | `src/generated/field-registry.ts`를 다시 쓴다 |
+| `npm test` | `fields:gen` 후 `LS=1 jest` | 생성 파일을 다시 쓴다. 커버리지는 `coverage/` |
+| `npm run test:watch /mock/` | 패턴에 맞는 spec만 감시 실행 | 모듈 README 예시 참고 |
+| `npx tsc --noEmit` | 타입 검사만 | 파일을 쓰지 않는다 |
+| `npm run lint` | `tsc --noEmit` + `eslint --fix` | **파일을 고쳐 쓴다** |
+| `npm run fields:gen` | 필드 레지스트리 생성 | 생성 파일을 다시 쓴다 |
+| `npm run fields:check` | 레지스트리가 최신인지 검사 | 쓰지 않는다. 낡았으면 exit 1 |
+| `npm run fields:report` | 생성 + 키·필드 표 출력 | 생성 파일을 다시 쓴다 |
+| `npm run fields:migrate` | 옛 `keys<T>()` 호출 코드 변환 | **소스와 `tsconfig`를 고쳐 쓴다** |
+| `npm run express.lemon` | `ENV=lemon STAGE=local`로 빌드·watch·nodemon 실행 | 포트는 `package.json` `port`(8800) |
+| `npm run types` | `@types/` 패키지 재생성 | 끝에 `npm publish --dry-run`을 돈다 |
+| `npm run lambda:test` | `bin/lib/*.test.mjs` 오프라인 테스트 | AWS·서버 불필요 |
+| `npm run lambda:invoke -- ...` | 배포된 함수 호출 | [bin/README.md](bin/README.md#lambdainvoke) |
+| `npm run lambda:logs -- ...` | CloudWatch 로그 조회·추적 | [bin/README.md](bin/README.md#lambdalogs) |
+| `npm run perf:lambda -- ...` | 반복 호출, cold/warm 시간 요약 | [bin/README.md](bin/README.md#perflambda) |
+| `npm run fields:admin -- --target express\|lambda` | `GET /<type>/fields/admin` 점검 | [bin/README.md](bin/README.md#fieldsadmin) |
+
+**사람만 실행** — 에이전트는 사람이 명시적으로 시킬 때만 돌린다.
+
+| 명령 | 하는 일 |
+|---|---|
+| `npm run deploy.lemon` / `deploy.lemon-vpc` / `deploy.lemon.prod` | 빌드 후 `sls deploy` (dev / dev+VPC / prod) |
+| `npm run pack.lemon` / `pack.lemon.prod` | 빌드 후 `sls package` |
+| `npm run info` / `info.lemon` / `info.lemon.prod` | `sls info`. 인자 없는 `info`는 prod다. |
+| `npm run logs` / `logs.lemon` / `logs.lemon.prod` | `sls logs`. 인자 없는 `logs`는 prod다. |
+| `npm run remove` / `remove.lemon` / `remove.lemon.prod` | `sls remove`. 스택을 지운다. 인자 없는 `remove`는 prod다. |
+
+소스 주석의 `:8888` 예시는 꺼진 `serverless-offline`의 포트다. 로컬 express 포트는 8800이다.
+
+## 작업 검증
+
+완료라고 말하기 전에 아래를 돌린다.
+
+```sh
+npx tsc --noEmit        # 기대: 출력 없음, exit 0
+npm test                # 기대: jest 요약에 failed 0, exit 0
+npm run fields:check    # 기대: exit 0 (레지스트리 최신)
+npm run lambda:test     # bin/ 을 바꿨을 때. 기대: fail 0
+```
+
+- 테스트가 실패하면 테스트가 아니라 코드를 고친다.
+- `npm test`는 `src/generated/field-registry.ts`를 다시 쓴다. 모델을 안 바꿨는데 이 파일이 바뀌면 원인을 찾는다.
+- 모델 필드를 바꾸면 `src/modules/mock/fields-admin.expected.json`의 `counts`·`extra`도 고친다.
+- 로컬 서버(`LOCAL_MODE=1`)가 떠 있으면 `npm run fields:admin -- --target express`로 점검한다. 기대: exit 0.
+
+배포 후 점검(사람이 dev에 배포한 뒤, dev 스테이지만):
+
+```sh
+npm run fields:admin -- --target lambda --stage dev   # 기대: ok=true, gate=closed(403), exit 0
+npm run lambda:invoke -- --stage dev --path /hello/0  # 기대: function-error=none, http 200
+npm run lambda:logs -- --stage dev --since 5m         # 오류 줄 확인
+```
+
+- `lambda:invoke`는 `http 4xx/5xx`여도 exit 0이다. 출력의 `http` 줄을 본다.
+
+## 에이전트 규칙
+
+- `env/*.yml`·`env/config.js`를 열지 않는다. 그 값을 출력·인용하지 않는다.
+- `/hello/environ`을 호출하지 않는다. 그 응답을 붙이지 않는다. 스테이지·프로필·테이블·큐·토픽 설정값을 그대로 돌려준다.
+- `bin/` 스크립트에 `--raw`를 쓰지 않는다. 계정·ARN·토큰 마스킹이 꺼진다.
+- deploy·pack·info·`sls logs`·remove는 사람이 명시적으로 시킬 때만 돌린다.
+- prod 스테이지 호출은 하지 않는다. `bin/`의 stage guard는 dev 외 스테이지에 `--confirm-stage <stage>`를 요구한다. 이 플래그는 사람의 명시 지시가 있을 때만 붙인다.
+- 작업 전에 브랜치를 만든다. v5 라인 작업의 base는 `v5`다.
+- 생성·자동 관리 파일(`src/generated/`, `@types/dist/`, `docs/proxy-implementation-guide.md`, 아래 proxy 블록)을 손으로 고치지 않는다.
+- `npm run lint`·`fields:migrate`는 파일을 고쳐 쓴다. 의도한 경우에만 돌린다.
+- 문서와 소스가 다르면 소스가 맞다.
+
+## 새 서비스로 복제할 때
+
+- [ ] `package.json`의 `name`·`description`·`repository.url`·`version`을 바꾼다.
+- [ ] `serverless.yml`의 `service:`를 바꾼다. `bin/`의 함수 이름(`<service>-<stage>-<fn>`)이 이 값에서 나온다.
+- [ ] `serverless.yml` `custom`의 `topicName`·`tableName`·`queueName` 스테이지별 맵을 바꾼다. IAM·환경변수·`resources`가 이 맵을 참조한다.
+- [ ] `serverless.yml` schedule `name`의 접두어를 바꾼다.
+- [ ] `npm run types`로 `@types/package.json`을 다시 만든다. 이름은 `@lemoncloud/<package.json name>`이 된다. `@types/README.md` 제목도 바꾼다.
+- [ ] 쓰지 않는 샘플 모듈은 위 연결 지점과 `serverless.yml` 명시 라우트에서 함께 뺀다. 그 뒤 `npm run fields:gen`을 돌린다.
+- [ ] 이 README의 제목·소개·VERSION INFO를 바꾼다. proxy 블록은 그대로 둔다.
+- [ ] `env/` 설정은 사람이 준비한다.
+
+## 문서 색인
+
+| 문서 | 내용 |
+|---|---|
+| [bin/README.md](bin/README.md) | `lambda:invoke`·`lambda:logs`·`perf:lambda`·`fields:admin` 옵션, 자격 증명, 안전 규칙, exit code |
+| [src/modules/mock/README.md](src/modules/mock/README.md) | `TestModel` 골든 계약, 함께 고칠 파일, `fields/admin` 점검 |
+| [src/modules/callback/README.md](src/modules/callback/README.md) | callback 모듈 설계 개념 |
+| [docs/proxy-implementation-guide.md](docs/proxy-implementation-guide.md) | `BackendProxy`·`ManagerProxy`·`guardProxy()`와 use-case 구현 가이드 (lemon-devkit 관리) |
+| [docs/dependency-audit.md](docs/dependency-audit.md) | 운영 의존성 `npm audit` 점검 기록 |
+| [HOW_TO_UPGRADE_V4.md](HOW_TO_UPGRADE_V4.md) | lemon-core v3 → v4 업그레이드 가이드 (과거 기록) |
+| [HOW_TO_USE_OS2.md](HOW_TO_USE_OS2.md) | OS2를 FGAC JWT로 쓰는 방법 |
+| [@types/README.md](@types/README.md) | 타입 패키지 소개 |
 
 ----------------
 
@@ -20,7 +189,7 @@ Summarized specifications to design modeling
 
 | Version   | Description
 |--         |--
-| 5.26.xxx  | optimized `lemon-core@5.0.3` since 2026.
+| 5.26.xxx  | optimized `lemon-core@5.0.4` since 2026. (`^5.0.4`, see [docs/dependency-audit.md](docs/dependency-audit.md))
 | 0.25.808  | optimized `lemon-core@4.0.6` initially.
 
 <!-- lemon-devkit:proxy-doc:start -->
