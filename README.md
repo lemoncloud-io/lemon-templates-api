@@ -116,7 +116,8 @@ flowchart LR
 | `npm run fields:check` | 레지스트리가 최신인지 검사 | 쓰지 않는다. 낡았으면 exit 1 |
 | `npm run fields:report` | 생성 + 키·필드 표 출력 | 생성 파일을 다시 쓴다 |
 | `npm run fields:migrate` | 옛 `keys<T>()` 호출 코드 변환 | **소스와 `tsconfig`를 고쳐 쓴다** |
-| `npm run express.lemon` | `ENV=lemon STAGE=local`로 빌드·watch·nodemon 실행 | 포트는 `package.json` `port`(8800) |
+| `npm run express.lemon` | `ENV=lemon STAGE=local LOCAL_TRANSPORT=mock`로 빌드·watch·nodemon 실행 | 포트는 `package.json` `port`(8800). 자기 서비스로 가는 SNS·SQS·protocol 발신을 프로세스 안에서 전달한다(lemon-core 로컬 전송). 다른 대상은 `501`이다 |
+| `npm run express.lemon.aws` | `ENV=lemon STAGE=local`로 실행(예전 동작) | 발신이 실제 AWS로 간다 |
 | `npm run types` | `@types/` 패키지 재생성 | 끝에 `npm publish --dry-run`을 돈다 |
 | `npm run lambda:test` | `bin/lib/*.test.mjs` 오프라인 테스트 | AWS·서버 불필요 |
 | `npm run lambda:invoke -- ...` | 배포된 함수 호출 | [bin/README.md](bin/README.md#lambdainvoke) |
@@ -124,6 +125,7 @@ flowchart LR
 | `npm run perf:lambda -- ...` | 반복 호출, cold/warm 시간 요약 | [bin/README.md](bin/README.md#perflambda) |
 | `npm run fields:admin -- --target express\|lambda` | `GET /<type>/fields/admin` 점검 | [bin/README.md](bin/README.md#fieldsadmin) |
 | `npm run loop:check -- ...` | SNS·SQS·protocol 루프 테스트를 로그 줄로 점검 | [bin/README.md](bin/README.md#loopcheck) |
+| `npm run loop:check -- --target express` | 로컬 서버(`express.lemon`)에서 루프 테스트 다섯 kind 점검 | AWS 불필요. 응답의 `mock`·`recv`로 판정 |
 
 **사람만 실행** — 에이전트는 사람이 명시적으로 시킬 때만 돌린다.
 
@@ -152,6 +154,14 @@ npm run lambda:test     # bin/ 을 바꿨을 때. 기대: fail 0
 - `npm test`는 `src/generated/field-registry.ts`를 다시 쓴다. 모델을 안 바꿨는데 이 파일이 바뀌면 원인을 찾는다.
 - 모델 필드를 바꾸면 `src/modules/mock/fields-admin.expected.json`의 `counts`·`extra`도 고친다.
 - 로컬 서버(`LOCAL_MODE=1`)가 떠 있으면 `npm run fields:admin -- --target express`로 점검한다. 기대: exit 0.
+- 루프 테스트를 바꿨으면 로컬에서 먼저 점검한다. 서버는 `npm run express.lemon`으로 띄운다.
+
+```sh
+npm run loop:check -- --target express --kind all   # 기대: 다섯 줄 모두 send=ok recv=ok, exit 0
+```
+
+- 서버 로그에 kind마다 `[MOCK] deliver` 줄 1개와 `[LOOP] recv` 줄 1개가 있다.
+- 로컬 전송은 발신만 바꾼다. 서버 시작 때 설정 복호화(KMS)는 그대로 AWS를 쓴다.
 
 배포 후 점검(사람이 dev에 배포한 뒤, dev 스테이지만):
 

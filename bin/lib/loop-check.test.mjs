@@ -1,6 +1,6 @@
 /**
  * `bin/lib/loop-check.test.mjs`
- * - offline tests for `loop-check.mjs` (fake Lambda invoker, fake log fetch, fake clock; no AWS).
+ * - offline tests for `loop-check.mjs` (fake Lambda invoker, fake log fetch, fake clock, fake `fetch`; no AWS).
  * - run: `npm run lambda:test`
  */
 import { test, describe } from 'node:test';
@@ -15,6 +15,7 @@ import {
     logGroups,
     triggerEvent,
     resultLine,
+    defaultPort,
     KINDS,
 } from './loop-check.mjs';
 import { functionName, ArgError } from './common.mjs';
@@ -368,5 +369,127 @@ describe('loop-check helpers and --dry', () => {
         const r = spawnSync(process.execPath, [SCRIPT, '--stage', 'prod', '--dry'], { encoding: 'utf8' });
         assert.equal(r.status, 2);
         assert.equal(r.stderr.trim(), 'ERROR: stage "prod" needs --confirm-stage prod');
+    });
+});
+
+// a fake `fetch` of the local express server: answers each kind like `doPostLoop()` with the local transport.
+// `answer(kind, body)` may change the body; `status` the http status; records each request.
+const fakeServer = ({ status = 200, answer, fail } = {}) => {
+    const requests = [];
+    const fn = async (url, init) => {
+        requests.push({ url, ...init });
+        if (fail) throw fail;
+        const kind = new URL(url).pathname.split('/')[2];
+        const loopId = IDS[kind];
+        const recv = [{ kind, loopId, recvAt: 1042, hop: 1 }];
+        const base = { kind, loopId, sentAt: 1000, mock: true, recv };
+        const ok =
+            kind === 'protocol'
+                ? { ...base, result: { loopId, recvAt: 1042, hop: 1 } }
+                : { ...base, messageId: `mock-${kind}` };
+        const body = answer ? answer(kind, ok) : ok;
+        return { status, text: async () => (status === 200 ? JSON.stringify(body) : '403 NOT ALLOWED - x') };
+    };
+    return Object.assign(fn, { requests });
+};
+
+describe('loop-check --target express', () => {
+    test('every kind received: exit 0, one POST per kind to 127.0.0.1:<port>, no AWS', async () => {
+        const fetch = fakeServer();
+        const invoke = fakeInvoke();
+        const identity = async () => assert.fail('no STS banner for express');
+        const r = await call(['--target', 'express', '--port', '8899'], { fetch, invoke, identity });
+        assert.equal(r.code, 0, r.out);
+        assert.deepEqual(r.lines, [
+            'loop-check target=express url=http://127.0.0.1:8899',
+            `loop kind=sns loop=${IDS.sns} send=ok recv=ok latency=42`,
+            `loop kind=sqs loop=${IDS.sqs} send=ok recv=ok latency=42`,
+            `loop kind=protocol loop=${IDS.protocol} send=ok recv=ok latency=42`,
+            `loop kind=notify loop=${IDS.notify} send=ok recv=ok latency=42`,
+            `loop kind=enqueue loop=${IDS.enqueue} send=ok recv=ok latency=42`,
+        ]);
+        assert.equal(r.err, '');
+        assert.deepEqual(
+            fetch.requests.map(q => `${q.method} ${q.url}`),
+            KINDS.map(k => `POST http://127.0.0.1:8899/callback/${k}/loop`),
+        );
+        assert.equal(fetch.requests[0].body, '{"note":"loop:check"}');
+        assert.equal(invoke.events.length, 0);
+    });
+    test('default port from package.json, --kind and --json', async () => {
+        const fetch = fakeServer();
+        const r = await call(['--target', 'express', '--kind', 'notify', '--json'], { fetch });
+        assert.equal(r.code, 0, r.out);
+        const port = defaultPort();
+        assert.equal(fetch.requests[0].url, `http://127.0.0.1:${port}/callback/notify/loop`);
+        const json = JSON.parse(r.out);
+        assert.equal(json.target, 'express');
+        assert.equal(json.url, `http://127.0.0.1:${port}`);
+        assert.deepEqual(json.results[0], {
+            kind: 'notify',
+            loopId: IDS.notify,
+            messageId: 'mock-notify',
+            http: 200,
+            send: true,
+            recv: true,
+            latency: 42,
+            issues: [],
+        });
+    });
+    test('not mock, no recv, recv twice or another loop id: exit 1 with the issue', async () => {
+        const noMock = await call(['--target', 'express', '--kind', 'sns'], {
+            fetch: fakeServer({ answer: (k, b) => ({ ...b, mock: undefined, recv: undefined }) }),
+        });
+        assert.equal(noMock.code, 1);
+        assert.deepEqual(noMock.lines.slice(1), [
+            `loop kind=sns loop=${IDS.sns} send=ok recv=missing latency=-`,
+            '  - no mock: true in the response (run the server with npm run express.lemon)',
+            '  - expected 1 recv for the loopId got 0',
+        ]);
+        const twice = await call(['--target', 'express', '--kind', 'sqs'], {
+            fetch: fakeServer({ answer: (k, b) => ({ ...b, recv: [...b.recv, ...b.recv] }) }),
+        });
+        assert.equal(twice.code, 1);
+        assert.equal(twice.lines[2], '  - expected 1 recv for the loopId got 2');
+        const other = await call(['--target', 'express', '--kind', 'enqueue'], {
+            fetch: fakeServer({ answer: (k, b) => ({ ...b, recv: [{ ...b.recv[0], loopId: IDS.sns }] }) }),
+        });
+        assert.equal(other.code, 1);
+        assert.equal(other.lines[2], '  - expected 1 recv for the loopId got 0');
+    });
+    test('non-200 answer: exit 1; server down: exit 1 with one ERROR line', async () => {
+        const denied = await call(['--target', 'express', '--kind', 'protocol'], {
+            fetch: fakeServer({ status: 403 }),
+        });
+        assert.equal(denied.code, 1);
+        assert.deepEqual(denied.lines.slice(1), [
+            `loop kind=protocol loop=- send=missing recv=missing latency=-`,
+            '  - expected http 200 got 403: 403 NOT ALLOWED - x',
+        ]);
+        const fail = Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNREFUSED' } });
+        const down = await call(['--target', 'express', '--port', '1'], { fetch: fakeServer({ fail }) });
+        assert.equal(down.code, 1);
+        assert.equal(down.err, 'ERROR: cannot reach http://127.0.0.1:1/callback/sns/loop (ECONNREFUSED)');
+    });
+    test('lambda-target options with --target express (and --port without it) exit 2', async () => {
+        for (const opt of [
+            ['--stage', 'dev'],
+            ['--confirm-stage', 'dev'],
+            ['--region', 'x'],
+            ['--profile', 'p'],
+            ['--timeout', '5000'],
+            ['--dry'],
+        ]) {
+            const fetch = fakeServer();
+            const r = await call(['--target', 'express', ...opt], { fetch });
+            assert.equal(r.code, 2, opt.join(' '));
+            assert.equal(r.err, `ERROR: ${opt[0]} applies to --target lambda only`);
+            assert.equal(fetch.requests.length, 0);
+        }
+        throwsArg(() => parseOptions(['--port', '8800']), /^--port applies to --target express only$/);
+        throwsArg(() => parseOptions(['--target', 'ecs']), /^--target must be express or lambda \(got: ecs\)$/);
+        throwsArg(() => parseOptions(['--target', 'express', '--port', '0']), /^--port needs an integer 1-65535/);
+        throwsArg(() => parseOptions(['--target', 'express', '--port', 'x']), /^--port needs an integer 1-65535/);
+        assert.equal(parseOptions([]).target, 'lambda');
     });
 });

@@ -7,7 +7,7 @@ They call AWS directly with the SDK (no `sls`), so they work on any machine with
 - `lambda-logs.mjs` — print or follow the function's CloudWatch logs (polling `FilterLogEvents`).
 - `perf-lambda.mjs` — invoke the deployed function several times and summarize cold / warm timings from the log tail, or from the full CloudWatch log with `--logs`. See [perf:lambda](#perflambda).
 - `fields-admin.mjs` — check `GET /<type>/fields/admin` on the local express server or the deployed Lambda with `checkFieldsAdmin()` of lemon-core. See [fields:admin](#fieldsadmin).
-- `loop-check.mjs` — check the SNS / SQS / protocol / notify / enqueue loop test of the deployed service from its CloudWatch log lines. See [loop:check](#loopcheck).
+- `loop-check.mjs` — check the SNS / SQS / protocol / notify / enqueue loop test of the deployed service from its CloudWatch log lines, or of a local server with `--target express`. See [loop:check](#loopcheck).
 
 The Lambda call itself (`lambda:Invoke`) is shared in `lib/invoke.mjs` by `lambda-invoke.mjs`, `fields-admin.mjs`, `perf-lambda.mjs`, and `loop-check.mjs`.
 The paged `FilterLogEvents` read is shared in `lib/logs.mjs` by `lambda-logs.mjs`, `perf-lambda.mjs --logs`, and `loop-check.mjs`.
@@ -444,7 +444,9 @@ The jest spec `src/modules/callback/api-callback-loop.spec.ts` covers each guard
 
 | Option | Default | Meaning |
 |---|---|---|
+| `--target <t>` | `lambda` | `lambda` (the deployed service) or `express` (a local server, see [`--target express`](#--target-express-local)). |
 | `--kind <k>` | `all` | `sns`, `sqs`, `protocol`, `notify`, `enqueue`, or `all` (= `sns,sqs,protocol,notify,enqueue`, in this order). |
+| `--port <n>` | `port` of `package.json` (8800) | `--target express` only. The server port on `127.0.0.1`, `1`–`65535`. |
 | `--stage <stage>` | `dev` | Deploy stage. Any stage other than `dev` needs `--confirm-stage`. |
 | `--confirm-stage <stage>` | | The same value as the stage. See [Safety](#safety). |
 | `--region <region>` | `AWS_REGION` or `ap-northeast-2` | AWS region. |
@@ -455,6 +457,7 @@ The jest spec `src/modules/callback/api-callback-loop.spec.ts` covers each guard
 | `--help` | | Show help. |
 
 The functions are `<service>-<stage>-lambda` and `<service>-<stage>-backend`. `--name`, `--fn`, `--raw`, and `--max-bytes` are not accepted (exit 2).
+`--stage`, `--confirm-stage`, `--region`, `--profile`, `--timeout`, and `--dry` apply to `--target lambda` only, and `--port` to `--target express` only: `ERROR: --<option> applies to --target <t> only`, exit 2.
 
 ### Flow per kind
 
@@ -505,6 +508,28 @@ npm run loop:check -- --stage dev --kind sqs --timeout 120000 --json
 npm run loop:check -- --stage dev --dry
 ```
 
+### `--target express` (local)
+
+The same five loops on a local server, with no AWS.
+Start the server with `npm run express.lemon` (`LOCAL_MODE=1` from the env file, and `LOCAL_TRANSPORT=mock`).
+lemon-core's local transport then delivers each send to this service in the same process: it builds the Lambda record and runs it through the engine's `LambdaHandler.handle()`.
+A target that is not this service answers `501 NOT SUPPORTED - local transport: <name> is not this service`.
+
+Per kind, `loop:check` sends one `POST http://127.0.0.1:<port>/callback/<kind>/loop` (body `{"note":"loop:check"}`; local mode makes it admin).
+The route waits for the delivery (`$localTransport.drain()`), then answers `{ …, mock: true, recv: [{ kind, loopId, recvAt, hop }] }`.
+The kind passes with http 200, `mock: true`, and exactly one `recv` with the same `loopId`. `latency` is `recv[0].recvAt - sentAt`.
+There is no STS call and no log poll. `--json` prints `{ target: 'express', url, results }`.
+
+```sh
+npm run express.lemon                                        # terminal 1
+npm run loop:check -- --target express                       # terminal 2: 5 lines send=ok recv=ok, exit 0
+npm run loop:check -- --target express --port 8899 --kind notify --json
+```
+
+The server log has one `[MOCK] deliver kind=<sns|sqs|protocol> target=<name> message=mock-<uuid>` line and one `[LOOP] recv` line per kind; the send lines end with ` mock=1`.
+`npm run express.lemon.aws` starts the server without the local transport (the sends go to AWS); `loop:check --target express` then reports `no mock: true in the response`.
+Exit codes: 0 = every kind passed; 1 = any issue, or the server is not reachable (`ERROR: cannot reach <url> (ECONNREFUSED)`); 2 = bad arguments.
+
 ## Safety
 
 All scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target lambda`; rule 7 applies to `perf:lambda --internal` and `loop:check`).
@@ -523,7 +548,7 @@ All scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target
 5. **Size cap.** A printed response body, a log tail, or a single log message longer than 64 KB is cut and ends with `…[truncated N bytes]`. With `--json`, each string value is cut instead, so the JSON stays valid. `--raw` does not lift the cap. `--max-bytes <n>` sets it; `--max-bytes 0` removes it.
 6. **Header echo.** `--dry` prints `<redacted>` for the values of the sensitive headers in rule 4 (`headers` and `multiValueHeaders`). Other headers print as given. The event sent to Lambda keeps the real values. This covers `--identity` (`x-lemon-identity`).
 7. **Internal events.** `--internal` only changes the shape of the web event (no `Host` header). It does not bypass the stage guard or the identity line.
-8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/*.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, the web event builder (`--internal`, `--identity`), the shared invoke call, and `fields:admin` with a fake `fetch` and a fake invoker (arguments, both targets, the gate, `--json`, `--no-gate`, `--dry`), and `perf:lambda` (the log-tail parser with cold, warm, failed, and cut tails, the summary statistics, the tables, the exit code, and the CLI with `--dry`, `--help`, and bad arguments), and `perf:lambda --logs` (`lib/logs.mjs` with a fake `fetch` and a fake clock: polling until `REPORT`, the timeout, the INIT query of a cold run, the full-log parse, the merge with the tail, and the request id), and `loop:check` (a fake invoker, a fake log fetch, and a fake clock: arguments, the stage guard, one invoke per kind, the log groups and the filter, the poll until the timeout, a late line, non-200, `FunctionError`, a protocol result mismatch, a Logs error, `--json`, `--dry`). They need no AWS access and no server; the scripts run with `--dry` or `--help` only.
+8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/*.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, the web event builder (`--internal`, `--identity`), the shared invoke call, and `fields:admin` with a fake `fetch` and a fake invoker (arguments, both targets, the gate, `--json`, `--no-gate`, `--dry`), and `perf:lambda` (the log-tail parser with cold, warm, failed, and cut tails, the summary statistics, the tables, the exit code, and the CLI with `--dry`, `--help`, and bad arguments), and `perf:lambda --logs` (`lib/logs.mjs` with a fake `fetch` and a fake clock: polling until `REPORT`, the timeout, the INIT query of a cold run, the full-log parse, the merge with the tail, and the request id), and `loop:check` (a fake invoker, a fake log fetch, and a fake clock: arguments, the stage guard, one invoke per kind, the log groups and the filter, the poll until the timeout, a late line, non-200, `FunctionError`, a protocol result mismatch, a Logs error, `--json`, `--dry`; and `--target express` with a fake `fetch`: one POST per kind, `mock`/`recv` checks, non-200, an unreachable server, and the target-only options). They need no AWS access and no server; the scripts run with `--dry` or `--help` only.
 
 ## Exit codes
 
