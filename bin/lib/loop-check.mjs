@@ -4,6 +4,7 @@
  *   (`POST /callback/<kind>/loop`), then the `[LOOP] send` / `[LOOP] recv` lines in CloudWatch.
  *   - `sns`, `sqs`: send in the `lambda` log group, recv in the `backend` log group.
  *   - `protocol`: send and recv both in the `lambda` log group (`//self` is the `lambda` function).
+ *   - `notify`, `enqueue`: protocol service over SNS / SQS; send in `lambda`, recv (`loop-recv`) in `backend`.
  * - exactly one invoke per kind, no retry; the log poll stops at `--timeout`.
  * - all logic of `bin/loop-check.mjs`: no `process.exit`; the Lambda invoker, the log fetch, the STS banner,
  *   the clock, and the printers are injectable, so the tests run offline.
@@ -24,7 +25,7 @@ import {
 import { webEvent } from './event.mjs';
 
 // every loop kind, in the order of `--kind all`.
-export const KINDS = ['sns', 'sqs', 'protocol'];
+export const KINDS = ['sns', 'sqs', 'protocol', 'notify', 'enqueue'];
 
 // identity of the admin trigger (lemon-core reads it on internal calls only).
 export const ADMIN_IDENTITY = '{"roles":["admin"]}';
@@ -45,17 +46,17 @@ export const LOOKBACK_MS = 60 * 1000;
 
 // help text for `--help`.
 export const HELP = [
-    'Check the SNS / SQS / protocol loop test of the deployed service from its CloudWatch log lines.',
+    'Check the SNS / SQS / protocol / notify / enqueue loop test of the deployed service from its CloudWatch log lines.',
     '',
     'usage: node bin/loop-check.mjs [options]',
     '       npm run loop:check -- [options]',
     '',
     'per kind: one internal admin invoke of `lambda` (POST /callback/<kind>/loop), then a poll of the log lines',
-    '  sns, sqs:  [LOOP] send in the lambda log group, [LOOP] recv in the backend log group',
-    '  protocol:  [LOOP] send and [LOOP] recv both in the lambda log group',
+    '  sns, sqs, notify, enqueue:  [LOOP] send in the lambda log group, [LOOP] recv in the backend log group',
+    '  protocol:                   [LOOP] send and [LOOP] recv both in the lambda log group',
     '',
     'options:',
-    '  --kind <k>              sns | sqs | protocol | all (default: all)',
+    '  --kind <k>              sns | sqs | protocol | notify | enqueue | all (default: all)',
     '  --stage <stage>         deploy stage (default: dev)',
     '  --confirm-stage <stage> required for any stage other than dev (same value as the stage)',
     `  --region <region>       AWS region (default: $AWS_REGION or ${DEFAULT_REGION})`,
@@ -87,7 +88,7 @@ export const parseOptions = argv => {
     // `--kind`: one kind or all.
     const kind = opts.kind === undefined ? 'all' : opts.kind;
     if (!(kind === 'all' || KINDS.includes(kind))) {
-        throw new ArgError(`--kind must be sns, sqs, protocol or all (got: ${kind})`);
+        throw new ArgError(`--kind must be sns, sqs, protocol, notify, enqueue or all (got: ${kind})`);
     }
     // `--timeout`: an integer within the range.
     const t = opts.timeout;
@@ -155,7 +156,7 @@ export const checkAnswer = (kind, body) => {
     if (!loopId) issues.push('no valid loopId in the response');
     if (B.kind !== kind) issues.push(`expected kind=${kind} got ${B.kind ?? '-'}`);
     const messageId = MESSAGE_ID_RE.test(`${B.messageId ?? ''}`) ? B.messageId : null;
-    // sns/sqs: a message id from AWS; protocol: the receiver's result with the same loop id.
+    // sns/sqs/notify/enqueue: a message id from AWS; protocol: the receiver's result with the same loop id.
     if (kind !== 'protocol' && !messageId) issues.push('no messageId in the response');
     if (kind === 'protocol' && (!loopId || B.result?.loopId !== loopId)) {
         issues.push('protocol result.loopId does not match');

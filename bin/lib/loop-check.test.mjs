@@ -33,7 +33,12 @@ const IDS = {
     sns: '11111111-1111-4111-8111-111111111111',
     sqs: '22222222-2222-4222-8222-222222222222',
     protocol: '33333333-3333-4333-8333-333333333333',
+    notify: '44444444-4444-4444-8444-444444444444',
+    enqueue: '55555555-5555-4555-8555-555555555555',
 };
+
+// kinds whose recv line carries ` hop=1` (the protocol receiver `loop-recv`).
+const RECV_HOP = ['protocol', 'notify', 'enqueue'];
 
 // a lemon-core `_inf` line as CloudWatch keeps it (ANSI colors, request id, level).
 const line = body => `2026-10-30T00:00:00.000Z\tabc\tINFO\t\x1b[33mloop:\x1b[0m ${body}\n`;
@@ -42,7 +47,7 @@ const line = body => `2026-10-30T00:00:00.000Z\tabc\tINFO\t\x1b[33mloop:\x1b[0m 
 const sendLine = kind =>
     line(`[LOOP] send kind=${kind} loop=${IDS[kind]} message=${kind === 'protocol' ? '-' : 'm-1'}`);
 const recvLine = (kind, ms = 42) =>
-    line(`[LOOP] recv kind=${kind} loop=${IDS[kind]} latency=${ms}ms${kind === 'protocol' ? ' hop=1' : ''}`);
+    line(`[LOOP] recv kind=${kind} loop=${IDS[kind]} latency=${ms}ms${RECV_HOP.includes(kind) ? ' hop=1' : ''}`);
 
 // a fake invoker: answers the trigger of each kind with `http` and its body; records each event.
 const fakeInvoke = ({ http = 200, functionError, body } = {}) => {
@@ -75,8 +80,15 @@ const fakeFetch = (logs, { fail } = {}) => {
 
 // every line of a good run, per group.
 const GOOD_LOGS = {
-    [G_LAMBDA]: [sendLine('sns'), sendLine('sqs'), sendLine('protocol'), recvLine('protocol', 7)],
-    [G_BACKEND]: [recvLine('sns', 120), recvLine('sqs', 300)],
+    [G_LAMBDA]: [
+        sendLine('sns'),
+        sendLine('sqs'),
+        sendLine('protocol'),
+        recvLine('protocol', 7),
+        sendLine('notify'),
+        sendLine('enqueue'),
+    ],
+    [G_BACKEND]: [recvLine('sns', 120), recvLine('sqs', 300), recvLine('notify', 250), recvLine('enqueue', 3100)],
 };
 
 // a fake clock: `sleep` moves it forward.
@@ -116,7 +128,10 @@ describe('loop-check arguments', () => {
         const extra = await call(['sns']);
         assert.equal(extra.code, 2);
         assert.equal(extra.err, 'ERROR: unknown argument sns (see --help)');
-        throwsArg(() => parseOptions(['--kind', 'kafka']), /^--kind must be sns, sqs, protocol or all \(got: kafka\)$/);
+        throwsArg(
+            () => parseOptions(['--kind', 'kafka']),
+            /^--kind must be sns, sqs, protocol, notify, enqueue or all \(got: kafka\)$/,
+        );
         throwsArg(() => parseOptions(['--timeout', '999']), /^--timeout needs an integer 1000-600000/);
         throwsArg(() => parseOptions(['--timeout', '600001']), /^--timeout needs an integer/);
         throwsArg(() => parseOptions(['--timeout', 'x']), /^--timeout needs an integer/);
@@ -125,10 +140,12 @@ describe('loop-check arguments', () => {
     test('defaults: all kinds, 60000 ms', () => {
         const o = parseOptions([]);
         assert.deepEqual(o.kinds, KINDS);
-        assert.deepEqual(KINDS, ['sns', 'sqs', 'protocol']);
+        assert.deepEqual(KINDS, ['sns', 'sqs', 'protocol', 'notify', 'enqueue']);
         assert.equal(o.timeoutMs, 60000);
         assert.deepEqual(parseOptions(['--kind', 'sqs', '--timeout', '5000']).kinds, ['sqs']);
-        assert.equal(parseOptions(['--kind', 'all']).kinds.length, 3);
+        assert.equal(parseOptions(['--kind', 'all']).kinds.length, 5);
+        assert.deepEqual(parseOptions(['--kind', 'notify']).kinds, ['notify']);
+        assert.deepEqual(parseOptions(['--kind', 'enqueue']).kinds, ['enqueue']);
     });
     test('the stage guard exits 2 before any AWS call', async () => {
         const invoke = fakeInvoke();
@@ -155,6 +172,8 @@ describe('loop-check run', () => {
             `loop kind=sns loop=${IDS.sns} send=ok recv=ok latency=120`,
             `loop kind=sqs loop=${IDS.sqs} send=ok recv=ok latency=300`,
             `loop kind=protocol loop=${IDS.protocol} send=ok recv=ok latency=7`,
+            `loop kind=notify loop=${IDS.notify} send=ok recv=ok latency=250`,
+            `loop kind=enqueue loop=${IDS.enqueue} send=ok recv=ok latency=3100`,
         ]);
         assert.match(r.err, /^account=\*\*\*\*0000 /);
         assert.equal(r.clock.sleeps.length, 0);
@@ -164,7 +183,13 @@ describe('loop-check run', () => {
         await call([], { invoke, fetch: fakeFetch(GOOD_LOGS) });
         assert.deepEqual(
             invoke.events.map(e => `${e.httpMethod} ${e.path}`),
-            ['POST /callback/sns/loop', 'POST /callback/sqs/loop', 'POST /callback/protocol/loop'],
+            [
+                'POST /callback/sns/loop',
+                'POST /callback/sqs/loop',
+                'POST /callback/protocol/loop',
+                'POST /callback/notify/loop',
+                'POST /callback/enqueue/loop',
+            ],
         );
         for (const e of invoke.events) {
             assert.ok(!Object.keys(e.headers).some(k => k.toLowerCase() === 'host'));
@@ -173,7 +198,7 @@ describe('loop-check run', () => {
             assert.equal(e.resource, '/callback/{id}/{cmd}');
         }
     });
-    test('log queries: filtered by the loop id; sns/sqs recv in backend, protocol recv in lambda', async () => {
+    test('log queries: filtered by the loop id; protocol recv in lambda, the others in backend', async () => {
         const fetch = fakeFetch(GOOD_LOGS);
         await call([], { invoke: fakeInvoke(), fetch });
         const seen = fetch.queries.map(q => `${q.logGroupName} ${q.filterPattern}`);
@@ -183,12 +208,22 @@ describe('loop-check run', () => {
             `${G_LAMBDA} "${IDS.sqs}"`,
             `${G_BACKEND} "${IDS.sqs}"`,
             `${G_LAMBDA} "${IDS.protocol}"`,
+            `${G_LAMBDA} "${IDS.notify}"`,
+            `${G_BACKEND} "${IDS.notify}"`,
+            `${G_LAMBDA} "${IDS.enqueue}"`,
+            `${G_BACKEND} "${IDS.enqueue}"`,
         ]);
         assert.ok(fetch.queries.every(q => typeof q.startTime === 'number'));
         assert.deepEqual(logGroups('protocol', { lambda: 'a', backend: 'b' }), {
             send: '/aws/lambda/a',
             recv: '/aws/lambda/a',
         });
+        for (const kind of ['sns', 'sqs', 'notify', 'enqueue']) {
+            assert.deepEqual(logGroups(kind, { lambda: 'a', backend: 'b' }), {
+                send: '/aws/lambda/a',
+                recv: '/aws/lambda/b',
+            });
+        }
     });
     test('recv missing: polls until the timeout, then exit 1 (one invoke only)', async () => {
         const invoke = fakeInvoke();
@@ -317,12 +352,14 @@ describe('loop-check helpers and --dry', () => {
         const lines = r.stdout.split('\n');
         assert.equal(
             lines[0],
-            `loop-check stage=dev lambda=${LAMBDA} backend=${BACKEND} kinds=sns,sqs,protocol timeout=60000ms region=${
+            `loop-check stage=dev lambda=${LAMBDA} backend=${BACKEND} kinds=sns,sqs,protocol,notify,enqueue timeout=60000ms region=${
                 process.env.AWS_REGION || 'ap-northeast-2'
             } (dry)`,
         );
         assert.ok(lines.includes(`--- kind=sns: invoke ${LAMBDA}, send in ${G_LAMBDA}, recv in ${G_BACKEND} ---`));
         assert.ok(lines.includes(`--- kind=protocol: invoke ${LAMBDA}, send in ${G_LAMBDA}, recv in ${G_LAMBDA} ---`));
+        assert.ok(lines.includes(`--- kind=notify: invoke ${LAMBDA}, send in ${G_LAMBDA}, recv in ${G_BACKEND} ---`));
+        assert.ok(lines.includes(`--- kind=enqueue: invoke ${LAMBDA}, send in ${G_LAMBDA}, recv in ${G_BACKEND} ---`));
         assert.match(r.stdout, /"x-lemon-identity": "<redacted>"/);
         assert.match(r.stdout, /"path": "\/callback\/sqs\/loop"/);
         assert.doesNotMatch(r.stdout, /"host"/i);

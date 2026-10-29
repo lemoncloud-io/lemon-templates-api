@@ -8,12 +8,16 @@
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2026-10-30 initial version (SNS/SQS/protocol loop test).
+ * @date        2026-10-30 add `notify` and `enqueue` (protocol service over SNS/SQS).
  *
  * @copyright   (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 import $cores, { GETERR, LambdaHandler, LambdaSNSHandler, LambdaSQSHandler } from 'lemon-core';
 import request from 'supertest';
+import { readFileSync } from 'fs';
+import path from 'path';
+import $service from '../../service/backend-service';
 import { app } from '../../express';
 import { $sns, $sqs, $web } from '../../engine';
 import { loadSample } from '../../test-helpers/contexts.spec';
@@ -40,6 +44,7 @@ const ENV: { [key: string]: string | undefined } = {
     AWS_SHARED_CREDENTIALS_FILE: NO_FILE,
     LOCAL_MODE: undefined,
     AWS_LAMBDA_FUNCTION_NAME: undefined,
+    REPORT_ERROR_ARN: '', //* `getHelloArn()` then builds from `context.accountId` (no real topic in this spec).
 };
 
 //! set (or delete) each name of a map in `process.env`.
@@ -49,19 +54,56 @@ const setEnv = (M: { [key: string]: string | undefined }) =>
 //! the static `REPORT_ERROR` flags: off in this spec, so a failure never publishes an error report (no AWS).
 const REPORTERS: any[] = [LambdaHandler, LambdaSNSHandler, LambdaSQSHandler, $cores.cores.protocol.service.constructor];
 
-//! fake transports that record each call (`protocol` records the context and the target too).
+//! fake transports that record each call (`protocol` records the context, the target and the options too).
 const fakeTransports = (onExecute?: (ctx: any, service: string, body: any) => any) => {
     const publish = jest.fn<Promise<string>, [string, string, any]>(async () => 'sns-mid-1');
     const sendMessage = jest.fn<Promise<string>, [any, any?]>(async () => 'sqs-mid-1');
     const execute = jest.fn();
-    const protocol = jest.fn((context: any, service: string) => ({
+    const notify = jest.fn<Promise<string>, any[]>(async () => 'notify-mid-1');
+    const enqueue = jest.fn<Promise<string>, any[]>(async () => 'enqueue-mid-1');
+    const protocol = jest.fn((context: any, service: string, options?: any) => ({
         execute: async (param?: any, body?: any, mode?: string) => {
             execute(param, body, mode);
             return onExecute ? onExecute(context, service, body) : { loopId: body?.loopId, recvAt: 1, hop: body?.hop };
         },
+        notify,
+        enqueue,
+        options, //* kept for the record (the calls also hold it).
     }));
     const $aws: LoopTransports = { sns: { publish }, sqs: { sendMessage }, protocol };
-    return { publish, sendMessage, protocol, execute, provider: () => $aws };
+    return { publish, sendMessage, protocol, execute, notify, enqueue, provider: () => $aws };
+};
+
+//! a protocol param to `callback/<LOOP_ID>/loop-recv` as `$protocol().notify()/enqueue()` builds it.
+const protoParam = (kind: string, more?: any) => ({
+    mode: 'POST',
+    type: 'callback',
+    id: LOOP_ID,
+    cmd: RECV_CMD,
+    body: message(kind, more),
+    context: { accountId: 'acct', requestId: 'r-1', depth: 1, identity: { roles: ['admin'] } },
+});
+
+//! the SNS Lambda event of a protocol param, built by the lemon-core transformer (signed as in production).
+const snsProtocolEvent = (param: any) => {
+    const sent = ($cores.cores.protocol.service as any).asTransformer('sns').transformToEvent('sns://loop-sns', param);
+    const attrs = Object.entries(sent.MessageAttributes).reduce(
+        (M: any, [k, v]: [string, any]) => ({ ...M, [k]: { Type: v.DataType, Value: v.StringValue } }),
+        {},
+    );
+    const Sns = { Subject: sent.Subject, Message: JSON.parse(sent.Message).default, MessageAttributes: attrs };
+    return { sent, event: { Records: [{ EventSource: 'aws:sns', EventVersion: '1.0', Sns }] } };
+};
+
+//! the SQS Lambda event of a protocol param, built by the lemon-core transformer (signed as in production).
+const sqsProtocolEvent = (param: any) => {
+    const sent = ($cores.cores.protocol.service as any).asTransformer('sqs').transformToEvent('sqs://loop-sqs', param);
+    const attrs = Object.entries(sent.MessageAttributes).reduce(
+        (M: any, [k, v]: [string, any]) => ({ ...M, [k]: { dataType: v.DataType, stringValue: v.StringValue } }),
+        {},
+    );
+    const record = { messageId: 'm-1', receiptHandle: 'h-1', body: sent.MessageBody, messageAttributes: attrs };
+    return { sent, event: { Records: [{ ...record, attributes: {}, eventSource: 'aws:sqs' }] } };
 };
 
 //! spies on every shared send-side service of lemon-core (resolved, so nothing reaches AWS).
@@ -223,15 +265,16 @@ describe('callback loop test', () => {
         expect(res.loopId).toMatch(UUID_RE);
         expect(res.result).toEqual({ loopId: res.loopId, recvAt: 1, hop: 1 });
         expect(T.protocol).toHaveBeenCalledTimes(1);
-        const [context, service] = T.protocol.mock.calls[0];
+        const [context, service, options] = T.protocol.mock.calls[0];
         expect(service).toEqual(`//self/callback/${res.loopId}/${RECV_CMD}`);
+        expect(options).toEqual({ isProd: false });
         expect(context).toMatchObject({ requestId: 'r-1', depth: 1, identity: { roles: ['admin'] } });
         expect(T.execute).toHaveBeenCalledWith(
             null,
             { loop: 'protocol', loopId: res.loopId, sentAt: res.sentAt, hop: 1 },
             'POST',
         );
-        expect(calls(T.publish, T.sendMessage)).toEqual(0);
+        expect(calls(T.publish, T.sendMessage, T.notify, T.enqueue)).toEqual(0);
         const lines = info.mock.calls.map(c => c[0]);
         expect(lines[0]).toEqual(`[LOOP] send kind=protocol loop=${res.loopId} message=-`);
         expect(lines[1]).toMatch(new RegExp(`^\\[LOOP\\] done kind=protocol loop=${res.loopId} rtt=\\d+ms$`));
@@ -250,6 +293,107 @@ describe('callback loop test', () => {
         expect(param.body).toEqual({ loop: 'protocol', loopId: res.loopId, sentAt: res.sentAt, hop: 1 });
         expect(param.context).toMatchObject({ depth: 1, identity: { roles: ['admin'] } });
         expect(calls(...spies)).toEqual(1);
+    });
+
+    //* notify: `$protocol(ctx, '//self/callback/<loopId>/loop-recv').notify(null, payload, 'POST')`, never a callback.
+    it('should notify the protocol loop without a callback (notify guard)', async () => {
+        const T = fakeTransports();
+        const api = new CallbackAPIController(undefined, T.provider);
+        const res: any = await api.doPostLoop('notify', {}, {}, rolesContext(['admin'], { requestId: 'r-2' }));
+        expect(Object.keys(res)).toEqual(['kind', 'loopId', 'messageId', 'sentAt']);
+        expect(res).toMatchObject({ kind: 'notify', messageId: 'notify-mid-1' });
+        const [context, service, options] = T.protocol.mock.calls[0];
+        expect(service).toEqual(`//self/callback/${res.loopId}/${RECV_CMD}`);
+        expect(options).toEqual({ isProd: false });
+        expect(context).toMatchObject({ requestId: 'r-2', depth: 1, identity: { roles: ['admin'] } });
+        expect(T.notify).toHaveBeenCalledTimes(1);
+        expect(T.notify.mock.calls[0]).toEqual([
+            null,
+            { loop: 'notify', loopId: res.loopId, sentAt: res.sentAt, hop: 1 },
+            'POST',
+            undefined,
+        ]);
+        expect(T.notify.mock.calls[0][3]).toBeUndefined(); //* no callback (a callback means one more execute).
+        expect(calls(T.publish, T.sendMessage, T.execute, T.enqueue)).toEqual(0);
+        expect(info.mock.calls.map(c => c[0])).toEqual([
+            `[LOOP] send kind=notify loop=${res.loopId} message=notify-mid-1`,
+        ]);
+    });
+
+    //* enqueue: `.enqueue(null, payload, 'POST', undefined, 0)`, never a callback.
+    it('should enqueue the protocol loop without a callback (enqueue guard)', async () => {
+        const T = fakeTransports();
+        const api = new CallbackAPIController(undefined, T.provider);
+        const res: any = await api.doPostLoop('enqueue', {}, { note: 'q' }, rolesContext(['admin']));
+        expect(Object.keys(res)).toEqual(['kind', 'loopId', 'messageId', 'sentAt']);
+        expect(res).toMatchObject({ kind: 'enqueue', messageId: 'enqueue-mid-1' });
+        expect(T.protocol.mock.calls[0][1]).toEqual(`//self/callback/${res.loopId}/${RECV_CMD}`);
+        expect(T.protocol.mock.calls[0][0]).toMatchObject({ depth: 1, identity: { roles: ['admin'] } });
+        expect(T.enqueue.mock.calls[0]).toEqual([
+            null,
+            { loop: 'enqueue', loopId: res.loopId, sentAt: res.sentAt, hop: 1, note: 'q' },
+            'POST',
+            undefined,
+            0,
+        ]);
+        expect(T.enqueue.mock.calls[0][3]).toBeUndefined(); //* no callback.
+        expect(calls(T.publish, T.sendMessage, T.execute, T.notify)).toEqual(0);
+        expect(info.mock.calls.map(c => c[0])).toEqual([
+            `[LOOP] send kind=enqueue loop=${res.loopId} message=enqueue-mid-1`,
+        ]);
+    });
+
+    //* notify/enqueue with the real `$protocol()`: the protocol service gets the param and no callback.
+    it('should pass no callback to the protocol service for notify/enqueue (real $protocol)', async () => {
+        const spies = sendSpies();
+        const [, , , notify, enqueue] = spies;
+        const api = new CallbackAPIController();
+        const a: any = await api.doPostLoop('notify', {}, {}, rolesContext(['admin']));
+        const b: any = await api.doPostLoop('enqueue', {}, {}, rolesContext(['admin']));
+        expect(a.messageId).toEqual('n');
+        expect(b.messageId).toEqual('q');
+        const [p1, cb1] = notify.mock.calls[0] as any[];
+        expect(cb1).toBeUndefined();
+        expect(p1).toMatchObject({ mode: 'POST', type: 'callback', id: a.loopId, cmd: RECV_CMD });
+        expect(p1.body).toEqual({ loop: 'notify', loopId: a.loopId, sentAt: a.sentAt, hop: 1 });
+        expect(p1.context).toMatchObject({ depth: 1, identity: { roles: ['admin'] } });
+        const [p2, cb2, delay] = enqueue.mock.calls[0] as any[];
+        expect(cb2).toBeUndefined();
+        expect(delay).toEqual(0);
+        expect(p2).toMatchObject({ mode: 'POST', type: 'callback', id: b.loopId, cmd: RECV_CMD });
+        expect(p2.body).toEqual({ loop: 'enqueue', loopId: b.loopId, sentAt: b.sentAt, hop: 1 });
+        expect(calls(...spies)).toEqual(2);
+    });
+
+    //* notify/enqueue reach `backend`: lemon-core maps this service to the topic and the queue `backend` subscribes to.
+    it('should map notify/enqueue to the topic and the queue of backend (serverless.yml)', () => {
+        const yml = readFileSync(path.join(__dirname, '../../../serverless.yml'), 'utf8');
+        const service = (yml.match(/^service:\s*['"]?([\w.-]+)/m) || [])[1];
+        //* a stage map of `custom` like `topicName:` → { dev: …, prod: … }.
+        const mapOf = (name: string) => {
+            const block = (yml.match(new RegExp(`^  ${name}:\\n((?:    \\w+: .+\\n)+)`, 'm')) || [])[1] || '';
+            return block.split('\n').reduce((M: any, line) => {
+                const m = line.match(/^\s+(\w+):\s*(\S+)/);
+                return m ? { ...M, [m[1]]: m[2] } : M;
+            }, {});
+        };
+        const topics = mapOf('topicName');
+        const queues = mapOf('queueName');
+        //* `backend` subscribes to the topic of `topicName` and the queue `MyQueue` (= `queueName`).
+        const backend = yml.substring(yml.indexOf('  backend:'), yml.indexOf('  lambda:'));
+        expect(backend).toMatch(/- sns: .*custom\.topicName\./);
+        expect(backend).toMatch(/- sqs:[\s\S]*MyQueue/);
+        expect(yml).toMatch(/QueueName: .*custom\.queueName\./);
+        //* the host of the protocol uri is the topic / queue name.
+        const MyProtocolService: any = $cores.cores.protocol.service.constructor;
+        const build = MyProtocolService.buildProtocolURI.bind(MyProtocolService); //* static, uses `this.asPath()`.
+        const host = (protocol: string, stage: string) =>
+            `${build(null, {}, protocol, service, stage, 'callback', LOOP_ID, RECV_CMD)}`.split('/')[2];
+        for (const stage of ['dev', 'prod']) {
+            expect(topics[stage]).toBeTruthy();
+            expect(host('sns', stage)).toEqual(topics[stage]);
+            expect(host('sqs', stage)).toEqual(queues[stage]);
+        }
     });
 
     //* the optional note: only a string, trimmed, capped at 100 chars.
@@ -286,6 +430,13 @@ describe('callback loop test', () => {
         const r3 = await request(app).post('/callback/protocol/loop').send({});
         expect(r3.status).toEqual(200);
         expect(r3.body).toMatchObject({ kind: 'protocol', result: {} });
+        const r4 = await request(app).post('/callback/notify/loop').send({});
+        expect(r4.status).toEqual(200);
+        expect(r4.body).toMatchObject({ kind: 'notify', messageId: 'n' });
+        const r5 = await request(app).post('/callback/enqueue/loop').send({});
+        expect(r5.status).toEqual(200);
+        expect(r5.body).toMatchObject({ kind: 'enqueue', messageId: 'q' });
+        expect(spies.map(f => f.mock.calls.length)).toEqual([1, 1, 1, 1, 1, 0]);
         expect([publish, send, execute].map(f => f.mock.calls.length)).toEqual([1, 1, 1]);
     });
 
@@ -298,7 +449,7 @@ describe('callback loop test', () => {
         const T = fakeTransports();
         const api = new CallbackAPIController(undefined, T.provider);
         const nested = '400 INVALID LOOP - nested trigger';
-        for (const kind of ['sns', 'sqs', 'protocol']) {
+        for (const kind of ['sns', 'sqs', 'protocol', 'notify', 'enqueue']) {
             const deep = rolesContext(['admin'], { depth: 1 });
             expect(await api.doPostLoop(kind, {}, {}, deep).catch(GETERR)).toEqual(nested);
             const other = rolesContext(['admin'], { source: 'api://1@self-api/callback/protocol/loop#1' });
@@ -306,7 +457,7 @@ describe('callback loop test', () => {
             const recv = rolesContext(['admin'], { source: `api://1@self-api/callback/${LOOP_ID}/${RECV_CMD}#1` });
             expect(await api.doPostLoop(kind, {}, {}, recv).catch(GETERR)).toEqual(nested);
         }
-        expect(calls(T.publish, T.sendMessage, T.protocol)).toEqual(0);
+        expect(calls(T.publish, T.sendMessage, T.protocol, T.notify, T.enqueue)).toEqual(0);
         //* a direct request: its own route as source (lemon-core `packContext()`), or no path at all.
         expect(isNestedTrigger({ source: 'api://1@self-api/callback/sns/loop#1' }, 'callback', 'sns')).toBe(false);
         expect(isNestedTrigger({ source: 'api://0008540000@lemon-hello-api#2.12.24a' }, 'callback', 'sns')).toBe(false);
@@ -361,6 +512,50 @@ describe('callback loop test', () => {
         expect(Object.keys(res)).toEqual(['loopId', 'recvAt', 'hop']);
         expect(info.mock.calls.map(c => c[0])).toEqual([expect.stringMatching(RECV_RE('protocol', ' hop=1'))]);
         expect(calls(...spies, T.publish, T.sendMessage, T.protocol)).toEqual(0);
+    });
+
+    //* receiver: `notify` (SNS) and `enqueue` (SQS) deliveries log their own kind; nothing is sent.
+    it('should log recv for notify and enqueue in the protocol receiver (guard 1)', async () => {
+        const spies = sendSpies();
+        const T = fakeTransports();
+        const api = new CallbackAPIController(undefined, T.provider);
+        const ctx = rolesContext([], { depth: 1 });
+        expect(await api.doPostLoopRecv(LOOP_ID, {}, message('notify'), ctx)).toMatchObject({
+            loopId: LOOP_ID,
+            hop: 1,
+        });
+        expect(await api.doPostLoopRecv(LOOP_ID, {}, message('enqueue'), ctx)).toMatchObject({ loopId: LOOP_ID });
+        expect(info.mock.calls.map(c => c[0])).toEqual([
+            expect.stringMatching(RECV_RE('notify', ' hop=1')),
+            expect.stringMatching(RECV_RE('enqueue', ' hop=1')),
+        ]);
+        expect(calls(...spies, T.publish, T.sendMessage, T.protocol, T.execute, T.notify, T.enqueue)).toEqual(0);
+    });
+
+    //* receiver via the protocol channel never throws (an SQS throw = redelivery, an SNS throw = an error report).
+    it('should never throw in the protocol receiver via the protocol channel (receiver guard)', async () => {
+        const spies = sendSpies();
+        const api = new CallbackAPIController();
+        const guard = jest.spyOn($service, 'guardProxy').mockRejectedValue(new Error('boom'));
+        const ctx = rolesContext([], { depth: 1 });
+        expect(await api.doPostLoopRecv(LOOP_ID, {}, message('notify'), ctx)).toEqual('');
+        expect(info.mock.calls.map(c => c[0])).toEqual(['[LOOP] bad kind=notify reason=error']);
+        //* a direct call keeps its error (only the protocol channel is caught).
+        expect(await api.doPostLoopRecv(LOOP_ID, {}, message('notify'), rolesContext(['admin'])).catch(GETERR)).toEqual(
+            'boom',
+        );
+        guard.mockRestore();
+        //* an error inside the receiver body is caught too.
+        const evil = {
+            loop: 'enqueue',
+            get sentAt(): number {
+                throw new Error('boom');
+            },
+        };
+        info.mockClear();
+        expect(await api.doPostLoopRecv(LOOP_ID, {}, evil, ctx)).toEqual('');
+        expect(info.mock.calls.map(c => c[0])).toEqual(['[LOOP] bad kind=enqueue reason=error']);
+        expect(calls(...spies)).toEqual(0);
     });
 
     //* receiver gate: not via protocol and not admin → 403; admin (direct invoke) is allowed.
@@ -516,6 +711,36 @@ describe('callback loop test', () => {
             '[LOOP] bad kind=sqs reason=loopId',
             `[LOOP] bad kind=sqs loop=${LOOP_ID} reason=hop`,
         ]);
+        expect(calls(...spies)).toEqual(0);
+    });
+
+    //* engine: a `notify` delivery (SNS, `x-protocol-service`) runs `loop-recv` through lemon-core; nothing is sent.
+    it('should deliver notify through the SNS protocol path to loop-recv (guard 1)', async () => {
+        const { sent, event } = snsProtocolEvent(protoParam('notify'));
+        expect(sent.Subject).toEqual('x-protocol-service');
+        expect('callback' in sent.MessageAttributes).toBe(false);
+        const spies = sendSpies();
+        await $sns.handle(event as any, null as any);
+        expect(JSON.parse(($sns as any).$lastResult[0])).toMatchObject({ loopId: LOOP_ID, hop: 1 });
+        expect(info.mock.calls.map(c => c[0])).toEqual([expect.stringMatching(RECV_RE('notify', ' hop=1'))]);
+        expect(calls(...spies)).toEqual(0);
+    });
+
+    //* engine: an `enqueue` delivery (SQS, `x-protocol-service`) runs `loop-recv`; a bad or failing one never fails the record.
+    it('should deliver enqueue through the SQS protocol path and never fail the record (receiver guard)', async () => {
+        const good = sqsProtocolEvent(protoParam('enqueue'));
+        expect(good.sent.MessageAttributes.Subject.StringValue).toEqual('x-protocol-service');
+        expect('callback' in good.sent.MessageAttributes).toBe(false);
+        const hop = sqsProtocolEvent(protoParam('enqueue', { hop: 2 }));
+        const spies = sendSpies();
+        expect(await $sqs.handle(good.event as any, null as any)).toEqual({ batchItemFailures: [] });
+        expect(info.mock.calls[0][0]).toMatch(RECV_RE('enqueue', ' hop=1'));
+        expect(await $sqs.handle(hop.event as any, null as any)).toEqual({ batchItemFailures: [] });
+        expect(info.mock.calls[1][0]).toEqual(`[LOOP] bad kind=enqueue loop=${LOOP_ID} reason=hop`);
+        //* an error in the receiver (here: the proxy) is caught, so the record does not fail (no redelivery).
+        jest.spyOn($service, 'guardProxy').mockRejectedValue(new Error('boom'));
+        expect(await $sqs.handle(good.event as any, null as any)).toEqual({ batchItemFailures: [] });
+        expect(info.mock.calls[2][0]).toEqual('[LOOP] bad kind=enqueue reason=error');
         expect(calls(...spies)).toEqual(0);
     });
 });

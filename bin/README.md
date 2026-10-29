@@ -7,7 +7,7 @@ They call AWS directly with the SDK (no `sls`), so they work on any machine with
 - `lambda-logs.mjs` — print or follow the function's CloudWatch logs (polling `FilterLogEvents`).
 - `perf-lambda.mjs` — invoke the deployed function several times and summarize cold / warm timings from the log tail, or from the full CloudWatch log with `--logs`. See [perf:lambda](#perflambda).
 - `fields-admin.mjs` — check `GET /<type>/fields/admin` on the local express server or the deployed Lambda with `checkFieldsAdmin()` of lemon-core. See [fields:admin](#fieldsadmin).
-- `loop-check.mjs` — check the SNS / SQS / protocol loop test of the deployed service from its CloudWatch log lines. See [loop:check](#loopcheck).
+- `loop-check.mjs` — check the SNS / SQS / protocol / notify / enqueue loop test of the deployed service from its CloudWatch log lines. See [loop:check](#loopcheck).
 
 The Lambda call itself (`lambda:Invoke`) is shared in `lib/invoke.mjs` by `lambda-invoke.mjs`, `fields-admin.mjs`, `perf-lambda.mjs`, and `loop-check.mjs`.
 The paged `FilterLogEvents` read is shared in `lib/logs.mjs` by `lambda-logs.mjs`, `perf-lambda.mjs --logs`, and `loop-check.mjs`.
@@ -383,17 +383,28 @@ The code is in the callback module: `src/modules/callback/loop.ts` and `src/modu
 | `sns` | `POST /callback/sns/loop` | `sns.publish('', 'x-loop-test', payload)` to the topic of env `MY_SNS_ENDPOINT` | function `backend` → lemon-core `LambdaSNSHandler` → `onLoopMessage()` | `backend` log group |
 | `sqs` | `POST /callback/sqs/loop` | `sqs.sendMessage(payload, { Subject: 'x-loop-test', loop, loopId })` to the queue of env `MY_SQS_ENDPOINT` | function `backend` → lemon-core `LambdaSQSHandler` → `onLoopMessage()` | `backend` log group |
 | `protocol` | `POST /callback/protocol/loop` | `$protocol(context, '//self/callback/<loopId>/loop-recv').execute(null, payload, 'POST')` (signed; `//self` is the `lambda` function) | `POST /callback/<loopId>/loop-recv` → `onLoopRecv()` | `lambda` log group |
+| `notify` | `POST /callback/notify/loop` | `$protocol(…).notify(null, payload, 'POST')` → SNS, Subject `x-protocol-service` (signed), no callback | function `backend` → `LambdaSNSHandler` protocol path → `handleProtocol()` → `POST /callback/<loopId>/loop-recv` | `backend` log group |
+| `enqueue` | `POST /callback/enqueue/loop` | `$protocol(…).enqueue(null, payload, 'POST', undefined, 0)` → SQS, attribute Subject `x-protocol-service` (signed), no callback, no delay | function `backend` → `LambdaSQSHandler` protocol path → `handleProtocol()` → `POST /callback/<loopId>/loop-recv` | `backend` log group |
+
+`$protocol()` gets `{ isProd: false }`, so `//self` stays on the deployed stage.
+Without it, the helper switches to stage `prod` when env `NS` is `SS`.
+
+For `notify` and `enqueue`, lemon-core builds the target from the service name and the stage (`buildProtocolURI`).
+For this service it gives `sns://<code>-sns[-dev]` and `sqs://<code>-sqs[-dev]`.
+These are `custom.topicName` and `custom.queueName` of `serverless.yml`: the topic and the queue that `backend` subscribes to.
+The SNS / SQS transformers take the region and the account from `getHelloArn()` (env `REPORT_ERROR_ARN`) and put this topic or queue name in its place.
+The jest spec checks this mapping against `serverless.yml` for `dev` and `prod`.
 
 The payload is `{ loop, loopId, sentAt, hop: 1 }` (+ `note`, max 100 chars, from the request body).
-The trigger answers `{ kind, loopId, messageId, sentAt }` (`sns`, `sqs`) or `{ kind, loopId, sentAt, result }` (`protocol`; `result` is `{ loopId, recvAt, hop }` from the receiver).
+The trigger answers `{ kind, loopId, messageId, sentAt }` (`sns`, `sqs`, `notify`, `enqueue`) or `{ kind, loopId, sentAt, result }` (`protocol`; `result` is `{ loopId, recvAt, hop }` from the receiver).
 No ARN, queue URL, or function name is in a response or in a `[LOOP]` line.
 
 Log lines (lemon-core `_inf`):
 
 ```text
-[LOOP] send kind=<sns|sqs|protocol> loop=<loopId> message=<messageId|->
+[LOOP] send kind=<sns|sqs|protocol|notify|enqueue> loop=<loopId> message=<messageId|->
 [LOOP] recv kind=<sns|sqs> loop=<loopId> latency=<ms>ms
-[LOOP] recv kind=protocol loop=<loopId> latency=<ms>ms hop=1
+[LOOP] recv kind=<protocol|notify|enqueue> loop=<loopId> latency=<ms>ms hop=1
 [LOOP] done kind=protocol loop=<loopId> rtt=<ms>ms
 [LOOP] bad kind=<kind> [loop=<loopId>] reason=<loopId|sentAt|hop|loop|error>
 ```
@@ -404,12 +415,20 @@ Log lines (lemon-core `_inf`):
 
 루프 테스트 수신부는 로그만 남긴다. 재발신하지 않는다.
 
-1. The receivers (SNS listener, SQS listener, protocol `loop-recv`) only log and return. They never publish, send, enqueue, notify, or execute.
+1. The receivers (SNS listener, SQS listener, protocol `loop-recv` for `protocol` / `notify` / `enqueue`) only log and return. They never publish, send, enqueue, notify, or execute.
 2. The trigger refuses re-entry through the protocol channel: `400 INVALID LOOP - nested trigger`. A protocol hop has `context.depth > 0` (lemon-core raises it per hop; the `protocol` trigger raises it too), or a `context.source` path of another route (a protocol call carries the caller's context).
 3. Hop cap: a receiver accepts only `hop === 1`. Any other value (missing, `2`, `'1'`) logs `[LOOP] bad … reason=hop` and returns `''`. Nothing increments `hop` and forwards.
-4. The SNS / SQS listener never throws. A throw would mean SNS retries or an SQS redrive (`batchItemFailures`). Any error logs `[LOOP] bad … reason=error` and returns `''`.
+4. The SNS / SQS listener never throws. `loop-recv` never throws when it came through the protocol channel (`depth > 0`). A throw on an SQS path is a `batchItemFailures` redelivery; on an SNS path lemon-core reports the error. Any error logs `[LOOP] bad … reason=error` and returns `''`. Only a direct non-admin call to `loop-recv` still gets its 403.
 5. lemon-core error reports go to the `REPORT_ERROR_ARN` topic with the subject `error`. That topic is not the one `backend` subscribes to, and the listener acts only on the subject `x-loop-test`.
 6. No cron, no schedule, no retry loop in app code. `loop:check` sends exactly one invoke per kind and polls the logs with a hard timeout. It never retries an invoke.
+7. `notify` and `enqueue` never pass a callback. With a callback, the receiving handler would call one more target after `loop-recv`.
+
+Limit — a failed signature: in `PROTOCOL_VERIFY=enforce` mode, lemon-core checks the signature of a protocol message before it calls our handler.
+A bad signature on the SNS path is reported and dropped (the v5 SNS handler does not rethrow).
+On the SQS path the record goes to `batchItemFailures`, and SQS delivers it again after each `VisibilityTimeout`.
+The queue in `serverless.yml` (`MyQueue`) has no redrive policy and no dead-letter queue.
+So a failing message comes back every 300 s (`VisibilityTimeout`) until `MessageRetentionPeriod` (1800 s) ends: about 6 receives, each with an error report.
+The queue also has `MaximumMessageSize: 4096`; an `enqueue` message carries the whole protocol param (context and body), so a large context can be refused.
 
 The jest spec `src/modules/callback/api-callback-loop.spec.ts` covers each guard.
 
@@ -418,14 +437,14 @@ The jest spec `src/modules/callback/api-callback-loop.spec.ts` covers each guard
 - The trigger is admin only: `403 NOT ALLOWED - only for admin @doPostLoop(callback/<kind>)` otherwise. lemon-core `hasAdminRole()` is true in local mode (`LOCAL_MODE=1`), for a signed access key, for an authed `admin` role, or when `context.identity.roles` has `admin`.
 - `loop:check` sends an internal web event (no `Host`, like `lambda:invoke --internal`) with `x-lemon-identity: {"roles":["admin"]}` (like `--identity`).
 - An unknown kind answers `404 NOT FOUND - callback/<kind>/loop`.
-- `loop-recv` takes a protocol call (`depth > 0`) or an admin. Any other request answers 403.
+- `loop-recv` takes a protocol call (`depth > 0`: `protocol`, `notify`, `enqueue`) or an admin. A direct non-admin request answers 403.
 - Limit: lemon-core verifies the signature of a host-less identity. In `PROTOCOL_VERIFY=enforce` mode the unsigned `x-lemon-identity` of `loop:check` answers 403 (the run exits 1). In `warn` mode it passes with one `PROTOCOL unsigned web` log line.
 
 ### Options
 
 | Option | Default | Meaning |
 |---|---|---|
-| `--kind <k>` | `all` | `sns`, `sqs`, `protocol`, or `all` (= `sns,sqs,protocol`, in this order). |
+| `--kind <k>` | `all` | `sns`, `sqs`, `protocol`, `notify`, `enqueue`, or `all` (= `sns,sqs,protocol,notify,enqueue`, in this order). |
 | `--stage <stage>` | `dev` | Deploy stage. Any stage other than `dev` needs `--confirm-stage`. |
 | `--confirm-stage <stage>` | | The same value as the stage. See [Safety](#safety). |
 | `--region <region>` | `AWS_REGION` or `ap-northeast-2` | AWS region. |
@@ -440,8 +459,8 @@ The functions are `<service>-<stage>-lambda` and `<service>-<stage>-backend`. `-
 ### Flow per kind
 
 1. Invoke `lambda` once with `POST /callback/<kind>/loop` (internal, admin identity, body `{"note":"loop:check"}`).
-2. Expect `statusCode` 200, a UUID `loopId`, and the `kind`. `sns` / `sqs` also need a `messageId`. `protocol` also needs `result.loopId` equal to `loopId`.
-3. Poll `FilterLogEvents` with the filter `"<loopId>"` from 60 seconds before the invoke, every 2 seconds, until both lines are seen or `--timeout` has passed. The send line is read from the `lambda` log group. The recv line is read from the `backend` log group (`sns`, `sqs`) or the `lambda` log group (`protocol`). A log group that does not exist yet reads as empty.
+2. Expect `statusCode` 200, a UUID `loopId`, and the `kind`. `sns` / `sqs` / `notify` / `enqueue` also need a `messageId`. `protocol` also needs `result.loopId` equal to `loopId`.
+3. Poll `FilterLogEvents` with the filter `"<loopId>"` from 60 seconds before the invoke, every 2 seconds, until both lines are seen or `--timeout` has passed. The send line is read from the `lambda` log group. The recv line is read from the `backend` log group (`sns`, `sqs`, `notify`, `enqueue`) or the `lambda` log group (`protocol`). A log group that does not exist yet reads as empty.
 4. A non-200 answer or a failed invoke skips the poll.
 
 Needs `lambda:InvokeFunction` on the `lambda` function and `logs:FilterLogEvents` on both log groups.
@@ -457,6 +476,8 @@ loop kind=sqs loop=<loopId> send=ok recv=missing latency=-
   - no [LOOP] recv line in /aws/lambda/<service>-dev-backend
   - timeout after 60000ms
 loop kind=protocol loop=<loopId> send=ok recv=ok latency=7
+loop kind=notify loop=<loopId> send=ok recv=ok latency=250
+loop kind=enqueue loop=<loopId> send=ok recv=ok latency=3100
 ```
 
 Exit codes: 0 = every kind received (http 200, both lines, no issue); 1 = any line missing, a timeout, a non-200 answer, a failed invoke, an AWS error, or no AWS identity (STS); 2 = bad arguments, an unknown option, or the stage guard.
@@ -467,14 +488,14 @@ Exit codes: 0 = every kind received (http 200, both lines, no issue); 1 = any li
 # 1. trigger (prints the loopId in the http body)
 npm run lambda:invoke -- --stage dev --internal --identity '{"roles":["admin"]}' --method POST --path /callback/sns/loop
 
-# 2. the recv line of that loop (sns, sqs: --fn backend; protocol: --fn lambda)
+# 2. the recv line of that loop (sns, sqs, notify, enqueue: --fn backend; protocol: --fn lambda)
 npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'
 ```
 
 Examples:
 
 ```sh
-# all three loops on dev
+# all five loops on dev
 npm run loop:check -- --stage dev --profile <name>
 
 # one kind, longer wait, machine-readable

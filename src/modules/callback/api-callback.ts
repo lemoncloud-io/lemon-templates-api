@@ -6,6 +6,7 @@
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2025-03-26 initial version.
  * @date        2026-10-30 loop test: `POST /callback/<kind>/loop`, `POST /callback/<loopId>/loop-recv` (see `loop.ts`).
+ * @date        2026-10-30 loop test: `notify` and `enqueue` kinds (protocol service over SNS/SQS).
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
@@ -18,7 +19,7 @@ import { CallbackModelManager } from './service';
 import { $trans, CallbackTransformer } from './transformer';
 import $LUT, { CallbackBody, CallbackView } from './views';
 import { LoopTransports, defaultTransports, loopLog, isLoopKind, isNestedTrigger } from './loop';
-import { asLoopPayload, onLoopRecv, LOOP_SUBJECT, RECV_CMD } from './loop';
+import { asLoopPayload, onLoopRecv, onLoopError, loopKindOf, LOOP_SUBJECT, RECV_CMD, PROTOCOL_OPTIONS } from './loop';
 
 //WARN - use `BackendService` from main service due to proper `BackendProxy`.
 import $service, { BackendService, ModelType } from '../../service/backend-service';
@@ -200,9 +201,11 @@ export class CallbackAPIController extends AbstractCRUDController<
     };
 
     /**
-     * loop test trigger (admin only): send one loop message by `sns`, `sqs` or `protocol`.
+     * loop test trigger (admin only): send one loop message by `sns`, `sqs`, `protocol`, `notify` or `enqueue`.
      * - refuses a nested trigger (re-entry through the protocol channel) with `400 INVALID LOOP`.
      * - `protocol` waits for the receiver (`doPostLoopRecv()`) and returns its result.
+     * - `notify` (SNS) and `enqueue` (SQS) go through the protocol service to `doPostLoopRecv()` in `backend`.
+     *   they never pass a callback (a callback would be one more call after the receiver).
      *
      * ```sh
      * $ npm run lambda:invoke -- --stage dev --internal --identity '{"roles":["admin"]}' --method POST --path /callback/sns/loop
@@ -235,23 +238,41 @@ export class CallbackAPIController extends AbstractCRUDController<
                 loopLog.inf(`[LOOP] send kind=sqs loop=${loopId} message=${messageId}`);
                 return { kind: id, loopId, messageId, sentAt };
             }
-            //* protocol: a signed call to this service's `lambda` function (`//self`); the payload goes in the body.
+            //* protocol kinds: a signed protocol call to `//self/callback/<loopId>/loop-recv`; the payload is the body.
             //* the context claims `admin` (like `proxy.ts`) and raises `depth`, which marks it as a protocol hop.
             const identity: any = $ctx?.identity;
             const roles: string[] = [...(identity?.roles ?? []).filter((r: string) => r !== 'admin'), 'admin'];
             const context: any = { ...$ctx, identity: { ...identity, roles }, depth: $U.N($ctx?.depth, 0) + 1 };
             const target = `//self/${this.type()}/${loopId}/${RECV_CMD}`;
+            const $proto = $aws.protocol(context, target, PROTOCOL_OPTIONS);
+            const noCallback: string = undefined; //* guard: never a callback (it would call once more).
+            //* notify: SNS topic of this service (`x-protocol-service`) → `backend`.
+            if (id === 'notify') {
+                const messageId = await $proto.notify(null, payload, 'POST', noCallback);
+                loopLog.inf(`[LOOP] send kind=notify loop=${loopId} message=${messageId || '-'}`);
+                return { kind: id, loopId, messageId, sentAt };
+            }
+            //* enqueue: SQS queue of this service (`x-protocol-service`) → `backend`, no delay.
+            if (id === 'enqueue') {
+                const messageId = await $proto.enqueue(null, payload, 'POST', noCallback, 0);
+                loopLog.inf(`[LOOP] send kind=enqueue loop=${loopId} message=${messageId || '-'}`);
+                return { kind: id, loopId, messageId, sentAt };
+            }
+            //* protocol: synchronized call to this service's `lambda` function (`//self`), waits for the result.
             loopLog.inf(`[LOOP] send kind=protocol loop=${loopId} message=-`);
-            const result = await $aws.protocol(context, target).execute(null, payload, 'POST');
+            const result = await $proto.execute(null, payload, 'POST');
             loopLog.inf(`[LOOP] done kind=protocol loop=${loopId} rtt=${Date.now() - sentAt}ms`);
             return { kind: id, loopId, sentAt, result };
         });
     };
 
     /**
-     * loop test receiver of the `protocol` loop: log one `[LOOP] recv` line and return. it never sends anything.
-     * - allowed via the protocol channel (`depth > 0`) or for an admin; any other request gets 403.
-     * - a bad message (loop id, sent time, `hop !== 1`) logs `[LOOP] bad` and returns ''.
+     * loop test receiver of the protocol kinds (`protocol`, `notify`, `enqueue`): log one `[LOOP] recv` line and
+     * return. it never sends anything.
+     * - allowed via the protocol channel (`depth > 0`) or for an admin; a direct non-admin request gets 403.
+     * - a bad message (loop, loop id, sent time, `hop !== 1`) logs `[LOOP] bad` and returns ''.
+     * - via the protocol channel it never throws: any error logs `[LOOP] bad … reason=error` and returns ''
+     *   (a throw on the SQS protocol path is a redelivery, on the SNS path an error report).
      *
      * ```sh
      * $ http POST ':8800/callback/<loopId>/loop-recv' loop=protocol sentAt:=1 hop:=1     # local mode
@@ -260,13 +281,19 @@ export class CallbackAPIController extends AbstractCRUDController<
     public doPostLoopRecv: NextHandler = async (id, param, body, $ctx) => {
         const errScope = `doPostLoopRecv(${this.type()}/${id ?? ''})`;
         _log(NS, `${errScope}...`);
-        return this.service.guardProxy($ctx, async proxy => {
-            const viaProtocol = $U.N($ctx?.depth, 0) > 0;
-            if (!viaProtocol && !proxy.hasAdminRole()) {
-                throw new Error(`403 NOT ALLOWED - protocol or admin only @${errScope}`);
-            }
-            return onLoopRecv(`${id ?? ''}`, body);
-        });
+        const viaProtocol = $U.N($ctx?.depth, 0) > 0;
+        try {
+            return await this.service.guardProxy($ctx, async proxy => {
+                if (!viaProtocol && !proxy.hasAdminRole()) {
+                    throw new Error(`403 NOT ALLOWED - protocol or admin only @${errScope}`);
+                }
+                return onLoopRecv(`${id ?? ''}`, body);
+            });
+        } catch (e) {
+            //* a direct call keeps its error (403 etc.); the protocol channel never gets one.
+            if (!viaProtocol) throw e;
+            return onLoopError(loopKindOf(body), e);
+        }
     };
 
     /**

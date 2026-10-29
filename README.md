@@ -27,7 +27,7 @@ lemoncloud 백엔드 마이크로서비스(`<code>-<service>-api`)의 템플릿 
 | `src/express.ts` | 로컬 express 서버. `POST /echo`를 더한다. | 거의 안 고침 |
 | `src/api/` | 모델 없는 컨트롤러(`hello-api.ts`, `crons-api.ts`)와 cron 목록(`cron-jobs.ts`) | 개발자 |
 | `src/modules/<name>/` | 모델 있는 기능 모듈. `mock`(골든 샘플), `callback`, `search` | 개발자 |
-| `src/modules/callback/loop.ts` | 루프 테스트(SNS·SQS·protocol). 라우트는 `api-callback.ts`의 `doPostLoop()`·`doPostLoopRecv()`다. | 개발자 |
+| `src/modules/callback/loop.ts` | 루프 테스트(SNS·SQS·protocol·notify·enqueue). 라우트는 `api-callback.ts`의 `doPostLoop()`·`doPostLoopRecv()`다. | 개발자 |
 | `src/service/` | `BackendService`·`BackendProxy`·`ModelType` 등 모듈 연결 지점 | 기능 추가 시 |
 | `src/view/` | 외부 공개 타입(`types.ts`)과 transformer 묶음 | 기능 추가 시 |
 | `src/test-helpers/` | 테스트용 컨텍스트 샘플(`loadSample`) | 개발자 |
@@ -56,7 +56,7 @@ flowchart LR
     H --> ENG["src/engine.ts lambda()"]
     ENG --> LC["lemon-core lambda-handler: 이벤트 종류 판별"]
     LC -- "web" --> WEB["$web 컨트롤러"]
-    LC -- "sns/sqs, Subject x-protocol-service" --> WEB
+    LC -- "sns/sqs, Subject x-protocol-service (notify·enqueue 루프 포함)" --> WEB
     LC -- "cron" --> CRON["$cron 리스너: crons.handleEvent"]
     CRON --> JOBS["src/api/cron-jobs.ts CRON_JOBS"]
     LC -- "그 밖의 sns/sqs" --> LOOP["$sns/$sqs 리스너: callback/loop.ts onLoopMessage"]
@@ -70,15 +70,17 @@ flowchart LR
 - 두 함수 모두 같은 `handler.lambda`를 쓴다. 함수별 이벤트는 `serverless.yml` `functions:`에 있다.
 - `src/engine.ts`는 웹 컨트롤러 6개, cron 리스너 1개, SNS·SQS 리스너 각 1개를 등록한다. DynamoDB stream 리스너는 없다.
 - SNS·SQS 리스너는 루프 테스트 전용이다. 제목 `x-loop-test` 메시지만 처리한다. 다른 메시지는 무시한다.
-- 루프 테스트는 callback 모듈에 있다. 트리거는 `POST /callback/<kind>/loop`(admin만)다. `kind`는 `sns`·`sqs`·`protocol`이다.
+- 루프 테스트는 callback 모듈에 있다. 트리거는 `POST /callback/<kind>/loop`(admin만)다. `kind`는 `sns`·`sqs`·`protocol`·`notify`·`enqueue`다.
 - protocol 루프의 수신부는 `POST /callback/<loopId>/loop-recv`다. `//self`는 `lambda` 함수다.
+- `notify`·`enqueue`는 protocol 서비스로 SNS·SQS를 거친다. `backend`가 `loop-recv`를 실행한다.
 - 루프 테스트 수신부는 로그만 남긴다. 재발신하지 않는다. 가드는 다음과 같다.
-  1. 수신부 3곳은 로그만 남기고 돌아간다.
+  1. 수신부(SNS·SQS 리스너, `loop-recv`)는 로그만 남기고 돌아간다.
   2. 트리거는 protocol 경유 재진입을 거부한다(`400 INVALID LOOP - nested trigger`).
   3. `hop`은 1만 받는다. 수신부는 `hop`을 올려 다시 보내지 않는다.
-  4. SNS·SQS 리스너는 throw 하지 않는다.
+  4. SNS·SQS 리스너는 throw 하지 않는다. protocol 경유 `loop-recv`도 throw 하지 않는다.
   5. 오류 보고는 `REPORT_ERROR_ARN` 토픽으로 간다. `backend`가 구독한 토픽이 아니다.
   6. 앱 코드에 cron·재시도 루프가 없다. `loop:check`는 kind마다 한 번만 호출한다.
+  7. `notify`·`enqueue`는 callback을 넘기지 않는다.
 - 자세한 내용: [bin/README.md](bin/README.md#loopcheck), [src/modules/callback/README.md](src/modules/callback/README.md)
 - 일반 라우트 `/{type}/{id}/{cmd}`에는 `authorizer: aws_iam`이 붙는다. `/`·`/hello`·`/mocks` 명시 라우트에는 없다.
 
@@ -157,7 +159,7 @@ npm run lambda:test     # bin/ 을 바꿨을 때. 기대: fail 0
 npm run fields:admin -- --target lambda --stage dev   # 기대: ok=true, gate=closed(403), exit 0
 npm run lambda:invoke -- --stage dev --path /hello/0  # 기대: function-error=none, http 200
 npm run lambda:logs -- --stage dev --since 5m         # 오류 줄 확인
-npm run loop:check -- --stage dev                     # 기대: 세 줄 모두 send=ok recv=ok, exit 0
+npm run loop:check -- --stage dev                     # 기대: 다섯 줄 모두 send=ok recv=ok, exit 0
 ```
 
 - `loop:check`는 kind마다 `lambda`를 한 번 호출한다. 그 뒤 `[LOOP] recv` 줄을 로그에서 찾는다. 기본 대기는 60초다.
@@ -165,7 +167,7 @@ npm run loop:check -- --stage dev                     # 기대: 세 줄 모두 s
 
 ```sh
 npm run lambda:invoke -- --stage dev --internal --identity '{"roles":["admin"]}' --method POST --path /callback/sns/loop
-npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'   # protocol은 --fn lambda
+npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'   # protocol만 --fn lambda
 ```
 
 - `lambda:invoke`는 `http 4xx/5xx`여도 exit 0이다. 출력의 `http` 줄을 본다.

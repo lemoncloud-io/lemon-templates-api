@@ -5,13 +5,17 @@
  *   1. `sns`: `sns.publish()` → `backend` → lemon-core `LambdaSNSHandler` → `onLoopMessage()`
  *   2. `sqs`: `sqs.sendMessage()` → `backend` → lemon-core `LambdaSQSHandler` → `onLoopMessage()`
  *   3. `protocol`: `$protocol().execute()` → `lambda` → `POST /callback/<loopId>/loop-recv` → `onLoopRecv()`
+ *   4. `notify`: `$protocol().notify()` → SNS (`x-protocol-service`) → `backend` → `loop-recv` → `onLoopRecv()`
+ *   5. `enqueue`: `$protocol().enqueue()` → SQS (`x-protocol-service`) → `backend` → `loop-recv` → `onLoopRecv()`
  * - the routes are in `api-callback.ts` (`doPostLoop()`, `doPostLoopRecv()`).
  * - infinite-loop guards: receivers only log and return (never send), a nested trigger is refused,
- *   `hop` must be exactly 1 (never forwarded), and the SNS/SQS listener never throws (no retry, no redrive).
+ *   `hop` must be exactly 1 (never forwarded), no callback on notify/enqueue, and the SNS/SQS listener and
+ *   the protocol receiver (via the protocol channel) never throw (no retry, no redrive).
  *
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2026-10-30 initial version (SNS/SQS/protocol loop test).
+ * @date        2026-10-30 add `notify` and `enqueue` (protocol service over SNS/SQS).
  *
  * @copyright   (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
@@ -49,12 +53,28 @@ export const MAX_NOTE = 100;
 /**
  * transport of one loop.
  */
-export type LoopKind = 'sns' | 'sqs' | 'protocol';
+export type LoopKind = 'sns' | 'sqs' | 'protocol' | 'notify' | 'enqueue';
 
 /**
  * every loop kind (`POST /callback/<kind>/loop`).
  */
-export const LOOP_KINDS: LoopKind[] = ['sns', 'sqs', 'protocol'];
+export const LOOP_KINDS: LoopKind[] = ['sns', 'sqs', 'protocol', 'notify', 'enqueue'];
+
+/**
+ * kinds that go through the lemon-core protocol service and end at `POST /callback/<loopId>/loop-recv`.
+ */
+export type ProtocolKind = 'protocol' | 'notify' | 'enqueue';
+
+/**
+ * every protocol kind (`onLoopRecv()` accepts these as `body.loop`).
+ */
+export const PROTOCOL_KINDS: ProtocolKind[] = ['protocol', 'notify', 'enqueue'];
+
+/**
+ * options of `$protocol()` for a loop: `isProd: false` keeps `//self` on this stage
+ * (without it, the helper forces stage `prod` when env `NS` is `SS`).
+ */
+export const PROTOCOL_OPTIONS = { isProd: false };
 
 /**
  * payload of one loop message (SNS `Message` JSON, SQS body, protocol body).
@@ -81,14 +101,26 @@ export interface LoopTransports {
     /** `$cores.cores.aws.sqs` */
     sqs: { sendMessage: (data: any, attr?: { [key: string]: string | number }) => Promise<string> };
     /** `$protocol()` of lemon-core */
-    protocol: (context: NextContext, service: string) => { execute: (param?: any, body?: any, mode?: string) => any };
+    protocol: (context: NextContext, service: string, options?: { isProd?: boolean }) => LoopProtocol;
+}
+
+/**
+ * the part of `$protocol()` a loop uses. a loop never passes `callback` to `notify()`/`enqueue()`.
+ */
+export interface LoopProtocol {
+    /** synchronized call via Lambda (`web`) */
+    execute: (param?: any, body?: any, mode?: string) => Promise<any>;
+    /** async call via SNS (`x-protocol-service`) */
+    notify: (param?: any, body?: any, mode?: string, callback?: string) => Promise<string>;
+    /** async call via SQS (`x-protocol-service`) */
+    enqueue: (param?: any, body?: any, mode?: string, callback?: string, delaySeconds?: number) => Promise<string>;
 }
 
 //* the default transports (SNS/SQS endpoints from env `MY_SNS_ENDPOINT`/`MY_SQS_ENDPOINT`).
 export const defaultTransports = (): LoopTransports => ({
     sns: $cores.cores.aws.sns,
     sqs: $cores.cores.aws.sqs,
-    protocol: $protocol,
+    protocol: (context, service, options) => $protocol(context, service, options),
 });
 
 //* the loop log writer (one `_inf` line); an object, so jest can spy on `inf`.
@@ -104,6 +136,18 @@ export const isLoopId = (s: any): s is string => typeof s === 'string' && LOOP_I
 
 //* true for a known loop kind.
 export const isLoopKind = (s: any): s is LoopKind => LOOP_KINDS.includes(s);
+
+//* true for a kind that goes through the protocol service.
+export const isProtocolKind = (s: any): s is ProtocolKind => PROTOCOL_KINDS.includes(s);
+
+//* the kind label of a received protocol body (never throws): `body.loop` when it is a protocol kind, else `protocol`.
+export const loopKindOf = (body: any): ProtocolKind => {
+    try {
+        return isProtocolKind(body?.loop) ? body.loop : 'protocol';
+    } catch (e) {
+        return 'protocol';
+    }
+};
 
 /**
  * build the payload: a fresh loop id, the sent time, hop 1, and the optional note (string only, trimmed, capped).
@@ -179,30 +223,45 @@ export const onLoopMessage = (type: string, param: any, body: any): string => {
         return `loop:${kind}:${body.loopId}`;
     } catch (e) {
         //* never throw out of a listener.
-        _err(NS, `! err@onLoopMessage =`, e);
-        try {
-            loopLog.inf(badLine(kind, null, 'error'));
-        } catch (e2) {
-            _err(NS, `! err@badLine =`, e2);
-        }
-        return '';
+        return onLoopError(kind, e);
     }
 };
 
 /**
  * protocol receiver body (`POST /callback/<loopId>/loop-recv`). log only: it never sends anything.
+ * - `body.loop` is the kind that delivered it: `protocol` (execute), `notify` (SNS), or `enqueue` (SQS).
+ * - never throws: a bad message (loop, loop id, sent time, `hop !== 1`) or any error logs `[LOOP] bad` and returns ''.
  *
  * @param loopId the loop id (path id)
- * @param body   the payload `{ loop: 'protocol', sentAt, hop }`
+ * @param body   the payload `{ loop, loopId, sentAt, hop }`
  * @returns `{ loopId, recvAt, hop }` on success, else ''
  */
 export const onLoopRecv = (loopId: string, body: any): { loopId: string; recvAt: number; hop: number } | '' => {
-    const reason = body?.loop !== 'protocol' ? 'loop' : badReason(body, loopId);
-    if (reason) {
-        loopLog.inf(badLine('protocol', loopId, reason));
-        return '';
+    const kind = loopKindOf(body);
+    try {
+        const reason = isProtocolKind(body?.loop) ? badReason(body, loopId) : 'loop';
+        if (reason) {
+            loopLog.inf(badLine(kind, loopId, reason));
+            return '';
+        }
+        const recvAt = Date.now();
+        loopLog.inf(`[LOOP] recv kind=${kind} loop=${loopId} latency=${recvAt - body.sentAt}ms hop=${body.hop}`);
+        return { loopId, recvAt, hop: body.hop };
+    } catch (e) {
+        //* never throw out of a receiver.
+        return onLoopError(kind, e);
     }
-    const recvAt = Date.now();
-    loopLog.inf(`[LOOP] recv kind=protocol loop=${loopId} latency=${recvAt - body.sentAt}ms hop=${body.hop}`);
-    return { loopId, recvAt, hop: body.hop };
+};
+
+/**
+ * the error path of a receiver: log one `[LOOP] bad … reason=error` line, return '' (never throws).
+ */
+export const onLoopError = (kind: string, e: any): '' => {
+    _err(NS, `! err@loop-recv =`, e);
+    try {
+        loopLog.inf(badLine(kind, null, 'error'));
+    } catch (e2) {
+        _err(NS, `! err@badLine =`, e2);
+    }
+    return '';
 };
