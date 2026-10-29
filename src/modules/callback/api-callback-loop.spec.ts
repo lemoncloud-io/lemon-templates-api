@@ -128,7 +128,7 @@ const sendSpies = () => {
 //! total calls of the given spies (and fake transports).
 const calls = (...fns: jest.Mock[] | jest.SpyInstance[]) => (fns as any[]).reduce((n, f) => n + f.mock.calls.length, 0);
 
-//! a context with `identity.roles` only, like a direct invoke with `--identity '{"roles":["admin"]}'`.
+//! a context with `identity.roles` only, like a direct invoke with `--identity '{"sid":"loop-check","roles":["admin"]}'`.
 const rolesContext = (roles: string[], more?: any): any => ({ identity: { roles }, ...more });
 
 //! a synthetic SNS Lambda event with one record (payload as the `Message` JSON text).
