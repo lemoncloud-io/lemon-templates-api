@@ -435,7 +435,7 @@ The jest spec `src/modules/callback/api-callback-loop.spec.ts` covers each guard
 ### Access
 
 - The trigger is admin only: `403 NOT ALLOWED - only for admin @doPostLoop(callback/<kind>)` otherwise. lemon-core `hasAdminRole()` is true in local mode (`LOCAL_MODE=1`), for a signed access key, for an authed `admin` role, or when `context.identity.roles` has `admin`.
-- `loop:check` sends an internal web event (no `Host`, like `lambda:invoke --internal`) with `x-lemon-identity: {"roles":["admin"]}` (like `--identity`).
+- `loop:check` sends an internal web event (no `Host`, like `lambda:invoke --internal`) with `x-lemon-identity: {"sid":"loop-check","roles":["admin"]}` (like `--identity`). lemon-core drops a JSON identity without a non-empty `sid`, so the trigger then answers 403.
 - An unknown kind answers `404 NOT FOUND - callback/<kind>/loop`.
 - `loop-recv` takes a protocol call (`depth > 0`: `protocol`, `notify`, `enqueue`) or an admin. A direct non-admin request answers 403.
 - Limit: lemon-core verifies the signature of a host-less identity. In `PROTOCOL_VERIFY=enforce` mode the unsigned `x-lemon-identity` of `loop:check` answers 403 (the run exits 1). In `warn` mode it passes with one `PROTOCOL unsigned web` log line.
@@ -489,7 +489,7 @@ Exit codes: 0 = every kind received (http 200, both lines, no issue); 1 = any li
 
 ```sh
 # 1. trigger (prints the loopId in the http body)
-npm run lambda:invoke -- --stage dev --internal --identity '{"roles":["admin"]}' --method POST --path /callback/sns/loop
+npm run lambda:invoke -- --stage dev --internal --identity '{"sid":"loop-check","roles":["admin"]}' --method POST --path /callback/sns/loop
 
 # 2. the recv line of that loop (sns, sqs, notify, enqueue: --fn backend; protocol: --fn lambda)
 npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'

@@ -176,7 +176,7 @@ npm run loop:check -- --stage dev                     # 기대: 다섯 줄 모�
 - 같은 점검을 손으로 하려면 먼저 트리거를 호출한다. 응답의 `loopId`를 적는다.
 
 ```sh
-npm run lambda:invoke -- --stage dev --internal --identity '{"roles":["admin"]}' --method POST --path /callback/sns/loop
+npm run lambda:invoke -- --stage dev --internal --identity '{"sid":"loop-check","roles":["admin"]}' --method POST --path /callback/sns/loop
 npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'   # protocol만 --fn lambda
 ```
 
