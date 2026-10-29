@@ -4,7 +4,7 @@
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2025-03-26 initial version.
- * @date        2026-10-30 lemon-core B13: the callback request goes out as a relay (admin claim, no full context).
+ * @date        2026-10-30 lemon-core B14: the callback request goes out as a relay (admin claim, no full context).
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
@@ -149,7 +149,7 @@ describe('BackendProxy', () => {
         });
     });
 
-    //* lemon-core B13: `doRequest()` claims admin in `identity.roles`; the SQS message carries only the relay.
+    //* lemon-core B14: `doRequest()` claims admin in `identity.roles`; the SQS message carries only the relay.
     it('should enqueue the callback request as a relay (admin claim, no full context)', async () => {
         const { proxy, context } = instance('authed');
         const proto: any = $cores.cores.protocol.service;

@@ -11,7 +11,7 @@
  * - infinite-loop guards: receivers only log and return (never send), a nested trigger is refused,
  *   `hop` must be exactly 1 (never forwarded), no callback on notify/enqueue, and the SNS/SQS listener and
  *   the protocol receiver (via the protocol channel) never throw (no retry, no redrive).
- * - lemon-core B13: a protocol hop carries the relay (identity summary + trace), not the caller context.
+ * - lemon-core B14: a protocol hop carries the relay (identity summary + trace), not the caller context.
  *   the receiver context has `channel` and `trace { tid, hop }`; `trace.hop > 0` marks a protocol re-entry.
  *   the `send`/`recv`/`done` lines carry ` tid=<trace.tid> hop=<trace.hop>`, so one `tid` joins send and recv.
  *
@@ -20,7 +20,7 @@
  * @date        2026-10-30 initial version (SNS/SQS/protocol loop test).
  * @date        2026-10-30 add `notify` and `enqueue` (protocol service over SNS/SQS).
  * @date        2026-10-30 local transport (`LOCAL_TRANSPORT=mock`): keep each receiver result for `doPostLoop()`.
- * @date        2026-10-30 lemon-core B13: nested trigger by `trace.hop`, ` tid=… hop=…` on the loop lines.
+ * @date        2026-10-30 lemon-core B14: nested trigger by `trace.hop`, ` tid=… hop=…` on the loop lines.
  *
  * @copyright   (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
@@ -216,7 +216,7 @@ export const sourcePath = (source: any): string => {
 const MAX_TID = 128;
 
 /**
- * the trace of a context as lemon-core's relay carries it to the next hop (B13 `buildRelay()`).
+ * the trace of a context as lemon-core's relay carries it to the next hop (B14 `buildRelay()`).
  * - `tid` = `trace.tid`, else `requestId`, else '' (none). `hop` = `trace.hop` (an integer >= 0), else 0.
  * - a hand-raised `depth` is not read: the relay never carries it.
  */
@@ -238,7 +238,7 @@ export const traceTag = (context: NextContext): string => {
 };
 
 /**
- * true if the context came through the protocol channel (lemon-core B13): `trace.hop > 0` and not external.
+ * true if the context came through the protocol channel (lemon-core B14): `trace.hop > 0` and not external.
  * - lemon-core sets `trace.hop` from the relay only (web `x-lemon-relay`, SNS/SQS `relay`); an external request
  *   (`channel: 'external'`) ignores the relay, so its hop is 0. `external` is checked too, as a second fence.
  * - a direct invoke (`internal`, hop 0) and a local request (`local`, hop 0) are not via the protocol channel.

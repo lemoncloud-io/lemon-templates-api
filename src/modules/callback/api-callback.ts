@@ -8,7 +8,7 @@
  * @date        2026-10-30 loop test: `POST /callback/<kind>/loop`, `POST /callback/<loopId>/loop-recv` (see `loop.ts`).
  * @date        2026-10-30 loop test: `notify` and `enqueue` kinds (protocol service over SNS/SQS).
  * @date        2026-10-30 loop test: with lemon-core's local transport (`LOCAL_TRANSPORT=mock`), wait and answer `recv`.
- * @date        2026-10-30 loop test: lemon-core B13 relay — `trace.hop` gates, no hand-raised `depth`, ` tid=… hop=…` lines.
+ * @date        2026-10-30 loop test: lemon-core B14 relay — `trace.hop` gates, no hand-raised `depth`, ` tid=… hop=…` lines.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
@@ -255,7 +255,7 @@ export class CallbackAPIController extends AbstractCRUDController<
                 return done({ kind: id, loopId, messageId, sentAt });
             }
             //* protocol kinds: a signed protocol call to `//self/callback/<loopId>/loop-recv`; the payload is the body.
-            //* the context claims `admin` (like `proxy.ts`); `identity.roles` rides in the relay (lemon-core B13).
+            //* the context claims `admin` (like `proxy.ts`); `identity.roles` rides in the relay (lemon-core B14).
             //* no hand-raised `depth`: lemon-core counts the hop (`trace.hop + 1`) and the relay never carries `depth`.
             const identity: any = $ctx?.identity;
             const roles: string[] = [...(identity?.roles ?? []).filter((r: string) => r !== 'admin'), 'admin'];
@@ -286,7 +286,7 @@ export class CallbackAPIController extends AbstractCRUDController<
     /**
      * loop test receiver of the protocol kinds (`protocol`, `notify`, `enqueue`): log one `[LOOP] recv` line and
      * return. it never sends anything.
-     * - allowed via the protocol channel (lemon-core B13: `trace.hop > 0`, not `external`) or for an admin;
+     * - allowed via the protocol channel (lemon-core B14: `trace.hop > 0`, not `external`) or for an admin;
      *   any other non-admin request (external, direct invoke, local, or a hand-raised `depth`) gets 403.
      * - a bad message (loop, loop id, sent time, `hop !== 1`) logs `[LOOP] bad` and returns ''.
      * - via the protocol channel it never throws: any error logs `[LOOP] bad … reason=error` and returns ''

@@ -51,7 +51,7 @@ $ npm run test:watch /backend- /transformer. /callback/
 - 서명 검증 실패(`PROTOCOL_VERIFY=enforce`)는 lemon-core가 우리 핸들러 전에 던진다. SQS는 보존 기간(30분) 동안 재전달된다. 큐에 DLQ가 없다.
 - 앱 코드에 cron·재시도 루프가 없다. 점검 스크립트 `npm run loop:check`는 kind마다 한 번만 호출한다.
 
-### relay와 trace (lemon-core B13)
+### relay와 trace (lemon-core B14)
 
 - protocol 송신(`execute`·`notify`·`enqueue`)은 relay만 싣는다. relay는 identity 요약과 trace다. 호출자 context 전체(`cookie`·`domain`·`clientIp` 등)는 가지 않는다.
 - 트리거는 `identity.roles`에 `admin`을 더해 보낸다. `roles`는 relay 화이트리스트에 있다. `depth`는 올리지 않는다.

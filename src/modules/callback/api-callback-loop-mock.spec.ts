@@ -9,7 +9,7 @@
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2026-10-30 initial version.
- * @date        2026-10-30 lemon-core B13: one `tid` from send to recv (relay, hop 1); no `x-protocol-context` sent.
+ * @date        2026-10-30 lemon-core B14: one `tid` from send to recv (relay, hop 1); no `x-protocol-context` sent.
  *
  * @copyright   (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
@@ -30,7 +30,7 @@ const ENV: { [key: string]: string | undefined } = {
     REPORT_ERROR_ARN: '',
     MY_SNS_ENDPOINT: 'arn:aws:sns:ap-northeast-2:000000000000:loop-mock-sns',
     MY_SQS_ENDPOINT: 'https://sqs.ap-northeast-2.amazonaws.com/000000000000/loop-mock-sqs',
-    PROTOCOL_LEGACY_CONTEXT: undefined, //* lemon-core B13 default `off`: the relay only (no `x-protocol-context`).
+    PROTOCOL_LEGACY_CONTEXT: undefined, //* lemon-core B14 default `off`: the relay only (no `x-protocol-context`).
 };
 //! set (or delete) each name of a map in `process.env`.
 const setEnv = (M: { [key: string]: string | undefined }) =>
@@ -174,7 +174,7 @@ describe('callback loop test - local transport (mock)', () => {
             const recvs = lines.filter(l => l.startsWith(`[LOOP] recv kind=${kind} loop=${id} `));
             expect(sends).toEqual([expect.stringMatching(/ tid=\S+ hop=0 mock=1$/)]);
             expect(recvs.length).toEqual(1);
-            //* B13: the protocol kinds carry the sender's `tid` in the relay; the receiver is hop 1.
+            //* B14: the protocol kinds carry the sender's `tid` in the relay; the receiver is hop 1.
             const send = traceIn(sends[0]);
             if (PROTOCOL_KINDS.includes(kind)) {
                 expect({ kind, ...traceIn(recvs[0]) }).toEqual({ kind, tid: send.tid, hop: 1 });
@@ -213,7 +213,7 @@ describe('callback loop test - local transport (mock)', () => {
         expect(sdkCalls).toEqual([]);
     });
 
-    //* B13: the protocol kinds send the relay only — no `x-protocol-context` header, no `context` field (default).
+    //* B14: the protocol kinds send the relay only — no `x-protocol-context` header, no `context` field (default).
     it('should send the relay and no x-protocol-context by default (protocol, notify, enqueue)', async () => {
         const proto: any = $cores.cores.protocol.service;
         const web = jest.spyOn(proto.web, 'transformToEvent');

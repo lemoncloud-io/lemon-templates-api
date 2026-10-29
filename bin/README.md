@@ -411,7 +411,7 @@ Log lines (lemon-core `_inf`):
 
 `latency` is the receiver's `Date.now() - sentAt` (the clocks of two Lambda containers). `rtt` is the round trip of the `protocol` call, seen by the trigger.
 
-`tid` and `hop` come from lemon-core's call trace (B13, `context.trace`).
+`tid` and `hop` come from lemon-core's call trace (B14, `context.trace`).
 The trigger request is the first entry: `tid` is its request id, `hop` is 0.
 `protocol`, `notify`, and `enqueue` cross one protocol hop. lemon-core sends the relay (`x-lemon-relay` on web, the `relay` field on SNS / SQS): the identity summary and the trace only, no full context.
 So their recv line has the same `tid` and `hop=1`. lemon-core also writes one `TRACE tid=<tid> hop=<hop> ch=<channel> …` line per entry.

@@ -10,7 +10,7 @@
  * @date        2026-10-30 initial version (SNS/SQS/protocol loop test).
  * @date        2026-10-30 add `notify` and `enqueue` (protocol service over SNS/SQS).
  * @date        2026-10-30 12-digit placeholder account for the protocol events (lemon-core B10-6), local transport off.
- * @date        2026-10-30 lemon-core B13: relay hops (`trace.hop`), no hand-raised `depth`, ` tid=… hop=…` lines.
+ * @date        2026-10-30 lemon-core B14: relay hops (`trace.hop`), no hand-raised `depth`, ` tid=… hop=…` lines.
  *
  * @copyright   (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
@@ -40,7 +40,7 @@ const RECV_RE = (kind: string, tail = '') =>
 //! a trace id of the receiver tests (the relay `tid`).
 const TID = 'tid-1';
 
-//! a receiver context as lemon-core builds it from a relay (B13 D2): internal, hop 1, the whitelisted identity.
+//! a receiver context as lemon-core builds it from a relay (B14 D2): internal, hop 1, the whitelisted identity.
 const relayContext = (roles: string[] = []): any => ({
     identity: { roles },
     channel: 'internal',
@@ -508,7 +508,7 @@ describe('callback loop test', () => {
         expect(isNestedTrigger({ source: 'api://1@self-api/callback/sns/loop#1' }, 'callback', 'sns')).toBe(false);
         expect(isNestedTrigger({ source: 'api://0008540000@lemon-hello-api#2.12.24a' }, 'callback', 'sns')).toBe(false);
         expect(isNestedTrigger({}, 'callback', 'sns')).toBe(false);
-        //* B13 entries with hop 0: a direct invoke (`internal`) and a local request (`local`) are allowed.
+        //* B14 entries with hop 0: a direct invoke (`internal`) and a local request (`local`) are allowed.
         const own = 'api://1@self-api/callback/sns/loop#1';
         const entry = (channel: string): any => ({ channel, source: own, trace: { tid: 't', hop: 0 } });
         expect(isNestedTrigger(entry('internal'), 'callback', 'sns')).toBe(false);

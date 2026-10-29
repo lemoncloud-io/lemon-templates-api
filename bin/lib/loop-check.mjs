@@ -6,7 +6,7 @@
  *   - `protocol`: send and recv both in the `lambda` log group (`//self` is the `lambda` function).
  *   - `notify`, `enqueue`: protocol service over SNS / SQS; send in `lambda`, recv (`loop-recv`) in `backend`.
  * - exactly one invoke per kind, no retry; the log poll stops at `--timeout`.
- * - lemon-core B13 trace: each `[LOOP]` line ends with ` tid=<tid> hop=<hop>`. per kind it prints the send `tid`;
+ * - lemon-core B14 trace: each `[LOOP]` line ends with ` tid=<tid> hop=<hop>`. per kind it prints the send `tid`;
  *   for `protocol`, `notify`, `enqueue` (relay hops) the recv line must carry the same `tid` (else exit 1).
  * - `--target express`: the same trigger on a local express server run with lemon-core's local transport
  *   (`npm run express.lemon`, `LOCAL_TRANSPORT=mock`): `POST /callback/<kind>/loop`, and the answer must hold
