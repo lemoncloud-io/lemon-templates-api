@@ -16,7 +16,10 @@ import {
     triggerEvent,
     resultLine,
     defaultPort,
+    tidOf,
+    tidIssues,
     KINDS,
+    TRACE_KINDS,
 } from './loop-check.mjs';
 import { functionName, ArgError } from './common.mjs';
 
@@ -38,17 +41,33 @@ const IDS = {
     enqueue: '55555555-5555-4555-8555-555555555555',
 };
 
-// kinds whose recv line carries ` hop=1` (the protocol receiver `loop-recv`).
+// kinds whose recv line carries the relay trace ` tid=<send tid> hop=1` (the protocol receiver `loop-recv`).
 const RECV_HOP = ['protocol', 'notify', 'enqueue'];
+
+// the trigger tid of each kind (a Lambda request id).
+const TIDS = {
+    sns: 'aaaaaaaa-0000-4000-8000-0000000000a1',
+    sqs: 'aaaaaaaa-0000-4000-8000-0000000000a2',
+    protocol: 'aaaaaaaa-0000-4000-8000-0000000000a3',
+    notify: 'aaaaaaaa-0000-4000-8000-0000000000a4',
+    enqueue: 'aaaaaaaa-0000-4000-8000-0000000000a5',
+};
 
 // a lemon-core `_inf` line as CloudWatch keeps it (ANSI colors, request id, level).
 const line = body => `2026-10-30T00:00:00.000Z\tabc\tINFO\t\x1b[33mloop:\x1b[0m ${body}\n`;
 
-// the send / recv log lines of a kind.
+// the send / recv log lines of a kind (`tid`: the recv tid, default the send tid; null = no tid).
 const sendLine = kind =>
-    line(`[LOOP] send kind=${kind} loop=${IDS[kind]} message=${kind === 'protocol' ? '-' : 'm-1'}`);
-const recvLine = (kind, ms = 42) =>
-    line(`[LOOP] recv kind=${kind} loop=${IDS[kind]} latency=${ms}ms${RECV_HOP.includes(kind) ? ' hop=1' : ''}`);
+    line(
+        `[LOOP] send kind=${kind} loop=${IDS[kind]} message=${kind === 'protocol' ? '-' : 'm-1'} tid=${
+            TIDS[kind]
+        } hop=0`,
+    );
+const recvLine = (kind, ms = 42, tid = TIDS[kind]) =>
+    line(
+        `[LOOP] recv kind=${kind} loop=${IDS[kind]} latency=${ms}ms` +
+            (RECV_HOP.includes(kind) && tid ? ` tid=${tid} hop=1` : ''),
+    );
 
 // a fake invoker: answers the trigger of each kind with `http` and its body; records each event.
 const fakeInvoke = ({ http = 200, functionError, body } = {}) => {
@@ -170,11 +189,11 @@ describe('loop-check run', () => {
         assert.equal(r.code, 0, r.out);
         assert.deepEqual(r.lines, [
             `loop-check stage=dev lambda=${LAMBDA} backend=${BACKEND}`,
-            `loop kind=sns loop=${IDS.sns} send=ok recv=ok latency=120`,
-            `loop kind=sqs loop=${IDS.sqs} send=ok recv=ok latency=300`,
-            `loop kind=protocol loop=${IDS.protocol} send=ok recv=ok latency=7`,
-            `loop kind=notify loop=${IDS.notify} send=ok recv=ok latency=250`,
-            `loop kind=enqueue loop=${IDS.enqueue} send=ok recv=ok latency=3100`,
+            `loop kind=sns loop=${IDS.sns} send=ok recv=ok latency=120 tid=${TIDS.sns}`,
+            `loop kind=sqs loop=${IDS.sqs} send=ok recv=ok latency=300 tid=${TIDS.sqs}`,
+            `loop kind=protocol loop=${IDS.protocol} send=ok recv=ok latency=7 tid=${TIDS.protocol} recv-tid=same`,
+            `loop kind=notify loop=${IDS.notify} send=ok recv=ok latency=250 tid=${TIDS.notify} recv-tid=same`,
+            `loop kind=enqueue loop=${IDS.enqueue} send=ok recv=ok latency=3100 tid=${TIDS.enqueue} recv-tid=same`,
         ]);
         assert.match(r.err, /^account=\*\*\*\*0000 /);
         assert.equal(r.clock.sleeps.length, 0);
@@ -231,7 +250,7 @@ describe('loop-check run', () => {
         const fetch = fakeFetch({ [G_LAMBDA]: [sendLine('sns')] });
         const r = await call(['--kind', 'sns', '--timeout', '10000'], { invoke, fetch });
         assert.equal(r.code, 1);
-        assert.equal(r.lines[1], `loop kind=sns loop=${IDS.sns} send=ok recv=missing latency=-`);
+        assert.equal(r.lines[1], `loop kind=sns loop=${IDS.sns} send=ok recv=missing latency=- tid=${TIDS.sns}`);
         assert.deepEqual(r.lines.slice(2), [`  - no [LOOP] recv line in ${G_BACKEND}`, '  - timeout after 10000ms']);
         assert.equal(invoke.events.length, 1);
         // polls at 0, 2, 4, 6, 8, 10 s (the last one at the timeout): 5 sleeps, 6 polls;
@@ -250,7 +269,7 @@ describe('loop-check run', () => {
         };
         const r = await call(['--kind', 'sqs'], { invoke: fakeInvoke(), fetch, now: clock.now, sleep });
         assert.equal(r.code, 0, r.out);
-        assert.equal(r.lines[1], `loop kind=sqs loop=${IDS.sqs} send=ok recv=ok latency=900`);
+        assert.equal(r.lines[1], `loop kind=sqs loop=${IDS.sqs} send=ok recv=ok latency=900 tid=${TIDS.sqs}`);
         assert.deepEqual(clock.sleeps, [2000]);
     });
     test('non-200 http: exit 1, no log poll', async () => {
@@ -258,7 +277,7 @@ describe('loop-check run', () => {
         const r = await call(['--kind', 'sns'], { invoke: fakeInvoke({ http: 403 }), fetch });
         assert.equal(r.code, 1);
         assert.deepEqual(r.lines.slice(1), [
-            'loop kind=sns loop=- send=missing recv=missing latency=-',
+            'loop kind=sns loop=- send=missing recv=missing latency=- tid=-',
             '  - expected http 200 got 403: nope',
         ]);
         assert.equal(fetch.queries.length, 0);
@@ -273,7 +292,7 @@ describe('loop-check run', () => {
         const r = await call(['--kind', 'protocol'], { invoke: fakeInvoke({ body }), fetch: fakeFetch(GOOD_LOGS) });
         assert.equal(r.code, 1);
         assert.ok(r.lines.includes('  - protocol result.loopId does not match'));
-        assert.match(r.lines[1], / send=ok recv=ok latency=7$/);
+        assert.match(r.lines[1], / send=ok recv=ok latency=7 tid=\S+ recv-tid=same$/);
     });
     test('a Logs error exits 1 with the error redacted; a missing log group reads as empty', async () => {
         const fail = Object.assign(new Error('denied for arn:aws:iam::123456789012:user/x'), {
@@ -305,21 +324,67 @@ describe('loop-check run', () => {
                 send: true,
                 recv: true,
                 latency: 120,
+                tid: TIDS.sns,
+                recvTid: null,
                 issues: [],
             },
         ]);
     });
 });
 
+describe('loop-check trace (tid)', () => {
+    test('a relay kind whose recv tid differs: exit 1 with the mismatch', async () => {
+        const logs = { [G_LAMBDA]: [sendLine('notify')], [G_BACKEND]: [recvLine('notify', 9, 'other-tid')] };
+        const r = await call(['--kind', 'notify'], { invoke: fakeInvoke(), fetch: fakeFetch(logs) });
+        assert.equal(r.code, 1);
+        assert.deepEqual(r.lines.slice(1), [
+            `loop kind=notify loop=${IDS.notify} send=ok recv=ok latency=9 tid=${TIDS.notify} recv-tid=differs`,
+            `  - tid mismatch: send=${TIDS.notify} recv=other-tid`,
+        ]);
+    });
+    test('a relay kind whose recv line has no tid (old receiver): exit 1', async () => {
+        const logs = { [G_LAMBDA]: [sendLine('enqueue')], [G_BACKEND]: [recvLine('enqueue', 9, null)] };
+        const r = await call(['--kind', 'enqueue'], { invoke: fakeInvoke(), fetch: fakeFetch(logs) });
+        assert.equal(r.code, 1);
+        assert.deepEqual(r.lines.slice(2), ['  - no tid on the [LOOP] recv line']);
+    });
+    test('protocol: send and recv in the lambda group with the same tid: exit 0', async () => {
+        const logs = { [G_LAMBDA]: [sendLine('protocol'), recvLine('protocol', 5)] };
+        const r = await call(['--kind', 'protocol', '--json'], { invoke: fakeInvoke(), fetch: fakeFetch(logs) });
+        assert.equal(r.code, 0);
+        const [res] = JSON.parse(r.out).results;
+        assert.deepEqual([res.tid, res.recvTid, res.issues], [TIDS.protocol, TIDS.protocol, []]);
+    });
+    test('sns / sqs: the tid is printed, never compared (a raw message has no relay)', async () => {
+        const r = await call(['--kind', 'sqs'], { invoke: fakeInvoke(), fetch: fakeFetch(GOOD_LOGS) });
+        assert.equal(r.code, 0);
+        assert.match(r.lines[1], new RegExp(` tid=${TIDS.sqs}$`));
+        assert.deepEqual(tidIssues('sqs', { send: true, recv: true, sendTid: 'a', recvTid: null }), []);
+    });
+    test('tidOf reads a safe id only; tidIssues skips a missing line', () => {
+        assert.equal(tidOf('[LOOP] send kind=x loop=y message=- tid=abc-1.2:3_4 hop=0 mock=1'), 'abc-1.2:3_4');
+        assert.equal(tidOf('[LOOP] recv kind=x loop=y latency=1ms tid=a-b hop=1\n'), 'a-b');
+        assert.equal(tidOf('[LOOP] recv kind=x loop=y latency=1ms tid=<bad> hop=1'), null);
+        assert.equal(tidOf('[LOOP] recv kind=x loop=y latency=1ms'), null);
+        assert.deepEqual(tidIssues('protocol', { send: true, recv: false, sendTid: 'a' }), []);
+        assert.deepEqual(tidIssues('protocol', { send: true, recv: true, sendTid: null, recvTid: 'a' }), [
+            'no tid on the [LOOP] send line',
+        ]);
+        assert.deepEqual(TRACE_KINDS, ['protocol', 'notify', 'enqueue']);
+    });
+});
+
 describe('loop-check helpers and --dry', () => {
     test('findLines strips ANSI codes and reads the latency', () => {
         const got = findLines([{ message: sendLine('sns') }, { message: recvLine('sns', 55) }], 'sns', IDS.sns);
-        assert.deepEqual(got, { send: true, recv: true, latency: 55 });
+        assert.deepEqual(got, { send: true, recv: true, latency: 55, sendTid: TIDS.sns, recvTid: null });
         // another kind or loop id does not match.
         assert.deepEqual(findLines([{ message: recvLine('sns') }], 'sqs', IDS.sns), {
             send: false,
             recv: false,
             latency: null,
+            sendTid: null,
+            recvTid: null,
         });
         assert.equal(findLines([{ message: recvLine('sqs') }], 'sqs', IDS.sns).recv, false);
     });
@@ -338,12 +403,26 @@ describe('loop-check helpers and --dry', () => {
             sleep: clock.sleep,
         });
         // polls at 0, 2, 4 s; a poll at 6 s would pass the 5 s timeout.
-        assert.deepEqual(r, { send: false, recv: false, latency: null, timedOut: true, polls: 3 });
+        assert.deepEqual(r, {
+            send: false,
+            recv: false,
+            latency: null,
+            sendTid: null,
+            recvTid: null,
+            timedOut: true,
+            polls: 3,
+        });
         assert.deepEqual(clock.sleeps, [2000, 2000]);
     });
     test('resultLine format', () => {
         const r = { kind: 'sqs', loopId: IDS.sqs, send: true, recv: false, latency: null, issues: [] };
         assert.equal(resultLine(r), `loop kind=sqs loop=${IDS.sqs} send=ok recv=missing latency=-`);
+        // lambda results carry `tid` (and `recvTid` for the relay kinds).
+        assert.equal(resultLine({ ...r, tid: 't-1', recvTid: null }), `${resultLine(r)} tid=t-1`);
+        const p = { ...r, kind: 'notify', loopId: IDS.notify, recv: true, latency: 3, tid: 't-1' };
+        assert.match(resultLine({ ...p, recvTid: 't-1' }), / latency=3 tid=t-1 recv-tid=same$/);
+        assert.match(resultLine({ ...p, recvTid: 't-2' }), / latency=3 tid=t-1 recv-tid=differs$/);
+        assert.match(resultLine({ ...p, tid: null, recvTid: null }), / latency=3 tid=- recv-tid=missing$/);
         assert.equal(triggerEvent('sns', 'dev').body, '{"note":"loop:check"}');
     });
     test('--dry prints the targets and the events with the identity masked, no AWS call (no stderr)', () => {

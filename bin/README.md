@@ -402,23 +402,30 @@ No ARN, queue URL, or function name is in a response or in a `[LOOP]` line.
 Log lines (lemon-core `_inf`):
 
 ```text
-[LOOP] send kind=<sns|sqs|protocol|notify|enqueue> loop=<loopId> message=<messageId|->
+[LOOP] send kind=<sns|sqs|protocol|notify|enqueue> loop=<loopId> message=<messageId|-> tid=<tid> hop=0
 [LOOP] recv kind=<sns|sqs> loop=<loopId> latency=<ms>ms
-[LOOP] recv kind=<protocol|notify|enqueue> loop=<loopId> latency=<ms>ms hop=1
-[LOOP] done kind=protocol loop=<loopId> rtt=<ms>ms
+[LOOP] recv kind=<protocol|notify|enqueue> loop=<loopId> latency=<ms>ms tid=<tid> hop=1
+[LOOP] done kind=protocol loop=<loopId> rtt=<ms>ms tid=<tid> hop=0
 [LOOP] bad kind=<kind> [loop=<loopId>] reason=<loopId|sentAt|hop|loop|error>
 ```
 
 `latency` is the receiver's `Date.now() - sentAt` (the clocks of two Lambda containers). `rtt` is the round trip of the `protocol` call, seen by the trigger.
+
+`tid` and `hop` come from lemon-core's call trace (B14, `context.trace`).
+The trigger request is the first entry: `tid` is its request id, `hop` is 0.
+`protocol`, `notify`, and `enqueue` cross one protocol hop. lemon-core sends the relay (`x-lemon-relay` on web, the `relay` field on SNS / SQS): the identity summary and the trace only, no full context.
+So their recv line has the same `tid` and `hop=1`. lemon-core also writes one `TRACE tid=<tid> hop=<hop> ch=<channel> …` line per entry.
+`sns` and `sqs` send a raw message (no relay), and the listener gets no context: their recv line has no `tid`.
+A `tid` with whitespace is written with `_`.
 
 ### Infinite-loop guards
 
 루프 테스트 수신부는 로그만 남긴다. 재발신하지 않는다.
 
 1. The receivers (SNS listener, SQS listener, protocol `loop-recv` for `protocol` / `notify` / `enqueue`) only log and return. They never publish, send, enqueue, notify, or execute.
-2. The trigger refuses re-entry through the protocol channel: `400 INVALID LOOP - nested trigger`. A protocol hop has `context.depth > 0` (lemon-core raises it per hop; the `protocol` trigger raises it too), or a `context.source` path of another route (a protocol call carries the caller's context).
+2. The trigger refuses re-entry through the protocol channel: `400 INVALID LOOP - nested trigger`. A relay hop has `context.trace.hop > 0` (lemon-core counts it; web, SNS, and SQS). A legacy `x-protocol-context` call (a v4 caller) arrives with hop 0 and the caller's `context.source`, so a `source` path of another route is refused too. `context.depth` is not read: the trigger does not raise it, and the relay does not carry it.
 3. Hop cap: a receiver accepts only `hop === 1`. Any other value (missing, `2`, `'1'`) logs `[LOOP] bad … reason=hop` and returns `''`. Nothing increments `hop` and forwards.
-4. The SNS / SQS listener never throws. `loop-recv` never throws when it came through the protocol channel (`depth > 0`). A throw on an SQS path is a `batchItemFailures` redelivery; on an SNS path lemon-core reports the error. Any error logs `[LOOP] bad … reason=error` and returns `''`. Only a direct non-admin call to `loop-recv` still gets its 403.
+4. The SNS / SQS listener never throws. `loop-recv` never throws when it came through the protocol channel (`trace.hop > 0` and `channel` not `external`). A throw on an SQS path is a `batchItemFailures` redelivery; on an SNS path lemon-core reports the error. Any error logs `[LOOP] bad … reason=error` and returns `''`. Only a direct non-admin call to `loop-recv` still gets its 403.
 5. lemon-core error reports go to the `REPORT_ERROR_ARN` topic with the subject `error`. That topic is not the one `backend` subscribes to, and the listener acts only on the subject `x-loop-test`.
 6. No cron, no schedule, no retry loop in app code. `loop:check` sends exactly one invoke per kind and polls the logs with a hard timeout. It never retries an invoke.
 7. `notify` and `enqueue` never pass a callback. With a callback, the receiving handler would call one more target after `loop-recv`.
@@ -428,7 +435,7 @@ A bad signature on the SNS path is reported and dropped (the v5 SNS handler does
 On the SQS path the record goes to `batchItemFailures`, and SQS delivers it again after each `VisibilityTimeout`.
 The queue in `serverless.yml` (`MyQueue`) has no redrive policy and no dead-letter queue.
 So a failing message comes back every 300 s (`VisibilityTimeout`) until `MessageRetentionPeriod` (1800 s) ends: about 6 receives, each with an error report.
-The queue also has `MaximumMessageSize: 4096`; an `enqueue` message carries the whole protocol param (context and body), so a large context can be refused.
+The queue also has `MaximumMessageSize: 4096`; an `enqueue` message carries the protocol param (the relay, about 0.4 KB, and the body). With `PROTOCOL_LEGACY_CONTEXT=send` it carries the full context too, so a large context can be refused.
 
 The jest spec `src/modules/callback/api-callback-loop.spec.ts` covers each guard.
 
@@ -437,7 +444,7 @@ The jest spec `src/modules/callback/api-callback-loop.spec.ts` covers each guard
 - The trigger is admin only: `403 NOT ALLOWED - only for admin @doPostLoop(callback/<kind>)` otherwise. lemon-core `hasAdminRole()` is true in local mode (`LOCAL_MODE=1`), for a signed access key, for an authed `admin` role, or when `context.identity.roles` has `admin`.
 - `loop:check` sends an internal web event (no `Host`, like `lambda:invoke --internal`) with `x-lemon-identity: {"sid":"loop-check","roles":["admin"]}` (like `--identity`). lemon-core drops a JSON identity without a non-empty `sid`, so the trigger then answers 403.
 - An unknown kind answers `404 NOT FOUND - callback/<kind>/loop`.
-- `loop-recv` takes a protocol call (`depth > 0`: `protocol`, `notify`, `enqueue`) or an admin. A direct non-admin request answers 403.
+- `loop-recv` takes a protocol call (`trace.hop > 0` and `channel` not `external`: `protocol`, `notify`, `enqueue`) or an admin. Any other non-admin request (external, direct invoke, local) answers 403.
 - Limit: lemon-core verifies the signature of a host-less identity. In `PROTOCOL_VERIFY=enforce` mode the unsigned `x-lemon-identity` of `loop:check` answers 403 (the run exits 1). In `warn` mode it passes with one `PROTOCOL unsigned web` log line.
 
 ### Options
@@ -452,7 +459,7 @@ The jest spec `src/modules/callback/api-callback-loop.spec.ts` covers each guard
 | `--region <region>` | `AWS_REGION` or `ap-northeast-2` | AWS region. |
 | `--profile <name>` | SDK default chain | Named profile. |
 | `--timeout <ms>` | `60000` | Longest wait for the log lines, per kind. `1000`–`600000`, else exit 2. |
-| `--json` | | Print `{ stage, functions: { lambda, backend }, results: [...] }` only. Each result is `{ kind, loopId, messageId, http, send, recv, latency, issues }`. The issue texts are redacted. |
+| `--json` | | Print `{ stage, functions: { lambda, backend }, results: [...] }` only. Each result is `{ kind, loopId, messageId, http, send, recv, latency, tid, recvTid, issues }` (`tid`: of the send line, `recvTid`: of the recv line, `null` if none). The issue texts are redacted. |
 | `--dry` | | Print the targets, the log groups, and the event of each kind (`x-lemon-identity` as `<redacted>`). Do not call AWS (no STS call either). |
 | `--help` | | Show help. |
 
@@ -465,6 +472,7 @@ The functions are `<service>-<stage>-lambda` and `<service>-<stage>-backend`. `-
 2. Expect `statusCode` 200, a UUID `loopId`, and the `kind`. `sns` / `sqs` / `notify` / `enqueue` also need a `messageId`. `protocol` also needs `result.loopId` equal to `loopId`.
 3. Poll `FilterLogEvents` with the filter `"<loopId>"` from 60 seconds before the invoke, every 2 seconds, until both lines are seen or `--timeout` has passed. The send line is read from the `lambda` log group. The recv line is read from the `backend` log group (`sns`, `sqs`, `notify`, `enqueue`) or the `lambda` log group (`protocol`). A log group that does not exist yet reads as empty.
 4. A non-200 answer or a failed invoke skips the poll.
+5. Print the `tid` of the send line. For `protocol`, `notify`, and `enqueue`, the recv line must carry the same `tid`. A recv line without `tid` (an older deploy) or with another `tid` is an issue.
 
 Needs `lambda:InvokeFunction` on the `lambda` function and `logs:FilterLogEvents` on both log groups.
 
@@ -474,16 +482,19 @@ The identity line goes to stderr first (see [Safety](#safety)). Then one line pe
 
 ```text
 loop-check stage=dev lambda=<service>-dev-lambda backend=<service>-dev-backend
-loop kind=sns loop=<loopId> send=ok recv=ok latency=120
-loop kind=sqs loop=<loopId> send=ok recv=missing latency=-
+loop kind=sns loop=<loopId> send=ok recv=ok latency=120 tid=<tid>
+loop kind=sqs loop=<loopId> send=ok recv=missing latency=- tid=<tid>
   - no [LOOP] recv line in /aws/lambda/<service>-dev-backend
   - timeout after 60000ms
-loop kind=protocol loop=<loopId> send=ok recv=ok latency=7
-loop kind=notify loop=<loopId> send=ok recv=ok latency=250
-loop kind=enqueue loop=<loopId> send=ok recv=ok latency=3100
+loop kind=protocol loop=<loopId> send=ok recv=ok latency=7 tid=<tid> recv-tid=same
+loop kind=notify loop=<loopId> send=ok recv=ok latency=250 tid=<tid> recv-tid=same
+loop kind=enqueue loop=<loopId> send=ok recv=ok latency=3100 tid=<tid> recv-tid=differs
+  - tid mismatch: send=<tid> recv=<other tid>
 ```
 
-Exit codes: 0 = every kind received (http 200, both lines, no issue); 1 = any line missing, a timeout, a non-200 answer, a failed invoke, an AWS error, or no AWS identity (STS); 2 = bad arguments, an unknown option, or the stage guard.
+`recv-tid` is `same`, `differs`, or `missing` (no recv line, or no `tid` on it).
+
+Exit codes: 0 = every kind received (http 200, both lines, no issue); 1 = any line missing, a timeout, a non-200 answer, a failed invoke, a `tid` that is missing or differs (`protocol`, `notify`, `enqueue`), an AWS error, or no AWS identity (STS); 2 = bad arguments, an unknown option, or the stage guard.
 
 ### Manual equivalent
 
@@ -493,6 +504,9 @@ npm run lambda:invoke -- --stage dev --internal --identity '{"sid":"loop-check",
 
 # 2. the recv line of that loop (sns, sqs, notify, enqueue: --fn backend; protocol: --fn lambda)
 npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'
+
+# 3. every line of that call chain by the tid of the send line ([LOOP] and lemon-core TRACE; also --fn lambda)
+npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"tid=<tid>"'
 ```
 
 Examples:
@@ -548,7 +562,7 @@ All scripts apply these rules (rules 2, 3, and 6 apply to `fields:admin --target
 5. **Size cap.** A printed response body, a log tail, or a single log message longer than 64 KB is cut and ends with `…[truncated N bytes]`. With `--json`, each string value is cut instead, so the JSON stays valid. `--raw` does not lift the cap. `--max-bytes <n>` sets it; `--max-bytes 0` removes it.
 6. **Header echo.** `--dry` prints `<redacted>` for the values of the sensitive headers in rule 4 (`headers` and `multiValueHeaders`). Other headers print as given. The event sent to Lambda keeps the real values. This covers `--identity` (`x-lemon-identity`).
 7. **Internal events.** `--internal` only changes the shape of the web event (no `Host` header). It does not bypass the stage guard or the identity line.
-8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/*.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, the web event builder (`--internal`, `--identity`), the shared invoke call, and `fields:admin` with a fake `fetch` and a fake invoker (arguments, both targets, the gate, `--json`, `--no-gate`, `--dry`), and `perf:lambda` (the log-tail parser with cold, warm, failed, and cut tails, the summary statistics, the tables, the exit code, and the CLI with `--dry`, `--help`, and bad arguments), and `perf:lambda --logs` (`lib/logs.mjs` with a fake `fetch` and a fake clock: polling until `REPORT`, the timeout, the INIT query of a cold run, the full-log parse, the merge with the tail, and the request id), and `loop:check` (a fake invoker, a fake log fetch, and a fake clock: arguments, the stage guard, one invoke per kind, the log groups and the filter, the poll until the timeout, a late line, non-200, `FunctionError`, a protocol result mismatch, a Logs error, `--json`, `--dry`; and `--target express` with a fake `fetch`: one POST per kind, `mock`/`recv` checks, non-200, an unreachable server, and the target-only options). They need no AWS access and no server; the scripts run with `--dry` or `--help` only.
+8. **Tests.** `npm run lambda:test` runs the offline unit tests in `bin/lib/*.test.mjs` (`node:test`). They cover rules 1, 2, 4, 5, 6, and 7, the identity line format, the web event builder (`--internal`, `--identity`), the shared invoke call, and `fields:admin` with a fake `fetch` and a fake invoker (arguments, both targets, the gate, `--json`, `--no-gate`, `--dry`), and `perf:lambda` (the log-tail parser with cold, warm, failed, and cut tails, the summary statistics, the tables, the exit code, and the CLI with `--dry`, `--help`, and bad arguments), and `perf:lambda --logs` (`lib/logs.mjs` with a fake `fetch` and a fake clock: polling until `REPORT`, the timeout, the INIT query of a cold run, the full-log parse, the merge with the tail, and the request id), and `loop:check` (a fake invoker, a fake log fetch, and a fake clock: arguments, the stage guard, one invoke per kind, the log groups and the filter, the poll until the timeout, a late line, non-200, `FunctionError`, a protocol result mismatch, the `tid` of the send and recv lines (same, differs, missing), a Logs error, `--json`, `--dry`; and `--target express` with a fake `fetch`: one POST per kind, `mock`/`recv` checks, non-200, an unreachable server, and the target-only options). They need no AWS access and no server; the scripts run with `--dry` or `--help` only.
 
 ## Exit codes
 

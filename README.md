@@ -81,6 +81,13 @@ flowchart LR
   5. 오류 보고는 `REPORT_ERROR_ARN` 토픽으로 간다. `backend`가 구독한 토픽이 아니다.
   6. 앱 코드에 cron·재시도 루프가 없다. `loop:check`는 kind마다 한 번만 호출한다.
   7. `notify`·`enqueue`는 callback을 넘기지 않는다.
+- 내부 호출(protocol)은 lemon-core relay로 간다(B14). 호출자 context 전체를 보내지 않는다.
+  - 송신: web은 헤더 `x-lemon-relay`, SNS·SQS는 param 필드 `relay`를 싣는다. relay에는 identity 요약(`sid`·`uid`·`gid`·`roles`·`identityId`·`lang`)과 trace만 있다.
+  - `x-protocol-context`는 기본으로 보내지 않는다(`PROTOCOL_LEGACY_CONTEXT=off`).
+  - 수신: 진입 지점이 `context.channel`을 정한다. Host가 있는 web은 `external`, Host 없는 직접 invoke는 `internal`, 로컬 express는 `local`, protocol 수신(web relay·SNS·SQS)은 `internal`이다.
+  - `context.trace`는 `{ tid, hop }`이다. 외부 진입은 `hop` 0이다. protocol hop마다 lemon-core가 `hop`을 1 올린다. `tid`는 사슬 전체에서 같다.
+  - 루프 테스트는 `trace.hop > 0`을 protocol 경유로 본다. `depth`를 손으로 올리지 않는다.
+  - `[LOOP] send`·`recv`·`done` 줄 끝에 ` tid=<tid> hop=<hop>`이 붙는다. CloudWatch에서 `tid` 하나로 두 함수의 줄을 잇는다.
 - 자세한 내용: [bin/README.md](bin/README.md#loopcheck), [src/modules/callback/README.md](src/modules/callback/README.md)
 - 일반 라우트 `/{type}/{id}/{cmd}`에는 `authorizer: aws_iam`이 붙는다. `/`·`/hello`·`/mocks` 명시 라우트에는 없다.
 
