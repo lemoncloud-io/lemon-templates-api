@@ -59,7 +59,7 @@ describe('BackendService', () => {
 
         // NOTE: TestModel gained mockId/mock$/mockIds/mock$$ (linked-mock refs) and lost `_date`
         // in 73fadf2 ("chore: opt cores and mocks"); this expectation was never updated then.
-        // field-registry.ts (regenerated via `fields:gen`, unchanged) confirms this is the current model shape.
+        // the v4 generated registry confirmed this shape; v5 B4: `fieldsOf(TestModel)` (`@field()` annotations) gives it now.
         const expFields = [
             'name',
             'stereo',
@@ -84,9 +84,13 @@ describe('BackendService', () => {
             'id',
             '_idx',
         ];
-        expect2(() => service.$test.FIELDS).toEqual(expFields);
+        //* v5 B4: fieldsOf() is parent-first (HOW_TO § 10.5) — compare sets
+        const asSorted = (list: string[]) => [...list].sort();
+        expect2(() => asSorted(service.$test.FIELDS)).toEqual(asSorted(expFields));
         expect2(() => service.$test.type).toEqual('test');
-        expect2(await service.guardProxy(context, async proxy => proxy.test.$mgr.FIELDS)).toEqual(expFields);
+        expect2(await service.guardProxy(context, async proxy => asSorted(proxy.test.$mgr.FIELDS))).toEqual(
+            asSorted(expFields),
+        );
     });
 
     it('should pass making default model', async () => {

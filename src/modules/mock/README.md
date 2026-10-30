@@ -31,7 +31,6 @@ $ npm run test:watch /backend- /transformer. /mock/
 - `src/modules/mock/proxy.ts`
 - `src/modules/mock/transformer.spec.ts`
 - `src/modules/mock/proxy.spec.ts`
-- `src/generated/field-registry.ts` (`npm run fields:gen`)
 - `docs/proxy-implementation-guide.md`
 
 ## fields/admin 점검

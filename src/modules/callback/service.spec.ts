@@ -9,14 +9,15 @@
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 import { loadProfile } from 'lemon-core/dist/environ';
-import { expect2, _it, $info } from 'lemon-core';
+import { expect2, _it, $info, CoreModel } from 'lemon-core';
 
 import { BackendProxy } from '../../service/backend-proxy';
 import * as $service from '../../service/backend-service.spec';
-import { filterFields, Model } from './model';
-import { fieldKeys } from '../../generated/field-registry';
+import { filterFields } from './model';
+//* v5 B4: `Model` (= `CoreModel<ModelType>`) lists the core fields from the class (was `fieldKeys.callbackServiceModel`)
+import { fieldsOf } from 'lemon-core/model';
 
-const $temp = filterFields(fieldKeys.callbackServiceModel<Model>(), ['meta']);
+const $temp = filterFields(fieldsOf(CoreModel), ['meta']);
 
 /**
  * make service and proxy

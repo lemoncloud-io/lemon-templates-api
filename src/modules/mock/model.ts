@@ -5,6 +5,7 @@
  * @author      Steve <steve@lemoncloud.io>
  * @date        2022-08-29 initial version.
  * @date        2026-10-28 v5 B4: `MockModel` is a class with `@field()` annotations (no generated registry entry).
+ * @date        2026-10-30 v5 B4: `TestModel` is a class too; the generated registry is gone.
  *
  * Copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
@@ -16,8 +17,6 @@ import { field, fieldsOf } from 'lemon-core/model';
 //WARN - DO NOT IMPORT FROM `../../service/backend-model`
 // import { ModelType } from '../../service/backend-types';
 import $LUT, { MockStereo, TestStereo } from './types';
-//* the other models still use the generated registry (v5 B4 transition: only `MockModel` is annotated).
-import { fieldKeys } from '../../generated/field-registry';
 
 /**
  * type: `ModelType`
@@ -89,38 +88,54 @@ export interface TestHead {
 
 /**
  * `test`: internal test model.
+ * - v5 B4: a class over `CoreModel`; head fields carry `{ group: 'head' }` (was the `TestHead` registry entry).
  */
-export interface TestModel extends Model, TestHead {
+export class TestModel extends CoreModel<ModelType> implements TestHead {
+    //* v5 B4: head fields (`id`/`stereo` are inherited, redeclared to join the head group)
+    /** id of head */
+    @field({ group: 'head' })
+    declare id?: string;
     /** name of model */
+    @field({ group: 'head' })
     name?: string;
     /** stereo of model */
-    stereo?: TestStereo;
+    @field({ group: 'head' })
+    declare stereo?: TestStereo;
+    /** internal reference */
+    @field({ group: 'head' })
+    _idx?: number;
 
     /** test count */
+    @field()
     count?: number;
 
     /** (optional) extra */
+    @field()
     extra?: SimpleSet;
 
     /** linked mock id */
+    @field()
     mockId?: string;
     /** linked mock head */
+    @field()
     mock$?: MockHead;
 
     /** linked mock ids */
+    @field()
     mockIds?: string[];
     /** linked mock heads */
+    @field()
     mock$$?: MockHead[];
 
     /**
-     * inner Object.
+     * inner Object. (view field: no `@field()`)
      */
     readonly Model?: Model;
 
-    /** linked mock model */
+    /** linked mock model (view) */
     readonly $mock?: MockModel;
 
-    /** linked mock models */
+    /** linked mock models (view) */
     readonly $mocks?: MockModel[];
 
     /**
@@ -148,14 +163,16 @@ export const filterFields = (fields: string[], base: string[] = []) =>
 export const $HEAD = {
     //* v5 B4: head group of the annotated class (same set as before; order is parent-first).
     mock: filterFields(fieldsOf(MockModel, { group: 'head' })),
-    test: filterFields(fieldKeys.testHead<TestHead>()),
+    //* v5 B4: head group of the annotated class
+    test: filterFields(fieldsOf(TestModel, { group: 'head' })),
 };
 
 // extract field names from models
 export const $FIELD = {
     //* v5 B4: all annotated fields of the class (same set as before; order is parent-first).
     mock: filterFields(fieldsOf(MockModel), ['meta']),
-    test: filterFields(fieldKeys.mockTestModel<TestModel>()),
+    //* v5 B4: all annotated fields of the class
+    test: filterFields(fieldsOf(TestModel)),
 };
 
 /** must export default as below */
