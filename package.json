@@ -59,7 +59,10 @@
     "prepretypes": "LS=1 ts-node @types/bin/init-package.ts",
     "pretypes": "rm -rf ./@types/dist && npm run prepretypes",
     "types": "ttsc -p ./@types/tsconfig.build.json",
-    "posttypes": "npm publish --dry-run ./@types"
+    "posttypes": "npm publish --dry-run ./@types",
+    "lambda:local": "node bin/lambda-local.mjs",
+    "lambda:local:test": "node --test bin/lib/local-*.test.mjs",
+    "bundle:lab": "npm --prefix tools/lambda-bundle run experiment"
   },
   "author": "Steve Jung (steve@lemoncloud.io)",
   "license": "MIT",

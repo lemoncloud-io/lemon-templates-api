@@ -23,6 +23,12 @@ lemoncloud 백엔드 마이크로서비스(`<code>-<service>-api`)의 템플릿 
 
 옵션·포함 경계·크기 제한·재현성과 검증 범위는 [Lambda ZIP 패키징](docs/lambda-pack.md)을 참고한다. 오프라인 테스트는 `npm run pack:test`다.
 
+## Lambda 로컬 실행
+
+`npm run lambda:local -- --artifact <pack-result-dir> --event <event.json> --mode warm --runs 3 --json`은 검증·추출한 ZIP의 handler를 순수 Node 자식 프로세스로 실행한다. 개발 중에는 `--root <compiled-handler-dir>`을 쓸 수 있다. cold/warm 상태, timeout, context, 로그와 오류·소스맵을 확인하며 AWS 배포는 수행하지 않는다. 호스트 자격정보는 상속하지 않고 기본 네트워크 가드는 표준 Node 경로를 차단한다. 보안 sandbox나 실제 Lambda의 OS·IAM·메모리/CPU·freeze/thaw 재현은 아니다.
+
+옵션과 결과 계약은 [Lambda 로컬 실행](docs/lambda-local.md), 테스트는 `npm run lambda:local:test`다. 번들·축약·난독화와 비공개 소스맵 비교는 [bundle lab](docs/lambda-bundle-research.md) 및 `npm run bundle:lab`으로 실행한다(tool 의존성 설치는 해당 문서 참고).
+
 ## 저장소 지도
 
 | 경로 | 내용 | 누가 고치나 |
