@@ -42,8 +42,9 @@ describe('BackendProxy', () => {
         expect2(() => proxy.test.$mgr.hello()).toEqual(
             'typed-storage-service:test/proxy-storage-service:dummy-storage-service:dummy-data/_id',
         );
+        //* v5 B17: TestModel lost `_date` and gained the linked-mock refs in 73fadf2 (same shape as backend-service.spec).
         expect2(() => proxy.test.$mgr.FIELDS.join(',')).toEqual(
-            'name,count,extra,ns,type,stereo,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id,_idx,_date',
+            'name,stereo,count,extra,mockId,mock$,mockIds,mock$$,ns,type,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id,_idx',
         );
 
         expect2(() => proxy.asDate(null)).toEqual('@date[null] is invalid format!');
@@ -63,7 +64,6 @@ describe('BackendProxy', () => {
         const expectedS = {
             _id: 'TT:test:a',
             _idx: 2,
-            _date: '11-22',
             id: 'a',
             ns: 'TT',
             type: 'test',
@@ -71,11 +71,12 @@ describe('BackendProxy', () => {
             deletedAt: 0,
             updatedAt: current,
         };
-        expect2(() => proxy.test.$mgr.FIELDS.filter(s => s.startsWith('_'))).toEqual(['_idx', '_date']);
-        expect2(await proxy.test.$mgr.prepare('a', { _date: '11-22', _idx: 2 })).toEqual({
+        //* v5 B17: `_date` is no longer a TestModel field (73fadf2) — only `_idx` stays as the internal field.
+        expect2(() => proxy.test.$mgr.FIELDS.filter(s => s.startsWith('_'))).toEqual(['_idx']);
+        expect2(await proxy.test.$mgr.prepare('a', { _idx: 2 })).toEqual({
             ...expectedS,
         });
-        expect2(await proxy.test.get('b', { _date: '11-22', _idx: 2 })).toEqual({
+        expect2(await proxy.test.get('b', { _idx: 2 })).toEqual({
             ...expectedS,
             id: 'b',
             _id: undefined,

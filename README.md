@@ -123,6 +123,7 @@ flowchart LR
 | `npm run fields:check` | 레지스트리가 최신인지 검사 | 쓰지 않는다. 낡았으면 exit 1 |
 | `npm run fields:report` | 생성 + 키·필드 표 출력 | 생성 파일을 다시 쓴다 |
 | `npm run fields:migrate` | 옛 `keys<T>()` 호출 코드 변환 | **소스와 `tsconfig`를 고쳐 쓴다** |
+| `npm run fields:types` | `$FIELD` 모델의 같은 필드 이름이 한 타입인지 검사(lemon-core `lemon-fields-types`, 한 OpenSearch 인덱스 기준) | 쓰지 않는다. `hard` 충돌이면 exit 1. `-- --fail-on order`로 순서 의존 충돌도 실패로 |
 | `npm run express.lemon` | `ENV=lemon STAGE=local LOCAL_TRANSPORT=mock`로 빌드·watch·nodemon 실행 | 포트는 `package.json` `port`(8800). 자기 서비스로 가는 SNS·SQS·protocol 발신을 프로세스 안에서 전달한다(lemon-core 로컬 전송). 다른 대상은 `501`이다 |
 | `npm run express.lemon.aws` | `ENV=lemon STAGE=local`로 실행(예전 동작) | 발신이 실제 AWS로 간다 |
 | `npm run types` | `@types/` 패키지 재생성 | 끝에 `npm publish --dry-run`을 돈다 |
