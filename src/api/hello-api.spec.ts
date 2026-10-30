@@ -40,7 +40,8 @@ describe('hello-api', () => {
             .set('Authorization', `Basic jest`)
             .type(0 ? 'form' : 'json')
             .send({ name: 'a@b.c' })
-            .expect(200, { hello: 'hello-api-controller:hello-none', body: { name: 'a@b.c' } })
+            //* v5 B17: `postHello()` returns `id` since 990dcd7 (templates-api change, not lemon-core); the spec never followed.
+            .expect(200, { id: '0', hello: 'hello-api-controller:hello-none', body: { name: 'a@b.c' } })
             .end(done);
     });
 });

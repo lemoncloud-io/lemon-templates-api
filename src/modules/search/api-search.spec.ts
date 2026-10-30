@@ -39,7 +39,23 @@ describe('SearchController', () => {
 
     //! test `/hello` route
     it('should pass express route: GET /0/hello', async done => {
-        const res = await request(app).get('/search/0/hello');
+        // v5 B5 (lemon-core 5.0.10): `getSearchHello` opens only in local mode (`LOCAL_MODE=1`, HOW_TO_UPGRADE_V5 § 11.3), so the spec sets it and restores it.
+        const saved = {
+            LOCAL_MODE: process.env.LOCAL_MODE,
+            AWS_LAMBDA_FUNCTION_NAME: process.env.AWS_LAMBDA_FUNCTION_NAME,
+        };
+        process.env.LOCAL_MODE = '1';
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+        //* run the request, then put both names back (or delete them) whatever the result.
+        const res = await (async () => {
+            try {
+                return await request(app).get('/search/0/hello');
+            } finally {
+                Object.entries(saved).forEach(([k, v]) =>
+                    v === undefined ? delete process.env[k] : (process.env[k] = v),
+                );
+            }
+        })();
         expect2(res).toMatchObject({
             status: 200,
             text: $U.json({ id: '', hello: 'search-api:search' }),

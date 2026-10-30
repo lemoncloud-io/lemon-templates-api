@@ -14,6 +14,7 @@
     "fields:gen": "lemon-fields gen",
     "fields:report": "lemon-fields gen --report",
     "fields:check": "lemon-fields --check",
+    "fields:types": "lemon-fields-types",
     "nodemon": "nodemon --config nodemon-main.json",
     "lint": "tsc --noEmit && eslint '*/**/*.{js,ts,jsx,tsx}' --fix",
     "!start": "------ run in local development (note! ts-node seems not watch '.js' file) ----",
@@ -75,7 +76,7 @@
     "@aws-sdk/client-sqs": "^3.971.0",
     "@aws-sdk/client-sts": "^3.971.0",
     "@aws-sdk/credential-providers": "^3.971.0",
-    "lemon-core": "^5.0.10"
+    "lemon-core": "^5.0.11"
   },
   "devDependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.971.0",

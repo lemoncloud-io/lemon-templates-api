@@ -39,6 +39,19 @@ describe('CallbackAPIController', () => {
     const PROFILE = loadProfile(process); // override process.env.
     PROFILE && console.info('! PROFILE=', PROFILE);
 
+    //* v5 B17: save `LOCAL_MODE` and `AWS_LAMBDA_FUNCTION_NAME` before each test, and put them back (or delete them) after.
+    const LOCAL_NAMES = ['LOCAL_MODE', 'AWS_LAMBDA_FUNCTION_NAME'];
+    let savedEnv: { [key: string]: string | undefined } = {};
+    beforeEach(() => (savedEnv = LOCAL_NAMES.reduce((M, k) => ({ ...M, [k]: process.env[k] }), {})));
+    afterEach(() =>
+        Object.entries(savedEnv).forEach(([k, v]) => (v === undefined ? delete process.env[k] : (process.env[k] = v))),
+    );
+    //* v5 B17: direct controller calls without a caller identity need local mode (HOW_TO_UPGRADE_V5 § 11.3).
+    const useLocalMode = () => {
+        process.env.LOCAL_MODE = '1';
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+    };
+
     //* test `/hello` w/ route
     it('should pass express route: GET /0/hello', async () => {
         const { api, type } = instance();
@@ -57,10 +70,15 @@ describe('CallbackAPIController', () => {
 
     //* test basic CRUD
     it('should pass basic CRUD', async () => {
-        const { api, type, proxy, current, $ts, _ts } = instance();
+        const { api, proxy, current, $ts, _ts } = instance();
+        // v5 B5 (lemon-core 5.0.10): no identity is allowed only in local mode — `canDo()` asks for the session otherwise (`403 IDENTITY-TOKEN`).
+        useLocalMode();
+        //* v5 B5 (lemon-core 5.0.10): in local mode a controller view always carries the cores `$` (`modelAsView`); `{}` as these rows have no sid/uid/gid.
+        const $cores = { $: {} };
 
         // get not exist
-        expect2(await api.doGet('1').catch(GETERR)).toEqual(`404 NOT FOUND - proxy/${type}/id:1`);
+        // v5 B17 (lemon-core 5.0.10): `AbstractCRUDController.doGet` throws `not found @doGet(<route>/<id>)` (since f12b2d3, kept as-is in lemon-core extended/cores).
+        expect2(await api.doGet('1').catch(GETERR)).toEqual(`404 NOT FOUND - not found @doGet(${api.type()}/1)`);
 
         //* validate body parameters.
         if (1) {
@@ -85,6 +103,7 @@ describe('CallbackAPIController', () => {
         expect2(() => view1st).toEqual({
             ...$ts('1000001'),
             ...api.trans.modelAsView(body1st),
+            ...$cores,
         });
 
         const expectedView = {
@@ -101,31 +120,41 @@ describe('CallbackAPIController', () => {
         // get newPost
         expect2(await api.doGet(view1st.id).catch(GETERR)).toEqual({
             ...expectedView,
+            ...$cores,
         });
 
         // put newPost
         const body2nd = { name: 'test2' };
         expect2(await api.doPut(view1st.id, null as any, { ...body2nd }).catch(GETERR)).toEqual({
             ...expectedView,
+            ...$cores,
             name: 'test2',
         });
         // check updated newPost
         expect2(await api.doGet(view1st.id).catch(GETERR)).toEqual({
             ...expectedView,
+            ...$cores,
             name: 'test2',
         });
 
         // delete not exists
-        expect2(await api.doDelete('not_exists').catch(GETERR)).toEqual(`404 NOT FOUND - proxy/${type}/id:not_exists`);
+        // v5 B17 (lemon-core 5.0.10): `doDelete` throws `not found @doDelete(<route>/<id>)` (since f12b2d3).
+        expect2(await api.doDelete('not_exists').catch(GETERR)).toEqual(
+            `404 NOT FOUND - not found @doDelete(${api.type()}/not_exists)`,
+        );
 
         // delete newPost
         expect2(await api.doDelete(view1st.id).catch(GETERR)).toEqual({
             ...expectedView,
+            ...$cores,
             deletedAt: current,
             name: 'test2',
         });
 
         // check deleted newPost (soft delete)
-        expect2(await api.doGet(view1st.id).catch(GETERR)).toEqual(`404 NOT FOUND - ${type}:1000001`);
+        // v5 B17 (lemon-core 5.0.10): `doGet` of a soft-deleted row throws `deleted at <ts> @doGet(<route>/<id>)` (since f12b2d3).
+        expect2(await api.doGet(view1st.id).catch(GETERR)).toEqual(
+            `404 NOT FOUND - deleted at ${$U.ts(current)} @doGet(${api.type()}/1000001)`,
+        );
     });
 });
