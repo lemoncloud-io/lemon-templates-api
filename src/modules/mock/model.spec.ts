@@ -10,8 +10,10 @@
  * @copyright (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  */
 //* `expect2` from lemon-core (importing `commons.spec` would also run its own 4 tests in this file).
-import { expect2 } from 'lemon-core';
-import { CoreModel, fieldsOf } from 'lemon-model';
+//* v5 B16: lemon-model through lemon-core
+import { expect2, CoreModel } from 'lemon-core';
+//* v5 B16: lemon-model through lemon-core
+import { fieldsOf } from 'lemon-core/model';
 import { $FIELD, $HEAD, MockModel } from './model';
 
 // v4 `$FIELD.mock` = registry entry `mockModel` through `filterFields(…, ['meta'])` (16 names)

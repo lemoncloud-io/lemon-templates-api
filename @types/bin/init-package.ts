@@ -9,12 +9,10 @@
  * @date        2023-01-19 optimized package.dependencies
  * @date        2025-07-01 optimized w/ `lemon-core#4.0.4`
  * @date        2025-12-30 optimized w/ `lemon-core#4.1.5`
+ * @date        2026-10-30 v5 B16: `lemon-core` dependency kept as is (lemon-model comes through lemon-core).
  *
  * @copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
-//! override environment.
-const MODEL_VERSION = '1.1.1';
-
 //! import statements
 import path from 'path';
 import fs from 'fs';
@@ -57,8 +55,8 @@ const makePackage = () => {
 
     //* grap the dependencies to include in types
     const dependencies = Object.entries($src.dependencies).reduce<SimpleSet>((M, [k, v]) => {
-        if (k == 'lemon-core') M['lemon-model'] = `^${MODEL_VERSION}`;
-        else if (k == 'lemon-model') M['lemon-model'] = `${v}`;
+        //* v5 B16: keep the parent's `lemon-core` range (no direct `lemon-model` any more).
+        if (k == 'lemon-core') M['lemon-core'] = `${v}`;
         else if (k.startsWith('@lemoncloud/')) M[k] = `${v}`;
         return M;
     }, {});

@@ -7,8 +7,8 @@
  *
  * Copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
-//NOTE - must use `lemon-model` to publish w/o `lemon-core`.
-import { CoreModel } from 'lemon-model';
+//* v5 B16: lemon-model through lemon-core (the types package now depends on `lemon-core`, not `lemon-model`)
+import { CoreModel } from 'lemon-core';
 import { ModelType } from './backend-types';
 
 /**
