@@ -14,8 +14,6 @@
         "outDir": "./dist",
         "baseUrl": ".",
         "paths": {
-            //* v5 B16: `moduleResolution: node` (TS 4.7) ignores `exports`, so map the `lemon-core/model` sub-path to its file.
-            "lemon-core/model": ["node_modules/lemon-core/dist/model"],
             "*": [
                 "node_modules/*",
                 "src/types/*"
