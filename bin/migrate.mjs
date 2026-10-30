@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
+import { validateDiagnostic } from './lib/migrate-diagnostic.mjs';
 import {
     PHASES,
     MigrationError,
@@ -74,6 +75,7 @@ export async function main(argv = process.argv.slice(2), deps = {}) {
                 code: known ? error.code : 'PREPARATION_FAILED',
                 message: known ? error.message : 'Could not prepare migration; raw errors are not logged.',
                 ...(known && error.receipt ? { receipt: error.receipt } : {}),
+                ...(known && error.diagnostic ? { diagnostic: validateDiagnostic(error.diagnostic) } : {}),
             }),
         );
         return (

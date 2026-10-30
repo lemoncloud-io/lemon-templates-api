@@ -6,6 +6,7 @@ import { performance } from 'node:perf_hooks';
 import path from 'node:path';
 import { validateConfig as validateDeployConfig } from './deploy-plan.mjs';
 import { runPrivateChild } from './migrate-process.mjs';
+import { validateDiagnostic } from './migrate-diagnostic.mjs';
 
 export const REVISION = '66d1e91a60a240765d44dedfdab73a92af6abd51';
 export const PHASES = ['plan', 'retain', 'remove', 'tag', 'apply', 'verify'];
@@ -515,8 +516,10 @@ export async function executeMigration(c, phase, options = {}, deps = {}) {
             timeoutMs: Math.min(remaining(), 30000),
             signal: options.signal,
         });
-        if (sts.code !== 0 || sts.account !== c.account)
+        if (sts.code !== 0 || sts.account !== c.account) {
+            step.diagnostic = validateDiagnostic(sts.diagnostic);
             fail('ACCOUNT_MISMATCH', 'STS account could not be confirmed for the configured profile.');
+        }
         if (performance.now() - start >= c.timeoutMs)
             fail('DEADLINE', 'Phase deadline reached before canonical migration.');
         const command = commandFor(c, phase, true);
@@ -538,12 +541,14 @@ export async function executeMigration(c, phase, options = {}, deps = {}) {
             },
         });
         step.exitCode = result.code;
-        if (result.code !== 0 || result.reason !== 'exited')
+        if (result.code !== 0 || result.reason !== 'exited') {
+            step.diagnostic = validateDiagnostic(result.diagnostic);
             fail(
                 'PHASE_FAILED',
                 'Canonical migration did not complete successfully; inspect private state before recovery.',
                 true,
             );
+        }
         const hashes = await snapshotIdentity(run, c, { after: phase === 'verify' });
         if (phase !== 'plan') {
             const baseline = Object.fromEntries(Object.entries(hashes).filter(([k]) => k !== 'after.json'));
@@ -580,6 +585,7 @@ export async function executeMigration(c, phase, options = {}, deps = {}) {
             'Migration stopped; private receipt requires manual review before any further phase.',
             { unknown },
         );
+        if (step.diagnostic) wrapped.diagnostic = validateDiagnostic(step.diagnostic);
         wrapped.receipt = receiptFile;
         wrapped.exitCode = unknown ? 3 : 1;
         throw wrapped;

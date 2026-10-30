@@ -2,6 +2,7 @@ import { fork, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
+import { classifyMigrationError, diagnosticFromMessage, validateDiagnostic } from './migrate-diagnostic.mjs';
 
 /** Owned process group; stdout/stderr are deliberately never forwarded or persisted. */
 export function runPrivateChild({ mode, command, args = [], cwd, environment, timeoutMs, signal, onProgress }) {
@@ -20,6 +21,7 @@ export function runPrivateChild({ mode, command, args = [], cwd, environment, ti
         });
         let reason,
             account,
+            diagnostic,
             done = false,
             code = null,
             pendingLine = '',
@@ -59,7 +61,8 @@ export function runPrivateChild({ mode, command, args = [], cwd, environment, ti
             }
         });
         child.on('message', m => {
-            if (mode === 'sts' && /^\d{12}$/.test(m?.account)) account = m.account;
+            if (mode === 'sts' && typeof m?.account === 'string' && /^\d{12}$/.test(m.account)) account = m.account;
+            if (m && Object.hasOwn(m, 'diagnostic')) diagnostic = diagnosticFromMessage(m);
         });
         const finish = async () => {
             if (done) return;
@@ -70,7 +73,15 @@ export function runPrivateChild({ mode, command, args = [], cwd, environment, ti
             signal?.removeEventListener('abort', stop);
             process.removeListener('exit', parentExit);
             await progress;
-            resolve({ code, reason: reason ?? (code === 0 ? 'exited' : 'failed'), ...(account ? { account } : {}) });
+            const outcome = reason ?? (code === 0 ? 'exited' : 'failed');
+            resolve({
+                code,
+                reason: outcome,
+                ...(account ? { account } : {}),
+                ...(code !== 0 || outcome !== 'exited'
+                    ? { diagnostic: validateDiagnostic(diagnostic ?? { kind: 'process' }) }
+                    : {}),
+            });
         };
         child.once('error', () => {
             reason = 'spawn-failed';
@@ -124,8 +135,15 @@ if (
                 // Canonical code may itself call process.exit; the parent also observes exitCode.
                 finish(0);
             } else finish(2);
-        } catch {
-            finish(1);
+        } catch (error) {
+            const diagnostic = classifyMigrationError(error, {
+                migrationFile: mode === 'migration' ? command : undefined,
+            });
+            try {
+                process.send({ diagnostic }, () => finish(1));
+            } catch {
+                finish(1);
+            }
         }
     }
 }

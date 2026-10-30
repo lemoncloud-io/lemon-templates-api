@@ -2,7 +2,7 @@
 
 `npm run lambda:migrate` prepares and runs one reviewed migration phase for **lemon-templates-api / dev / lemon-templates-api-dev**. Every phase defaults to an offline plan, including `plan` and `verify`. The wrapper executes the existing eureka migration script; it does not copy or reimplement its resource operations. `npm run lambda:deploy:dev` then reuses the verified ZIP deployment CLI for a dev code update.
 
-These scripts were verified with synthetic migration fixtures and offline plans. No live environment backup, migration or AWS deployment was performed during implementation.
+The initial implementation was verified with synthetic migration fixtures and offline plans, without live backup collection, migration or AWS deployment. A subsequent, separately authorized dev rehearsal is recorded below; it is distinct from the diagnostic patch's synthetic tests.
 
 ## Prepare the checkout and explicit config
 
@@ -81,7 +81,9 @@ flowchart LR
 
 State lives in the external canonical checkout at `scripts/migrate/runs/lemon-templates-api-dev/`, with owned directories mode 0700 and regular files mode 0600. Symlinks, hard-linked files, unowned directories and mismatched config fingerprints are rejected. A canonical snapshot created outside this wrapper is not silently adopted.
 
-The owner marker binds the run to normalized config. `templates-receipt.json` records each phase's UTC start/end, monotonic elapsed milliseconds, status, target, protected-file hashes and a validated deployId when emitted. Its SHA-256 envelope detects accidental corruption; it is **not** an authenticated approval or proof against someone with write access to the private directory. Receipt output never contains environment values, old-code bytes, signed URLs or raw upstream errors. Raw child stdout/stderr are discarded; only the canonical `dpl_<base36-time>_<six-hex>` identifier is captured from an exact deployId line.
+The owner marker binds the run to normalized config. `templates-receipt.json` records each phase's UTC start/end, monotonic elapsed milliseconds, status, target, protected-file hashes and a validated deployId when emitted. Its SHA-256 envelope detects accidental corruption; it is **not** an authenticated approval or proof against someone with write access to the private directory. Receipt output never contains environment values, old-code bytes, signed URLs or raw upstream errors. Raw child stdout/stderr are not forwarded or persisted. The canonical `dpl_<base36-time>_<six-hex>` identifier is captured from an exact deployId line.
+
+Failed child execution also carries a restricted `diagnostic` object through private IPC to the failed-step receipt and CLI failure JSON. It contains only `kind`, a fixed JavaScript `errorType`, a recognized AWS CLI `awsCode`/`operation` pair, and `sourceFile`/`line`. The source must match the pinned migration or common module; only `migrate.mjs` or `common.mjs` and a line from 1 to 100,000 are retained. AWS CLI headers with or without the exact `aws: [ERROR]: ` prefix are recognized in memory; message text after the header is discarded. Unrecognized values become `other`, with `line: null` when no allowed location exists. Caller boundaries reconstruct the object from fixed vocabularies; arbitrary fields, paths, URLs, messages, arguments and environment values never enter it. A direct nonzero `process.exit` without an exception gets a generic process diagnostic. This identifies a failure category/location, not proof of root cause, and does not change exit codes, state transitions or retry policy.
 
 Before destructive phases, the wrapper rechecks project/stage/stack/bucket/KMS, exactly the two templates dev function identities, before/env consistency and each original ZIP's code SHA. It hashes `plan.json`, `env.json`, `before.json` and original ZIPs; any drift blocks progress. A plan that exits zero with warnings still fails the gate. After verify, `after.json` is included in the protected inventory.
 
@@ -125,6 +127,12 @@ npm run lambda:migrate:test
 npm run lambda:test
 ```
 
-Synthetic tests cover phase/consent/target gates, valid and corrupted receipts, changed backups, zero-exit warnings, private permissions/symlinks, concurrent attempts, real process success/deadline/cancellation, parent SIGKILL, last-line progress capture, and dev-only deployment reuse. They do not contact AWS or run the real migration source.
+Synthetic tests cover phase/consent/target gates, valid and corrupted receipts, changed backups, zero-exit warnings, private permissions/symlinks, concurrent attempts, real process success/deadline/cancellation, parent SIGKILL, last-line progress capture, and dev-only deployment reuse. They do not contact AWS or run the real migration source. Diagnostic regressions include actual synthetic child exceptions with positive file/line checks, recognized AWS CLI headers, unknown fields, supplied getters/proxies, malicious IPC, raw-secret omission, direct process exits and unchanged receipt/CLI failure semantics.
 
 An additional offline check used the actual prepared dev config and a fresh pack artifact from source `719e53de1a9e96c23a48d23263cabc8ff025a10e`: migration plan 192.65 ms and dev ZIP plan 2653.38 ms. Node fetch/http/https/net connection paths were blocked by a test preload; this was not an OS security sandbox. These results establish local preparation/compatibility, not successful live migration or release deployment.
+
+### Subsequent dev rehearsal
+
+After the initial offline verification, a separately authorized dev migration and code deployment succeeded using source `6f8f84d6a58db1afce3949fd5f536da2e79d9b96`. The operating session checked both functions: each retained the same 20 environment entries as its baseline, and both API probes returned HTTP 200. All five loop checks passed; the observed individual delivery times were 496, 3124, 216, 300 and 58 ms. The code deployment took 20.085 seconds.
+
+These are results from that single subsequent dev rehearsal, not measurements of this diagnostic patch or a general latency guarantee. The diagnostic patch itself was exercised with synthetic local failures only; it did not repeat the migration or deployment. Private backups, environment values, account identifiers and resource identities remain outside this shared document.
