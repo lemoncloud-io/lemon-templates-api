@@ -10,8 +10,8 @@ lemoncloud 백엔드 마이크로서비스(`<code>-<service>-api`)의 템플릿 
 |---|---|
 | 런타임 | Node `24.15.0` (`.nvmrc`), `engines.node` `>=24.0.0`. Lambda 런타임은 `serverless.yml` `provider.runtime`이 env 설정에서 읽는다. |
 | 언어·빌드 | TypeScript `^4.7.4`, `ttsc`(ttypescript)로 `src/` → `dist/` |
-| 테스트 | jest `^27.5.1` + ts-jest (`src/**/*.spec.ts`). Lambda 도구(`lemon-*`)의 테스트는 lemon-core에 있다 |
-| 프레임워크 | `lemon-core` `^5.0.13`. lemon-model은 lemon-core를 통해 온다(`field`·`fieldsOf`는 `lemon-core/model`). 이 서비스는 `lemon-model`을 직접 선언하지 않는다. 로컬 express는 `lemon-devkit` `^0.2.2`가 만든다. |
+| 테스트 | jest `^29.7.0` + ts-jest `^29.4.15` (`src/**/*.spec.ts`). Lambda 도구(`lemon-*`)의 테스트는 lemon-core에 있다 |
+| 프레임워크 | `lemon-core` `^5.0.13`. lemon-model은 lemon-core를 통해 온다(`field`·`fieldsOf`는 `lemon-core/model`). 이 서비스는 `lemon-model`을 직접 선언하지 않는다. 로컬 express는 `lemon-devkit` `^0.2.3`가 만든다. |
 | AWS SDK | v3 (`@aws-sdk/*` `^3.971.0`) |
 | 배포 | Serverless Framework v3 (`frameworkVersion: "3"`) → AWS Lambda |
 | 브랜치 | 기본 브랜치 `develop`. v5 라인은 `v5` 브랜치에 있다. |

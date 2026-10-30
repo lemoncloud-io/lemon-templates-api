@@ -17,21 +17,19 @@ import request from 'supertest';
 describe('hello-api', () => {
     const $pack = loadJsonSync('package.json');
 
-    it('should pass express route: GET /', async done => {
+    //* jest 29 (jest-circus) rejects `async done =>`; async tests return the promise instead.
+    it('should pass express route: GET /', async () => {
         const res = await request(app).get('/');
         expect2(res).toMatchObject({ status: 200 });
         expect(res.text).toContain(`${$pack.name}/${$pack.version}`);
-
-        done();
     });
 
-    it(`should pass GET /hello/0`, async done => {
+    it(`should pass GET /hello/0`, async () => {
         const res = await request(app).get(`/hello/0?name=lemon`);
         expect2(res).toMatchObject({
             status: 200,
             text: $U.json({ hello: 'hello-api-controller:hello-none' }),
         });
-        done();
     });
 
     it(`should pass POST /hello/0`, done => {

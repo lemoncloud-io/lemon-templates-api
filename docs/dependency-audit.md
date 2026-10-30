@@ -1,8 +1,7 @@
 # 의존성 보안 점검 (npm audit)
 
-2026-10-29 기준 기록이다.
-대상은 운영 의존성 트리(`npm audit --omit=dev`)뿐이다.
-개발 전용 의존성(devDependencies) 항목은 오너 결정으로 범위 밖이다.
+2026-10-29 기준 기록이다. 변경 1·2는 운영 의존성 트리(`npm audit --omit=dev`)만 다룬다.
+2026-10-30에 개발 전용 의존성 항목도 정리했다(변경 3).
 
 ## 결과
 
@@ -10,6 +9,7 @@
 | --- | --- | --- |
 | `npm audit --omit=dev` | 24건 (critical 1, moderate 23) | 0건 |
 | `npm audit` 전체 (참고) | 57건 (critical 7, high 8, moderate 31, low 11) | 34건 (critical 6, high 8, moderate 9, low 11) |
+| `npm audit` 전체 (2026-10-30, 변경 3) | 23건 (critical 2, high 4, moderate 6, low 11) | 0건 |
 
 ## 변경 1 — lemon-core ^5.0.4
 
@@ -28,6 +28,19 @@
 - 새 `@aws-sdk/xml-builder`(3.972.42 이상)는 `fast-xml-parser`에 의존하지 않는다.
 - 중첩 사본이 공유 사본으로 합쳐져 운영 트리가 작아졌다.
 
+## 변경 3 — 개발 전용 항목 (2026-10-30)
+
+- 23건은 Serverless Framework 패키지를 뺀 뒤의 수다.
+- `codecov`를 뺐다. 쓰는 스크립트가 없었다. `teeny-request` → `uuid`, `js-yaml` 3.14.1 경로가 사라졌다.
+- `lemon-devkit` ^0.2.2 → ^0.2.3. 0.2.3은 `request`에 의존하지 않는다. `request`·`form-data`·`qs`·`tough-cookie`·`uuid`가 사라졌다.
+- `nodemon` ^2.0.18 → ^3.1.14. `simple-update-notifier` → `semver` 경로가 사라졌다.
+- `jest` 27 → ^29.7.0, `ts-jest` → ^29.4.15, `@types/jest` → ^29.5.14. `jsdom` → `http-proxy-agent` → `@tootallnate/once` 경로가 사라졌다.
+  - `jest.config.json`: ts-jest 옵션을 `transform` 튜플로 옮겼다. `testRunner: jest-jasmine2`를 지웠다(기본 jest-circus).
+  - ts-jest의 `compiler: ttypescript`를 지웠다. `tsconfig.json`에 `plugins`가 없어 결과가 같다. 빌드(`ttsc`)는 그대로다.
+  - spec 4건의 `async done =>`를 `async () =>`로 바꿨다. jest-circus는 둘을 함께 받지 않는다.
+- `deepmerge`(GHSA-gcqx-w48m-w2h4)는 고친 판이 없다. jest 29의 `jest-config`도 쓴다. lemon-model과 같은 개발 전용 대체본 `scripts/deepmerge-safe/`를 `overrides`로 넣었다.
+- `js-yaml` 3.x는 `babel-plugin-istanbul` → `@istanbuljs/load-nyc-config`(`^3.13.1`)가 남은 경로다. 잠금 파일이 3.15.2(고친 판)로 풀렸다. override는 쓰지 않는다.
+
 ## 남은 항목 (운영 트리)
 
 없다.
@@ -35,4 +48,4 @@
 ## 하지 않은 것
 
 - `npm audit fix --force`는 쓰지 않았다.
-- 개발 전용 항목(serverless v3 하위, jest 27, codecov, nodemon, lemon-devkit → request)은 손대지 않았다.
+- 변경 1·2 때 개발 전용 항목은 손대지 않았다. 2026-10-30 변경 3에서 정리했다.
