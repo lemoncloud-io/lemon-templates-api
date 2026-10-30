@@ -150,11 +150,10 @@ flowchart LR
 
 | 명령 | 하는 일 |
 |---|---|
-| `npm run deploy.lemon` / `deploy.lemon-vpc` / `deploy.lemon.prod` | 빌드 후 `sls deploy` (dev / dev+VPC / prod) |
-| `npm run pack.lemon` / `pack.lemon.prod` | 빌드 후 `sls package` |
-| `npm run info` / `info.lemon` / `info.lemon.prod` | `sls info`. 인자 없는 `info`는 prod다. |
-| `npm run logs` / `logs.lemon` / `logs.lemon.prod` | `sls logs`. 인자 없는 `logs`는 prod다. |
-| `npm run remove` / `remove.lemon` / `remove.lemon.prod` | `sls remove`. 스택을 지운다. 인자 없는 `remove`는 prod다. |
+| `npm run lambda:deploy -- --apply ...` | 배포 실행(`lemon-lambda-deploy`). 기본은 계획만 보인다. [docs/lambda-deploy.md](docs/lambda-deploy.md) |
+| `npm run lambda:migrate` / `lambda:deploy:dev` | 가드된 이행·dev 릴리스. [docs/lambda-migrate.md](docs/lambda-migrate.md) |
+
+Serverless Framework 패키지(`sls`)는 설치하지 않는다. 설정 파일 `serverless.yml`·`serverless-vpc.yml`은 남아 있고, `sls`로 직접 배포·운영하려면 [docs/serverless.md](docs/serverless.md)의 권장 구성(패키지·스크립트)을 다시 넣는다.
 
 소스 주석의 `:8888` 예시는 꺼진 `serverless-offline`의 포트다. 로컬 express 포트는 8800이다.
 
