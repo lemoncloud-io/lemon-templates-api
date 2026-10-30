@@ -65,7 +65,10 @@
     "lambda:local:test": "node --test bin/lib/local-*.test.mjs",
     "bundle:lab": "npm --prefix tools/lambda-bundle run experiment",
     "lambda:deploy": "node bin/deploy.mjs",
-    "lambda:deploy:test": "node --test bin/lib/deploy*.test.mjs"
+    "lambda:deploy:test": "node --test bin/lib/deploy*.test.mjs",
+    "lambda:migrate": "node bin/migrate.mjs",
+    "lambda:deploy:dev": "node bin/deploy-dev.mjs",
+    "lambda:migrate:test": "node --test bin/lib/migrate-*.test.mjs bin/lib/dev-release*.test.mjs"
   },
   "author": "Steve Jung (steve@lemoncloud.io)",
   "license": "MIT",

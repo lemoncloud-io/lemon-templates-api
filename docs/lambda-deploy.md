@@ -4,6 +4,10 @@
 
 Use `--apply` only after reviewing the plan. Apply creates or updates AWS resources and invokes both Lambda handlers for verification. This tool was tested with mock transports and a real existing ZIP in offline mode; no AWS deployment was performed during implementation.
 
+## Templates dev entrypoint
+
+For templates-specific work, `npm run lambda:deploy:dev -- --config .artifacts/deploy.dev.json --artifact <pack-output>` enforces `lemon-templates-api/dev/code`. Copy `deploy.dev.config.example.json` into that config path and replace its placeholders. Add `--apply` only for an explicitly reviewed update. Optional `--migration-receipt <canonical-run>/templates-receipt.json` requires a completed six-phase migration, matching target, no unresolved lock and unchanged backup hashes. The wrapper reuses the implementation and preflight below. See [Templates dev migration](lambda-migrate.md) for the separate Serverless-retention handover; it restores old deployed code before updating to a new pack artifact.
+
 ## Prepare inputs
 
 Node 24 and `npm ci` are required. The current server tool supports `nodejs24.x` but does not expose an architecture input. This CLI accepts only **Linux-targeted Node 24 x86_64 pack artifacts**. `arm64` artifacts are rejected before uploading. The deploy API's ZIP cap is 50,000,000 bytes, slightly smaller than the packer's 50 MiB cap.

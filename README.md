@@ -258,3 +258,9 @@ Proxy 기능을 추가하거나 변경할 때는 [lemon-devkit proxy implementat
 ### Verified ZIP deployment through eureka-deploy
 
 `npm run lambda:deploy -- --config <config.json> --artifact <pack-output>` validates the pack artifact and prints an offline deployment plan. Add `--apply` explicitly to run a managed code update or full bootstrap through eureka-deploy. See [Lambda deployment CLI](docs/lambda-deploy.md) for the example config, extra read-only preflight permissions, verification and interrupted-run recovery. Existing Serverless deployment commands are unchanged.
+
+### Templates dev 이관과 코드 배포
+
+`npm run lambda:migrate -- plan --config .artifacts/migration.dev.json`은 고정된 eureka 소스와 명시적 설정을 검사해 오프라인 계획을 출력한다. 실제 단계 실행은 `--execute`, 민감 백업 수집은 추가 동의 플래그, 스택 삭제는 정확한 스택 확인이 필요하다. 이관은 기존 배포 코드를 먼저 복원하고 검증한 뒤 새 ZIP을 적용하는 순서다.
+
+`npm run lambda:deploy:dev -- --config .artifacts/deploy.dev.json --artifact <pack-output>`은 templates/dev/code 전용 배포 계획을 만든다. 선택적으로 완료된 이관 영수증을 연결할 수 있으며 실제 배포는 `--apply`로 실행한다. 예제 설정·단계·개인 백업·중단 복구와 한계는 [Templates dev 이관 가이드](docs/lambda-migrate.md)를 참고한다. 오프라인 검증은 `npm run lambda:migrate:test`다.
