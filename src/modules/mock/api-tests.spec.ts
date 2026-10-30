@@ -54,9 +54,10 @@ describe('TestAPIController', () => {
             text: $U.json({
                 id: '0',
                 hello: `${type}-api-controller:${api.type()}`,
-                param: {},
-                body: {},
-                context: { clientIp: '::ffff:127.0.0.1' },
+                //* v5 B20: the local API Gateway sends what API Gateway sends — no query/body on GET → null; clientIp without `::ffff:`.
+                param: null,
+                body: null,
+                context: { clientIp: '127.0.0.1' },
             }),
         });
     });

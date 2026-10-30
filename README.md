@@ -11,7 +11,7 @@ lemoncloud 백엔드 마이크로서비스(`<code>-<service>-api`)의 템플릿 
 | 런타임 | Node `24.15.0` (`.nvmrc`), `engines.node` `>=24.0.0`. Lambda 런타임은 `serverless.yml` `provider.runtime`이 env 설정에서 읽는다. |
 | 언어·빌드 | TypeScript `^4.7.4`, `ttsc`(ttypescript)로 `src/` → `dist/` |
 | 테스트 | jest `^29.7.0` + ts-jest `^29.4.15` (`src/**/*.spec.ts`). Lambda 도구(`lemon-*`)의 테스트는 lemon-core에 있다 |
-| 프레임워크 | `lemon-core` `^5.0.13`. lemon-model은 lemon-core를 통해 온다(`field`·`fieldsOf`는 `lemon-core/model`). 이 서비스는 `lemon-model`을 직접 선언하지 않는다. 로컬 express는 lemon-core `buildExpress()`가 만든다(`src/express.ts`). `lemon-devkit` `^0.2.3`은 개발 도구(`lemon-fields gen`, proxy 문서)다. |
+| 프레임워크 | `lemon-core` `^5.0.14`. lemon-model은 lemon-core를 통해 온다(`field`·`fieldsOf`는 `lemon-core/model`). 이 서비스는 `lemon-model`을 직접 선언하지 않는다. 로컬 서버는 lemon-core `buildExpress()`의 로컬 API Gateway가 만든다(`src/express.ts`) — `serverless.yml` 라우트를 그대로 따르고(`{proxy+}`, 없는 경로·메서드는 403), `binaryMediaTypes`에 맞는 본문은 base64로 넘긴다. `express`는 devDependency, `lemon-devkit`은 쓰지 않는다(lemon-core 5.0.14, HOW_TO § 20). |
 | AWS SDK | v3 (`@aws-sdk/*` `^3.1159.0`, lemon-core peer 범위와 같다). lemon-core가 쓰는 클라이언트를 이 서비스가 직접 선언한다 |
 | 배포 | lemon-core `lemon-lambda-pack` → `lemon-lambda-deploy` → AWS Lambda. Serverless Framework 패키지는 설치하지 않는다 — `serverless.yml`은 함수 정의로 남고, `sls`로 쓰려면 [docs/serverless.md](docs/serverless.md) |
 | 브랜치 | 기본 브랜치 `develop`. v5 라인은 `v5` 브랜치에 있다. |
@@ -50,8 +50,6 @@ lemoncloud 백엔드 마이크로서비스(`<code>-<service>-api`)의 템플릿 
 | `serverless.yml` | 함수·이벤트·IAM·리소스 이름 맵. `serverless-vpc.yml`은 VPC 설정이 켜진 변형이다. | 사람 검토 필수 |
 | `env/` | 프로필·스테이지 설정 | **에이전트는 열지 않음** |
 | `docs/lambda-*.md` | Lambda 도구(lemon-core `lemon-*` 명령)의 이 서비스 사용법. 목록은 [docs/lambda-tools.md](docs/lambda-tools.md) | 개발자 |
-| `docs/proxy-implementation-guide.md` | proxy 구현 가이드. lemon-devkit이 install/upgrade 때 다시 쓴다. | **손으로 고치지 않음** |
-| `README.md` 끝 `lemon-devkit:proxy-doc` 블록 | lemon-devkit이 다시 쓰는 블록 | **손으로 고치지 않음** |
 
 ## 요청 흐름
 
@@ -223,7 +221,7 @@ npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'
 | [docs/lambda-tools.md](docs/lambda-tools.md) | Lambda 도구(lemon-core `lemon-*` 명령) 스크립트 표, 이 서비스가 읽히는 파일, AWS SDK 패키지, `fields:admin`·`loop:check` 서비스 메모. 옵션·안전 규칙·exit code는 lemon-core `docs/v5/B19-bin-tools.md`·`docs/v5/B19-bin-deploy.md` |
 | [src/modules/mock/README.md](src/modules/mock/README.md) | `TestModel` 골든 계약, 함께 고칠 파일, `fields/admin` 점검 |
 | [src/modules/callback/README.md](src/modules/callback/README.md) | callback 모듈 설계 개념, 루프 테스트 라우트와 가드 |
-| [docs/proxy-implementation-guide.md](docs/proxy-implementation-guide.md) | `BackendProxy`·`ManagerProxy`·`guardProxy()`와 use-case 구현 가이드 (lemon-devkit 관리) |
+| [docs/proxy-implementation-guide.md](docs/proxy-implementation-guide.md) | `BackendProxy`·`ManagerProxy`·`guardProxy()`와 use-case 구현 가이드 (이 저장소 소유) |
 | [docs/dependency-audit.md](docs/dependency-audit.md) | 운영 의존성 `npm audit` 점검 기록 |
 | [HOW_TO_UPGRADE_V4.md](HOW_TO_UPGRADE_V4.md) | lemon-core v3 → v4 업그레이드 가이드 (과거 기록) |
 | [HOW_TO_USE_OS2.md](HOW_TO_USE_OS2.md) | OS2를 FGAC JWT로 쓰는 방법 |
@@ -238,13 +236,11 @@ npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'
 | 5.26.xxx  | optimized `lemon-core@5.0.5` since 2026. (`^5.0.5` — local transport, see [docs/dependency-audit.md](docs/dependency-audit.md))
 | 0.25.808  | optimized `lemon-core@4.0.6` initially.
 
-<!-- lemon-devkit:proxy-doc:start -->
 ## Proxy
 
-`lemon-devkit@0.0.12`부터 install/upgrade 시 consumer project의 `docs/proxy-implementation-guide.md`와 `README.md`에 proxy 구현 가이드를 자동 반영한다.
-Proxy 기능을 추가하거나 변경할 때는 [lemon-devkit proxy implementation guide](docs/proxy-implementation-guide.md)를 먼저 확인한다.
+Proxy 기능을 추가하거나 바꿀 때는 [docs/proxy-implementation-guide.md](docs/proxy-implementation-guide.md)를 먼저 확인한다.
 `BackendProxy`, `ManagerProxy`, `guardProxy()` 계열 동작과 프로젝트 적용 절차는 이 문서 기준으로 맞춘다.
-<!-- lemon-devkit:proxy-doc:end -->
+이 문서는 예전에 lemon-devkit이 설치 때 써 넣던 사본에서 시작했고, 지금은 이 저장소가 소유한다(손으로 고친다).
 
 ### Verified ZIP deployment through eureka-deploy
 
