@@ -7,7 +7,8 @@
  *
  * Copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
-import { SimpleSet } from 'lemon-model';
+//* v5 B16: lemon-model through lemon-core
+import { SimpleSet } from 'lemon-core';
 import $callback from '../modules/callback/types';
 import $mocks from '../modules/mock/types';
 export { SimpleSet };

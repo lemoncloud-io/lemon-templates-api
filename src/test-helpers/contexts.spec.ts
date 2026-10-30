@@ -10,7 +10,8 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { describe, it, expect2, expect } from './commons.spec';
-import { NextContext } from 'lemon-model';
+//* v5 B16: lemon-model through lemon-core
+import { NextContext } from 'lemon-core';
 
 /**
  * sample sample context

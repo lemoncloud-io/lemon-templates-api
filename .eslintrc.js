@@ -17,5 +17,18 @@ module.exports = {
         '@typescript-eslint/no-inferrable-types': 'off',
         '@typescript-eslint/no-empty-function': 'off',
         '@typescript-eslint/prefer-as-const': 'off',
+        //* v5 B16: lemon-model is reached only through lemon-core (root or `lemon-core/model`).
+        'no-restricted-imports': [
+            'error',
+            {
+                paths: [
+                    {
+                        name: 'lemon-model',
+                        message: 'v5 B16: import from lemon-core (root) or lemon-core/model instead.',
+                    },
+                ],
+                patterns: ['lemon-model/*'],
+            },
+        ],
     },
 };

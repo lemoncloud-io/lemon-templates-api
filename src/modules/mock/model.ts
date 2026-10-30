@@ -8,9 +8,11 @@
  *
  * Copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
-import { CoreModel, NextIdentityAccess, SimpleSet } from 'lemon-model';
+//* v5 B16: lemon-model through lemon-core
+import { CoreModel, NextIdentityAccess, SimpleSet } from 'lemon-core';
 //* v5 B4: field annotations (lemon-model 5.0.0; not on the lemon-core root).
-import { field, fieldsOf } from 'lemon-model';
+//* v5 B16: lemon-model through lemon-core (`lemon-core/model` sub-path)
+import { field, fieldsOf } from 'lemon-core/model';
 //WARN - DO NOT IMPORT FROM `../../service/backend-model`
 // import { ModelType } from '../../service/backend-types';
 import $LUT, { MockStereo, TestStereo } from './types';

@@ -8,7 +8,8 @@
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
-import { CoreModel } from 'lemon-model';
+//* v5 B16: lemon-model through lemon-core
+import { CoreModel } from 'lemon-core';
 //WARN - DO NOT IMPORT FROM `../../service/backend-model`
 // import { ModelType } from '../../service/backend-types';
 import $LUT, { CallbackState, CallbackStereo } from './types';

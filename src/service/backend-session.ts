@@ -7,7 +7,8 @@
  *
  * Copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
-import { NextIdentityCognito, NextIdentity } from 'lemon-model';
+//* v5 B16: lemon-model through lemon-core
+import { NextIdentityCognito, NextIdentity } from 'lemon-core';
 
 /**
  * type: `SessionToken`
