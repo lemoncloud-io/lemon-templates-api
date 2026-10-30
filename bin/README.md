@@ -3,6 +3,8 @@
 Node scripts for packaging, trusted local handler execution and test-env/prod verification.
 `pack.mjs` uses Docker without AWS credentials. The invocation and log scripts call AWS directly with the SDK (no `sls`).
 
+- `migrate.mjs` — offline-by-default, phase-gated templates dev migration through a pinned external eureka checkout. Run `npm run lambda:migrate`; see [migration and dev release](../docs/lambda-migrate.md).
+- `deploy-dev.mjs` — templates/dev/code entrypoint reusing `deploy.mjs`, with an optional verified migration receipt gate. Run `npm run lambda:deploy:dev`; see [deployment](../docs/lambda-deploy.md).
 - `pack.mjs` — build a verified Lambda ZIP and external manifest using an isolated Lambda Linux image. Run `npm run pack`; see [Lambda ZIP packaging](../docs/lambda-pack.md). Offline fixtures: `npm run pack:test`.
 - `lambda-local.mjs` — execute a verified pack artifact or compiled local folder in isolated Node child processes, with cold/warm state, deadlines and bounded logs. Run `npm run lambda:local`; see [Local Lambda execution](../docs/lambda-local.md). Real-child tests: `npm run lambda:local:test`.
 - `lambda-invoke.mjs` — invoke the deployed function with a generated event (web, cron, SNS, SQS, or a raw JSON file).
