@@ -254,3 +254,7 @@ npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'
 Proxy 기능을 추가하거나 변경할 때는 [lemon-devkit proxy implementation guide](docs/proxy-implementation-guide.md)를 먼저 확인한다.
 `BackendProxy`, `ManagerProxy`, `guardProxy()` 계열 동작과 프로젝트 적용 절차는 이 문서 기준으로 맞춘다.
 <!-- lemon-devkit:proxy-doc:end -->
+
+### Verified ZIP deployment through eureka-deploy
+
+`npm run lambda:deploy -- --config <config.json> --artifact <pack-output>` validates the pack artifact and prints an offline deployment plan. Add `--apply` explicitly to run a managed code update or full bootstrap through eureka-deploy. See [Lambda deployment CLI](docs/lambda-deploy.md) for the example config, extra read-only preflight permissions, verification and interrupted-run recovery. Existing Serverless deployment commands are unchanged.
