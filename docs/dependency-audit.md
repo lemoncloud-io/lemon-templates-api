@@ -32,7 +32,7 @@
 
 - 23건은 Serverless Framework 패키지를 뺀 뒤의 수다.
 - `codecov`를 뺐다. 쓰는 스크립트가 없었다. `teeny-request` → `uuid`, `js-yaml` 3.14.1 경로가 사라졌다.
-- `lemon-devkit` ^0.2.2 → ^0.2.3. 0.2.3은 `request`에 의존하지 않는다. `request`·`form-data`·`qs`·`tough-cookie`·`uuid`가 사라졌다.
+- `lemon-devkit` ^0.2.2 → ^0.2.3(2026-10-31에 삭제 — lemon-core 5.0.14가 환경 로딩·로컬 서버를 직접 제공). 0.2.3은 `request`에 의존하지 않는다. `request`·`form-data`·`qs`·`tough-cookie`·`uuid`가 사라졌다.
 - `nodemon` ^2.0.18 → ^3.1.14. `simple-update-notifier` → `semver` 경로가 사라졌다.
 - `jest` 27 → ^29.7.0, `ts-jest` → ^29.4.15, `@types/jest` → ^29.5.14. `jsdom` → `http-proxy-agent` → `@tootallnate/once` 경로가 사라졌다.
   - `jest.config.json`: ts-jest 옵션을 `transform` 튜플로 옮겼다. `testRunner: jest-jasmine2`를 지웠다(기본 jest-circus).

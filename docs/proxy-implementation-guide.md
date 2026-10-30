@@ -48,7 +48,7 @@ glossary:
 - spec 헤더 골든 샘플: `src/lib/mock/update-test-name.spec.ts`
 
 `TestModel`의 `mockId + mock$`, `mockIds + mock$$`, `readonly $mock/$mocks` 패턴은 이 문서의 기준 계약이다.
-이 계약을 바꾸는 경우 `model/views/transformer/proxy/spec/field-registry/guide`를 함께 갱신해야 한다.
+이 계약을 바꾸는 경우 `model/views/transformer/proxy/spec/guide`를 함께 갱신해야 한다(필드 목록은 모델의 `@field()`에서 나온다).
 
 ---
 
@@ -457,19 +457,20 @@ public async validateModel<T extends TestModel>(model: T, modelId?: string): Pro
 }
 ```
 
-### STEP M7. fieldKeys 갱신
+### STEP M7. 필드 표기 확인 (`@field()`)
 
-`$HEAD`와 `$FIELD`는 `src/generated/field-registry.ts`의 `fieldKeys`를 사용하므로 모델 추가 후 반드시 생성 파일을 갱신한다.
+`$HEAD`와 `$FIELD`는 모델 클래스의 `@field()` 표기에서 `fieldsOf()`로 만든다(lemon-core B4, `lemon-core/model`). 생성 파일과 생성 명령은 없다.
 
-```sh
-npm run fields:gen
+```ts
+export const $HEAD = { pet: filterFields(fieldsOf(PetModel, { group: 'head' })) };
+export const $FIELD = { pet: filterFields(fieldsOf(PetModel)) };
 ```
 
-생성 후 아래를 확인한다.
+추가 후 아래를 확인한다.
 
-- `fieldKeys.<model>Head()`가 추가됐는가?
-- `fieldKeys.<model>Model()`이 추가됐는가?
-- `fieldRegistryMeta.entryCount`와 `checksum`이 함께 갱신됐는가?
+- 저장 필드마다 `@field()`가 붙었는가? head 필드는 `@field({ group: 'head' })`인가?
+- view 필드(`$x`, `Model`, `Query` 등)에는 `@field()`가 없는가?
+- 목록 순서는 부모(`CoreModel`) 필드가 먼저다. 순서를 박는 스펙은 집합으로 비교한다(lemon-core HOW_TO § 10.5).
 
 ### STEP M8. Transformer Spec
 
@@ -843,7 +844,7 @@ return this.service.guardProxy($ctx, async proxy => {
 | 전체 모델 참조는 readonly `$xxx` 사용 | `$xxx` 필드가 DB에 저장된다고 가정 |
 | head snapshot과 readonly 참조는 transformer `$imune`로 저장 불가 검증 | `bodyToModel()`에서 `stage$`, `note$$`, `$notes` 저장 허용 |
 | `stereo`가 있는 모델은 head에도 `stereo` 포함 | head에서 stereo 누락 |
-| 모델 추가 후 `npm run fields:gen` 실행 | `fieldKeys`를 수동 편집하거나 갱신 누락 |
+| 모델의 저장 필드에 `@field()` 표기 | 필드 목록을 손으로 적거나 `@field()` 누락 |
 | 여러 manager 조합은 `src/lib/<domain>` | `api-*.ts`에 긴 business flow 작성 |
 | atomic helper는 `ManagerProxy` | 같은 mutation 로직을 use-case마다 복사 |
 | `options`에는 실행 주입값만 | `options`에 business input 필드 섞기 |
@@ -865,7 +866,7 @@ return this.service.guardProxy($ctx, async proxy => {
 - [ ] 참조 필드는 `id + $head`, 배열은 `ids + $$heads`, 전체 모델은 readonly `$xxx` 패턴인가?
 - [ ] head snapshot과 readonly 참조가 `bodyToModel()` 저장 대상에서 제외되고 `$imune` spec으로 검증되는가?
 - [ ] `stereo`가 있는 모델의 head에 `stereo`가 포함되는가?
-- [ ] 새 모델 추가 후 `npm run fields:gen`으로 `fieldKeys`가 갱신됐는가?
+- [ ] 새 모델의 저장 필드에 `@field()`가 붙었는가?
 
 위반 항목이 있으면 해당 STEP으로 돌아가 수정 후 spec 재실행.
 
@@ -971,5 +972,5 @@ src/lib/mock/
 - [ ] 새 모델의 참조 필드는 `xxxId + xxx$`, `xxxIds + xxx$$`, readonly `$xxx` 규칙을 따름
 - [ ] `stereo`가 있는 모델은 head에도 `stereo`를 포함함
 - [ ] 새 모델의 모든 출력/입력 필드를 transformer spec으로 검증함
-- [ ] 새 모델 추가 후 `npm run fields:gen` 결과가 반영됨
+- [ ] 새 모델의 `@field()` 표기가 반영됨
 - [ ] 단위 spec과 필요한 통합 spec 통과
