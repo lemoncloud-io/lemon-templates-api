@@ -4,8 +4,8 @@
 
 설정 파일은 남아 있다.
 
-- `serverless.yml`, `serverless-vpc.yml` — 함수·이벤트·환경 정의. `lemon-*` 도구도 `serverless.yml`의 `service:`와 http 이벤트를 읽는다.
-- `serverless.yml`의 `plugins:` 목록도 그대로다. 패키지가 없으면 `sls` 명령만 동작하지 않는다.
+-   `serverless.yml`, `serverless-vpc.yml` — 함수·이벤트·환경 정의. `lemon-*` 도구도 `serverless.yml`의 `service:`와 http 이벤트를 읽는다.
+-   `serverless.yml`의 `plugins:` 목록도 그대로다. 패키지가 없으면 `sls` 명령만 동작하지 않는다.
 
 ## Serverless로 직접 배포·운영하려면
 
@@ -13,21 +13,21 @@
 
 ### devDependencies
 
-| 패키지 | 선언 범위 | 마지막 설치판 |
-| --- | --- | --- |
-| `serverless` | `^3.19.0` | 3.40.0 |
-| `serverless-aws-documentation` | `^0.8.0` | 0.8.0 |
-| `serverless-plugin-log-retention` | `^2.0.0` | 2.1.0 |
-| `serverless-prune-plugin` | `^2.0.1` | 2.1.0 |
-| `@cruglobal/serverless-merge-config` | `^1.1.0` | 1.1.0 |
+| 패키지                               | 선언 범위 | 마지막 설치판 |
+| ------------------------------------ | --------- | ------------- |
+| `serverless`                         | `^3.19.0` | 3.40.0        |
+| `serverless-aws-documentation`       | `^0.8.0`  | 0.8.0         |
+| `serverless-plugin-log-retention`    | `^2.0.0`  | 2.1.0         |
+| `serverless-prune-plugin`            | `^2.0.1`  | 2.1.0         |
+| `@cruglobal/serverless-merge-config` | `^1.1.0`  | 1.1.0         |
 
 ```sh
 npm i -D serverless@^3.19.0 serverless-aws-documentation@^0.8.0 serverless-plugin-log-retention@^2.0.0 serverless-prune-plugin@^2.0.1 @cruglobal/serverless-merge-config@^1.1.0
 ```
 
-- Serverless Framework 3.x 기준이다. 4.x는 로그인·라이선스 방식이 달라 이 저장소에서 검증하지 않았다.
-- `serverless-offline`은 Node 22 이상에서 실패해 이미 꺼져 있다(`serverless.yml` 주석). 로컬 실행은 `npm run express.lemon`과 `npm run lambda:local`을 쓴다.
-- 이 패키지들은 개발 전용이고, 설치하면 `npm audit`(전체) 경고가 늘어난다(지울 때 34 → 23건, `node_modules` 514 MB → 299 MB). `npm audit --omit=dev`는 그대로 0이다.
+-   Serverless Framework 3.x 기준이다. 4.x는 로그인·라이선스 방식이 달라 이 저장소에서 검증하지 않았다.
+-   `serverless-offline`은 Node 22 이상에서 실패해 이미 꺼져 있다(`serverless.yml` 주석). 로컬 실행은 `npm run express.lemon`과 `npm run lambda:local`을 쓴다.
+-   이 패키지들은 개발 전용이고, 설치하면 `npm audit`(전체) 경고가 늘어난다(지울 때 34 → 23건, `node_modules` 514 MB → 299 MB). `npm audit --omit=dev`는 그대로 0이다.
 
 ### scripts
 
@@ -54,9 +54,9 @@ npm i -D serverless@^3.19.0 serverless-aws-documentation@^0.8.0 serverless-plugi
 
 ## 대신 쓰는 명령
 
-| 예전 (`sls`) | 지금 |
-| --- | --- |
-| `pack.lemon` | `npm run pack` (`lemon-lambda-pack`) |
-| `deploy.lemon` | `npm run lambda:deploy` (`lemon-lambda-deploy`, 기본은 계획만, `--apply`로 실행) |
-| `logs.lemon` | `npm run lambda:logs` (`lemon-lambda-logs`) |
-| `info.lemon`, `remove.*` | 대응 명령 없음 — 필요하면 위 구성으로 `sls`를 다시 설치한다 |
+| 예전 (`sls`)             | 지금                                                                             |
+| ------------------------ | -------------------------------------------------------------------------------- |
+| `pack.lemon`             | `npm run pack` (`lemon-lambda-pack`)                                             |
+| `deploy.lemon`           | `npm run lambda:deploy` (`lemon-lambda-deploy`, 기본은 계획만, `--apply`로 실행) |
+| `logs.lemon`             | `npm run lambda:logs` (`lemon-lambda-logs`)                                      |
+| `info.lemon`, `remove.*` | 대응 명령 없음 — 필요하면 위 구성으로 `sls`를 다시 설치한다                      |
