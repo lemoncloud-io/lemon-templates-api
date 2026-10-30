@@ -29,16 +29,16 @@ describe('SearchController', () => {
     PROFILE && console.info('! PROFILE=', PROFILE);
 
     //! test controller
-    it('should pass w/ main-service', async done => {
+    //* jest 29 (jest-circus) rejects `async done =>`; async tests return the promise instead.
+    it('should pass w/ main-service', async () => {
         const { controller } = instance();
         /* eslint-disable prettier/prettier */
         expect2(controller.hello()).toEqual(`search-api:search`);
         /* eslint-enable prettier/prettier */
-        done();
     });
 
     //! test `/hello` route
-    it('should pass express route: GET /0/hello', async done => {
+    it('should pass express route: GET /0/hello', async () => {
         // v5 B5 (lemon-core 5.0.10): `getSearchHello` opens only in local mode (`LOCAL_MODE=1`, HOW_TO_UPGRADE_V5 § 11.3), so the spec sets it and restores it.
         const saved = {
             LOCAL_MODE: process.env.LOCAL_MODE,
@@ -60,6 +60,5 @@ describe('SearchController', () => {
             status: 200,
             text: $U.json({ id: '', hello: 'search-api:search' }),
         });
-        done();
     });
 });

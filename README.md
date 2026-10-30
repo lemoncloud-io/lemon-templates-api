@@ -10,10 +10,10 @@ lemoncloud 백엔드 마이크로서비스(`<code>-<service>-api`)의 템플릿 
 |---|---|
 | 런타임 | Node `24.15.0` (`.nvmrc`), `engines.node` `>=24.0.0`. Lambda 런타임은 `serverless.yml` `provider.runtime`이 env 설정에서 읽는다. |
 | 언어·빌드 | TypeScript `^4.7.4`, `ttsc`(ttypescript)로 `src/` → `dist/` |
-| 테스트 | jest `^27.5.1` + ts-jest (`src/**/*.spec.ts`). Lambda 도구(`lemon-*`)의 테스트는 lemon-core에 있다 |
-| 프레임워크 | `lemon-core` `^5.0.13`. lemon-model은 lemon-core를 통해 온다(`field`·`fieldsOf`는 `lemon-core/model`). 이 서비스는 `lemon-model`을 직접 선언하지 않는다. 로컬 express는 `lemon-devkit` `^0.2.2`가 만든다. |
-| AWS SDK | v3 (`@aws-sdk/*` `^3.971.0`) |
-| 배포 | Serverless Framework v3 (`frameworkVersion: "3"`) → AWS Lambda |
+| 테스트 | jest `^29.7.0` + ts-jest `^29.4.15` (`src/**/*.spec.ts`). Lambda 도구(`lemon-*`)의 테스트는 lemon-core에 있다 |
+| 프레임워크 | `lemon-core` `^5.0.13`. lemon-model은 lemon-core를 통해 온다(`field`·`fieldsOf`는 `lemon-core/model`). 이 서비스는 `lemon-model`을 직접 선언하지 않는다. 로컬 express는 lemon-core `buildExpress()`가 만든다(`src/express.ts`). `lemon-devkit` `^0.2.3`은 개발 도구(`lemon-fields gen`, proxy 문서)다. |
+| AWS SDK | v3 (`@aws-sdk/*` `^3.1159.0`, lemon-core peer 범위와 같다). lemon-core가 쓰는 클라이언트를 이 서비스가 직접 선언한다 |
+| 배포 | lemon-core `lemon-lambda-pack` → `lemon-lambda-deploy` → AWS Lambda. Serverless Framework 패키지는 설치하지 않는다 — `serverless.yml`은 함수 정의로 남고, `sls`로 쓰려면 [docs/serverless.md](docs/serverless.md) |
 | 브랜치 | 기본 브랜치 `develop`. v5 라인은 `v5` 브랜치에 있다. |
 | 패키지 버전 | `package.json` `version` |
 
@@ -145,11 +145,10 @@ flowchart LR
 
 | 명령 | 하는 일 |
 |---|---|
-| `npm run deploy.lemon` / `deploy.lemon-vpc` / `deploy.lemon.prod` | 빌드 후 `sls deploy` (dev / dev+VPC / prod) |
-| `npm run pack.lemon` / `pack.lemon.prod` | 빌드 후 `sls package` |
-| `npm run info` / `info.lemon` / `info.lemon.prod` | `sls info`. 인자 없는 `info`는 prod다. |
-| `npm run logs` / `logs.lemon` / `logs.lemon.prod` | `sls logs`. 인자 없는 `logs`는 prod다. |
-| `npm run remove` / `remove.lemon` / `remove.lemon.prod` | `sls remove`. 스택을 지운다. 인자 없는 `remove`는 prod다. |
+| `npm run lambda:deploy -- --apply ...` | 배포 실행(`lemon-lambda-deploy`). 기본은 계획만 보인다. [docs/lambda-deploy.md](docs/lambda-deploy.md) |
+| `npm run lambda:migrate` / `lambda:deploy:dev` | 가드된 이행·dev 릴리스. [docs/lambda-migrate.md](docs/lambda-migrate.md) |
+
+Serverless Framework 패키지(`sls`)는 설치하지 않는다. 설정 파일 `serverless.yml`·`serverless-vpc.yml`은 남아 있고, `sls`로 직접 배포·운영하려면 [docs/serverless.md](docs/serverless.md)의 권장 구성(패키지·스크립트)을 다시 넣는다.
 
 소스 주석의 `:8888` 예시는 꺼진 `serverless-offline`의 포트다. 로컬 express 포트는 8800이다.
 
