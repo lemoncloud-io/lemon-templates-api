@@ -43,4 +43,4 @@ $ npm run test:watch /backend- /transformer. /mock/
 - 로컬 express 서버: `npm run fields:admin -- --target express`
 - 배포된 Lambda: `npm run fields:admin -- --target lambda --stage dev` (IAM 자격으로 직접 invoke, 외부 경로는 403인지도 확인)
 
-모델 필드가 바뀌면 이 파일의 `counts`·`extra`를 함께 고친다. 자세한 옵션은 `bin/README.md`의 `fields:admin` 절을 본다.
+모델 필드가 바뀌면 이 파일의 `counts`·`extra`를 함께 고친다. 자세한 옵션은 [docs/lambda-tools.md](../../../docs/lambda-tools.md#fieldsadmin)의 `fields:admin` 절과 lemon-core `docs/v5/B19-bin-tools.md`를 본다.

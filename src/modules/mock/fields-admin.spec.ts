@@ -1,7 +1,7 @@
 /**
  * `fields-admin.spec.ts`
  * - `GET /mocks/fields/admin` over express (supertest), checked by `checkFieldsAdmin()` of lemon-core.
- * - the same check and fixture run on the local server and the deployed Lambda (`bin/fields-admin.mjs`).
+ * - the same check and fixture run on the local server and the deployed Lambda (`npm run fields:admin`, lemon-core `lemon-fields-admin`).
  * - a separate spec: it does not import `backend-proxy.spec`, so it runs on its own.
  *
  * @author      Steve <steve@lemoncloud.io>
@@ -15,7 +15,7 @@ import { checkFieldsAdmin, FieldsAdminExpect } from 'lemon-core';
 import { app } from '../../express';
 import request from 'supertest';
 import path from 'path';
-//! expected `fields/admin` report, shared with `bin/fields-admin.mjs`.
+//! expected `fields/admin` report, shared with `npm run fields:admin` (lemon-core `lemon-fields-admin`, default `--expect` for `mocks`).
 import expected from './fields-admin.expected.json';
 
 //! no such file: the AWS SDK then finds no profile at all.

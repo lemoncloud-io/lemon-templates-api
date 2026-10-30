@@ -123,11 +123,11 @@ The ZIP must target Node 24/x86_64. Code mode updates both managed functions wit
 ## Local verification
 
 ```sh
-npm run lambda:migrate:test
-npm run lambda:test
+npm run lambda:migrate -- --help
+npm run lambda:migrate -- plan --config .artifacts/migration.dev.json
 ```
 
-Synthetic tests cover phase/consent/target gates, valid and corrupted receipts, changed backups, zero-exit warnings, private permissions/symlinks, concurrent attempts, real process success/deadline/cancellation, parent SIGKILL, last-line progress capture, and dev-only deployment reuse. They do not contact AWS or run the real migration source. Diagnostic regressions include actual synthetic child exceptions with positive file/line checks, recognized AWS CLI headers, unknown fields, supplied getters/proxies, malicious IPC, raw-secret omission, direct process exits and unchanged receipt/CLI failure semantics.
+Since lemon-core 5.0.13 (v5 B19) the tools are the lemon-core bins `lemon-lambda-migrate` and `lemon-lambda-deploy-dev`, with this service's target pinned in lemon-core (reference: lemon-core `docs/v5/B19-bin-deploy.md`). Their synthetic tests run in lemon-core (`npm test`, the `migrate-core`, `migrate-diagnostic` and `dev-release` specs). The tests cover phase/consent/target gates, valid and corrupted receipts, changed backups, zero-exit warnings, private permissions/symlinks, concurrent attempts, real process success/deadline/cancellation, parent SIGKILL, last-line progress capture, and dev-only deployment reuse. They do not contact AWS or run the real migration source. Diagnostic regressions include actual synthetic child exceptions with positive file/line checks, recognized AWS CLI headers, unknown fields, supplied getters/proxies, malicious IPC, raw-secret omission, direct process exits and unchanged receipt/CLI failure semantics.
 
 An additional offline check used the actual prepared dev config and a fresh pack artifact from source `719e53de1a9e96c23a48d23263cabc8ff025a10e`: migration plan 192.65 ms and dev ZIP plan 2653.38 ms. Node fetch/http/https/net connection paths were blocked by a test preload; this was not an OS security sandbox. These results establish local preparation/compatibility, not successful live migration or release deployment.
 

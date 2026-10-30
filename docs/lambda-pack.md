@@ -11,7 +11,6 @@ npm run pack
 npm run pack -- --architecture arm64
 npm run pack -- --output .artifacts/lambda/release-candidate
 npm run pack -- --help
-npm run pack:test
 ```
 
 Run from the repository root. The default target is `nodejs24.x` / `x86_64` (`linux/amd64`); `arm64` selects `linux/arm64`. Unsupported runtimes and architectures fail. The tool verifies Linux, Node major 24, Amazon Linux 2023, and the selected CPU architecture inside the actual image. A missing or mismatched image is pulled; Docker/emulation failure never falls back to host execution.
@@ -46,7 +45,7 @@ Identical staged files produce identical ZIP bytes with the same packer Node/zli
 
 ## Verification and maintenance
 
-`npm run pack:test` runs offline `node:test` fixtures for strict options, path and credential boundaries, source/host isolation, lock mismatch, staging manifest/peer preservation, failure propagation, ZIP metadata/reproducibility, symlink containment, size limits and atomic publication. Its Docker runner is simulated; a real `npm run pack` run is the Linux integration gate. Use an independent ZIP reader for release inspection, for example:
+The `pack` tests of lemon-core (`npm test` there) run offline fixtures for strict options, path and credential boundaries, source/host isolation, lock mismatch, staging manifest/peer preservation, failure propagation, ZIP metadata/reproducibility, symlink containment, size limits and atomic publication. Its Docker runner is simulated; a real `npm run pack` run is the Linux integration gate. Use an independent ZIP reader for release inspection, for example:
 
 ```sh
 unzip -t .artifacts/lambda/release-candidate/lambda.zip
@@ -55,7 +54,7 @@ unzip -l .artifacts/lambda/release-candidate/lambda.zip
 
 Check the manifest's runtime/architecture, validation statuses, native modules, source dirty state, image identity and size before selecting the ZIP for deployment. The existing service test suite is separate from this packaging gate.
 
-`bin/pack.mjs` is the thin CLI; `bin/lib/pack-core.mjs` owns orchestration and file policy; `bin/lib/pack-zip.mjs` owns deterministic ZIP creation/extraction. Future migration to a shared `lemon-core` CLI can move these general modules while keeping `pack.config.json` as this project's adapter.
+Since lemon-core 5.0.13 (v5 B19) the packer is the lemon-core bin `lemon-lambda-pack`; `npm run pack` calls it from the service root. It is the thin CLI; lemon-core's `pack-core.mjs` owns orchestration and file policy and `pack-zip.mjs` owns deterministic ZIP creation/extraction. `pack.config.json` stays this project's adapter. Generic reference: lemon-core `docs/v5/B19-bin-deploy.md`.
 
 ## Official references
 
