@@ -32,6 +32,8 @@
     "info.lemon": "sls info --param='profile=lemon' --stage dev",
     "info.lemon.prod": "sls info --param='profile=lemon' --stage prod",
     "!pack": "------- gulp 빌드후 dist 폴더에 압축한 다음, serverless를 통해서 deploy 실행 -----",
+    "pack": "node bin/pack.mjs",
+    "pack:test": "node --test bin/lib/pack*.test.mjs",
     "pack.lemon": "npm run build && sls package --param='profile=lemon' --stage dev",
     "pack.lemon.prod": "npm run build && sls package --param='profile=lemon' --stage prod",
     "!logs": "------- print logs of serverless by profile -----",
@@ -58,7 +60,12 @@
     "prepretypes": "LS=1 ts-node @types/bin/init-package.ts",
     "pretypes": "rm -rf ./@types/dist && npm run prepretypes",
     "types": "ttsc -p ./@types/tsconfig.build.json",
-    "posttypes": "npm publish --dry-run ./@types"
+    "posttypes": "npm publish --dry-run ./@types",
+    "lambda:local": "node bin/lambda-local.mjs",
+    "lambda:local:test": "node --test bin/lib/local-*.test.mjs",
+    "bundle:lab": "npm --prefix tools/lambda-bundle run experiment",
+    "lambda:deploy": "node bin/deploy.mjs",
+    "lambda:deploy:test": "node --test bin/lib/deploy*.test.mjs"
   },
   "author": "Steve Jung (steve@lemoncloud.io)",
   "license": "MIT",
@@ -74,8 +81,11 @@
     "lemon-core": "^5.0.11"
   },
   "devDependencies": {
+    "@aws-crypto/sha256-js": "5.2.0",
     "@aws-sdk/client-cloudwatch-logs": "^3.971.0",
     "@cruglobal/serverless-merge-config": "^1.1.0",
+    "@smithy/protocol-http": "5.3.8",
+    "@smithy/signature-v4": "5.7.4",
     "@types/cors": "^2.8.7",
     "@types/jest": "^27.5.0",
     "@types/request": "^2.48.5",
@@ -103,7 +113,8 @@
     "ts-node": "^8.1.0",
     "tsconfig-paths": "^4.1.2",
     "ttypescript": "^1.5.15",
-    "typescript": "^4.7.4"
+    "typescript": "^4.7.4",
+    "js-yaml": "3.14.1"
   },
   "private": true,
   "engines": {

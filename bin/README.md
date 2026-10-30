@@ -1,8 +1,10 @@
-# bin/ — invoke the deployed Lambda, watch its logs, check `fields/admin`, and check the loop test
+# bin/ — package Lambda, run local handlers, invoke deployed functions, and verify behavior
 
-Small Node scripts for test-env and prod verification after `sls deploy`.
-They call AWS directly with the SDK (no `sls`), so they work on any machine with AWS credentials.
+Node scripts for packaging, trusted local handler execution and test-env/prod verification.
+`pack.mjs` uses Docker without AWS credentials. The invocation and log scripts call AWS directly with the SDK (no `sls`).
 
+- `pack.mjs` — build a verified Lambda ZIP and external manifest using an isolated Lambda Linux image. Run `npm run pack`; see [Lambda ZIP packaging](../docs/lambda-pack.md). Offline fixtures: `npm run pack:test`.
+- `lambda-local.mjs` — execute a verified pack artifact or compiled local folder in isolated Node child processes, with cold/warm state, deadlines and bounded logs. Run `npm run lambda:local`; see [Local Lambda execution](../docs/lambda-local.md). Real-child tests: `npm run lambda:local:test`.
 - `lambda-invoke.mjs` — invoke the deployed function with a generated event (web, cron, SNS, SQS, or a raw JSON file).
 - `lambda-logs.mjs` — print or follow the function's CloudWatch logs (polling `FilterLogEvents`).
 - `perf-lambda.mjs` — invoke the deployed function several times and summarize cold / warm timings from the log tail, or from the full CloudWatch log with `--logs`. See [perf:lambda](#perflambda).
@@ -20,6 +22,8 @@ Nothing here reads `env/*.yml`, `env/config.js`, or the `custom:` / `environment
 `bin/` is not packaged into the Lambda zip (`package.include` lists only `handler.js`, `package.json`, `dist/**`, `data/**`).
 
 ## Credentials
+
+These credentials apply to the deployed-function tools below. `lambda-local` does not inherit host credentials; its explicit environment and networking contract is in [Local Lambda execution](../docs/lambda-local.md#environment-and-host-boundary).
 
 - `--profile <name>` uses that named profile from `~/.aws`.
 - Without `--profile`, the AWS SDK default chain applies: `AWS_PROFILE`, `AWS_ACCESS_KEY_ID`/`AWS_SECRET_ACCESS_KEY`, SSO, instance role.

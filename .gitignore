@@ -74,3 +74,7 @@ typings/
 
 # git worktrees of this repo (agent lanes)
 .wt/
+
+# Verified Lambda ZIPs and external manifests (npm run pack)
+.artifacts/
+.pack-publish-*/
