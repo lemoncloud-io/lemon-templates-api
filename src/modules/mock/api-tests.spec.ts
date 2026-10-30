@@ -32,6 +32,19 @@ describe('TestAPIController', () => {
     const PROFILE = loadProfile(process); // override process.env.
     PROFILE && console.info('! PROFILE=', PROFILE);
 
+    //* v5 B17: save `LOCAL_MODE` and `AWS_LAMBDA_FUNCTION_NAME` before each test, and put them back (or delete them) after.
+    const LOCAL_NAMES = ['LOCAL_MODE', 'AWS_LAMBDA_FUNCTION_NAME'];
+    let savedEnv: { [key: string]: string | undefined } = {};
+    beforeEach(() => (savedEnv = LOCAL_NAMES.reduce((M, k) => ({ ...M, [k]: process.env[k] }), {})));
+    afterEach(() =>
+        Object.entries(savedEnv).forEach(([k, v]) => (v === undefined ? delete process.env[k] : (process.env[k] = v))),
+    );
+    //* v5 B17: direct controller calls without a caller identity need local mode (HOW_TO_UPGRADE_V5 § 11.3).
+    const useLocalMode = () => {
+        process.env.LOCAL_MODE = '1';
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+    };
+
     //! GET `/hello` w/ route
     it('should pass express route: GET /0/hello', async () => {
         const { api, type } = instance();
@@ -51,10 +64,13 @@ describe('TestAPIController', () => {
     //! basic CRUD
     it('should pass basic CRUD', async () => {
         const { api, current, type } = instance();
+        // v5 B5 (lemon-core 5.0.10): no identity is allowed only in local mode — `canDo()` asks for the session otherwise (`403 IDENTITY-TOKEN`).
+        useLocalMode();
         const _ts = (type?: string) => ({ createdAt: current, updatedAt: current, deletedAt: 0 });
 
         // get not exist
-        expect2(await api.doGet('1').catch(GETERR)).toEqual(`404 NOT FOUND - proxy/${type}/id:1`);
+        // v5 B17 (lemon-core 5.0.10): `AbstractCRUDController.doGet` throws `not found @doGet(<route>/<id>)` (since f12b2d3, kept as-is in lemon-core extended/cores).
+        expect2(await api.doGet('1').catch(GETERR)).toEqual(`404 NOT FOUND - not found @doGet(${api.type()}/1)`);
 
         const body1st = { name: 'hello' };
         const view1st = await api.doPost('', null as any, { ...body1st });
@@ -88,7 +104,10 @@ describe('TestAPIController', () => {
         });
 
         // delete not exists
-        expect2(await api.doDelete('not_exists').catch(GETERR)).toEqual(`404 NOT FOUND - proxy/${type}/id:not_exists`);
+        // v5 B17 (lemon-core 5.0.10): `doDelete` throws `not found @doDelete(<route>/<id>)` (since f12b2d3).
+        expect2(await api.doDelete('not_exists').catch(GETERR)).toEqual(
+            `404 NOT FOUND - not found @doDelete(${api.type()}/not_exists)`,
+        );
 
         // delete newPost
         expect2(await api.doDelete(view1st.id).catch(GETERR)).toEqual({
@@ -100,17 +119,25 @@ describe('TestAPIController', () => {
         });
 
         // check deleted newPost (soft delete)
-        expect2(await api.doGet(view1st.id).catch(GETERR)).toEqual(`404 NOT FOUND - ${type}:1000001`);
+        // v5 B17 (lemon-core 5.0.10): `doGet` of a soft-deleted row throws `deleted at <ts> @doGet(<route>/<id>)` (since f12b2d3).
+        expect2(await api.doGet(view1st.id).catch(GETERR)).toEqual(
+            `404 NOT FOUND - deleted at ${$U.ts(current)} @doGet(${api.type()}/1000001)`,
+        );
     });
 
     //! check proxy.validate
     it('should pass validate routine for POST/PUT', async () => {
         const { api, current, type } = instance();
+        // v5 B5 (lemon-core 5.0.10): no identity is allowed only in local mode — `canDo()` asks for the session otherwise (`403 IDENTITY-TOKEN`).
+        useLocalMode();
 
         // get not exist
-        expect2(await api.doGet('1').catch(GETERR)).toEqual(`404 NOT FOUND - proxy/${type}/id:1`);
+        // v5 B17 (lemon-core 5.0.10): `AbstractCRUDController.doGet` throws `not found @doGet(<route>/<id>)` (since f12b2d3, kept as-is in lemon-core extended/cores).
+        expect2(await api.doGet('1').catch(GETERR)).toEqual(`404 NOT FOUND - not found @doGet(${api.type()}/1)`);
 
+        //* v5 B5 (lemon-core 5.0.10): in local mode a controller view always carries the cores `$` (`modelAsView`); `{}` as these rows have no sid/uid/gid.
         const expected = {
+            $: {},
             id: '1000001',
             name: 'X',
             deletedAt: 0,
