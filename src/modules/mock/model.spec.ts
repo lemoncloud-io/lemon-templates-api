@@ -1,7 +1,7 @@
 /**
  * `model.spec.ts`
  * - parity test of the annotated `MockModel` (v5 B4) against the v4 generated registry.
- * - the expected lists are literals copied from the v4 `src/generated/field-registry.ts` (`mockModel`, `mockHead`).
+ * - the expected lists are literals copied from the v4 generated registry (`mockModel`, `mockHead`; the registry was removed in v5 B4).
  * - NOTE: order is intentionally NOT compared - `fieldsOf()` lists parent fields first, the generator listed own fields first.
  *
  * @author      Steve <steve@lemoncloud.io>

@@ -4,16 +4,18 @@
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2025-03-26 initial version.
+ * @date        2026-10-30 v5 B4: `CallbackModel` is a class with `@field()` annotations (no generated registry).
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 //* v5 B16: lemon-model through lemon-core
 import { CoreModel } from 'lemon-core';
+//* v5 B4: field annotations (lemon-model through the `lemon-core/model` sub-path)
+import { field, fieldsOf } from 'lemon-core/model';
 //WARN - DO NOT IMPORT FROM `../../service/backend-model`
 // import { ModelType } from '../../service/backend-types';
 import $LUT, { CallbackState, CallbackStereo } from './types';
-import { fieldKeys } from '../../generated/field-registry';
 
 /**
  * type: `ModelType`
@@ -63,59 +65,80 @@ export interface CallbackHead {
  * type: `CallbackModel` (콜백)
  * - 콜백 모델
  * - 콜백 요청과 응답에 대한 내용을 기록 관리하기 위함.
+ * - v5 B4: a class over `CoreModel`; head fields carry `{ group: 'head' }` (was the `CallbackHead` registry entry).
  */
-export interface CallbackModel extends Model, CallbackHead {
+export class CallbackModel extends CoreModel<ModelType> implements CallbackHead {
+    //* v5 B4: head fields (`id`/`stereo` are inherited, redeclared to join the head group)
     /** auto-seq or child-no */
-    id?: string;
+    @field({ group: 'head' })
+    declare id?: string;
     /** stereo */
-    stereo?: CallbackStereo;
+    @field({ group: 'head' })
+    declare stereo?: CallbackStereo;
     /** name of callback */
+    @field({ group: 'head' })
     name?: string;
 
     /** domain of origin context */
+    @field()
     domain?: string;
     /** client-ip requested */
+    @field()
     clientIp?: string;
     /** user-agent requested */
+    @field()
     userAgent?: string;
 
     /** state of callback */
+    @field()
     state?: CallbackState;
 
     /** (optional) parent of this */
+    @field()
     parentId?: string;
     /** parent info */
+    @field()
     parent$?: CallbackHead;
 
     /** (optional) child-no to tracking */
+    @field()
     no?: number;
 
     /** target url */
+    @field()
     target?: string;
     /** queue-id */
+    @field()
     qid?: string;
     /** callback handler */
+    @field()
     handler?: string;
     /** callback result */
+    @field()
     result?: string;
 
     /** time of requested */
+    @field()
     requestedAt?: number;
     /** time of responsed */
+    @field()
     responsedAt?: number;
 
-    /** request-info (will be exchanged with `.meta`) */
+    /** request-info (will be exchanged with `.meta`) - view field: no `@field()` */
     readonly $request?: CallbackRequest;
     /** request meta in json */
-    meta?: string;
+    @field()
+    declare meta?: string;
 
     /**
      * hidden(숨김) flag
      */
+    @field()
     hidden?: BoolFlag;
     /**
      * optional(선택) flag
      */
+    @field()
     optional?: BoolFlag;
 }
 
@@ -136,12 +159,14 @@ export const filterFields = (fields: string[], base: string[] = []) =>
 
 /** field names from head */
 export const $HEAD = {
-    callback: filterFields(fieldKeys.callbackHead<CallbackHead>()),
+    //* v5 B4: head group of the annotated class
+    callback: filterFields(fieldsOf(CallbackModel, { group: 'head' })),
 };
 
 // extract field names from models
 export const $FIELD = {
-    callback: filterFields(fieldKeys.callbackModel<CallbackModel>()),
+    //* v5 B4: all annotated fields of the class
+    callback: filterFields(fieldsOf(CallbackModel)),
 };
 
 /** must export default as below */

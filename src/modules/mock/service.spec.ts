@@ -68,9 +68,13 @@ describe('BackendProxy', () => {
             'id',
             '_idx',
         ];
-        expect2(() => service.$test.FIELDS).toEqual(expFields);
+        //* v5 B4: fieldsOf() is parent-first (HOW_TO § 10.5) — compare sets
+        const asSorted = (list: string[]) => [...list].sort();
+        expect2(() => asSorted(service.$test.FIELDS)).toEqual(asSorted(expFields));
         expect2(() => service.$test.type).toEqual('test');
-        expect2(await service.guardProxy(context, async proxy => proxy.test.$mgr.FIELDS)).toEqual(expFields);
+        expect2(await service.guardProxy(context, async proxy => asSorted(proxy.test.$mgr.FIELDS))).toEqual(
+            asSorted(expFields),
+        );
     });
 
     //* test of test-manager

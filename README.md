@@ -43,7 +43,6 @@ lemoncloud 백엔드 마이크로서비스(`<code>-<service>-api`)의 템플릿 
 | `src/service/` | `BackendService`·`BackendProxy`·`ModelType` 등 모듈 연결 지점 | 기능 추가 시 |
 | `src/view/` | 외부 공개 타입(`types.ts`)과 transformer 묶음 | 기능 추가 시 |
 | `src/test-helpers/` | 테스트용 컨텍스트 샘플(`loadSample`) | 개발자 |
-| `src/generated/field-registry.ts` | 필드 레지스트리. `lemon-fields gen`(lemon-devkit)이 만든다. | **손으로 고치지 않음** |
 | `data/` | 더미 데이터(`dummy-data.yml` 등)와 배치 샘플(`batch/`). Lambda 패키지에 들어간다. | 개발자 |
 | `sample/` | 컨텍스트·응답 예시 JSON | 참고용 |
 | `swagger/documentation.yml` | `serverless-aws-documentation` 설정 | 개발자 |
@@ -126,15 +125,11 @@ flowchart LR
 |---|---|---|
 | `nvm use` | `.nvmrc`의 Node로 맞춘다 | |
 | `npm install` | 의존성 설치 | `package-lock.json` 사용 |
-| `npm run build` | `fields:gen` 후 `ttsc` → `dist/` | `src/generated/field-registry.ts`를 다시 쓴다 |
-| `npm test` | `fields:gen` 후 `LS=1 jest` | 생성 파일을 다시 쓴다. 커버리지는 `coverage/` |
+| `npm run build` | `ttsc` → `dist/` | |
+| `npm test` | `LS=1 jest` | 커버리지는 `coverage/` |
 | `npm run test:watch /mock/` | 패턴에 맞는 spec만 감시 실행 | 모듈 README 예시 참고 |
 | `npx tsc --noEmit` | 타입 검사만 | 파일을 쓰지 않는다 |
 | `npm run lint` | `tsc --noEmit` + `eslint --fix` | **파일을 고쳐 쓴다** |
-| `npm run fields:gen` | 필드 레지스트리 생성 | 생성 파일을 다시 쓴다 |
-| `npm run fields:check` | 레지스트리가 최신인지 검사 | 쓰지 않는다. 낡았으면 exit 1 |
-| `npm run fields:report` | 생성 + 키·필드 표 출력 | 생성 파일을 다시 쓴다 |
-| `npm run fields:migrate` | 옛 `keys<T>()` 호출 코드 변환 | **소스와 `tsconfig`를 고쳐 쓴다** |
 | `npm run fields:types` | `$FIELD` 모델의 같은 필드 이름이 한 타입인지 검사(lemon-core `lemon-fields-types`, 한 OpenSearch 인덱스 기준) | 쓰지 않는다. `hard` 충돌이면 exit 1. `-- --fail-on order`로 순서 의존 충돌도 실패로 |
 | `npm run express.lemon` | `ENV=lemon STAGE=local LOCAL_TRANSPORT=mock`로 빌드·watch·nodemon 실행 | 포트는 `package.json` `port`(8800). 자기 서비스로 가는 SNS·SQS·protocol 발신을 프로세스 안에서 전달한다(lemon-core 로컬 전송). 다른 대상은 `501`이다 |
 | `npm run express.lemon.aws` | `ENV=lemon STAGE=local`로 실행(예전 동작) | 발신이 실제 AWS로 간다 |
@@ -165,11 +160,10 @@ flowchart LR
 ```sh
 npx tsc --noEmit        # 기대: 출력 없음, exit 0
 npm test                # 기대: jest 요약에 failed 0, exit 0
-npm run fields:check    # 기대: exit 0 (레지스트리 최신)
 ```
 
 - 테스트가 실패하면 테스트가 아니라 코드를 고친다.
-- `npm test`는 `src/generated/field-registry.ts`를 다시 쓴다. 모델을 안 바꿨는데 이 파일이 바뀌면 원인을 찾는다.
+- 모델 필드 목록은 모델 클래스의 `@field()`에서 나온다(`fieldsOf()`, lemon-core v5 B4). 저장 필드를 더하면 `@field()`를 붙인다. 빠뜨리면 그 값은 `.meta`로 들어간다. 이 변경부터 목록은 부모(`CoreModel`) 필드가 먼저다. 그래서 head 객체(`asHead()` → `parent$`·`mock$`)와 search `$param`의 키 순서도 새 순서를 따른다. 값과 저장 필드는 그대로다.
 - 모델 필드를 바꾸면 `src/modules/mock/fields-admin.expected.json`의 `counts`·`extra`도 고친다.
 - 로컬 서버(`LOCAL_MODE=1`)가 떠 있으면 `npm run fields:admin -- --target express`로 점검한다. 기대: exit 0.
 - 루프 테스트를 바꿨으면 로컬에서 먼저 점검한다. 서버는 `npm run express.lemon`으로 띄운다.
@@ -208,8 +202,8 @@ npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'
 - deploy·pack·info·`sls logs`·remove는 사람이 명시적으로 시킬 때만 돌린다.
 - prod 스테이지 호출은 하지 않는다. Lambda 도구의 stage guard는 dev 외 스테이지에 `--confirm-stage <stage>`를 요구한다. 이 플래그는 사람의 명시 지시가 있을 때만 붙인다.
 - 작업 전에 브랜치를 만든다. v5 라인 작업의 base는 `v5`다.
-- 생성·자동 관리 파일(`src/generated/`, `@types/dist/`, `docs/proxy-implementation-guide.md`, 아래 proxy 블록)을 손으로 고치지 않는다.
-- `npm run lint`·`fields:migrate`는 파일을 고쳐 쓴다. 의도한 경우에만 돌린다.
+- 생성·자동 관리 파일(`@types/dist/`, `docs/proxy-implementation-guide.md`, 아래 proxy 블록)을 손으로 고치지 않는다.
+- `npm run lint`는 파일을 고쳐 쓴다. 의도한 경우에만 돌린다.
 - 문서와 소스가 다르면 소스가 맞다.
 
 ## 새 서비스로 복제할 때
@@ -219,7 +213,7 @@ npm run lambda:logs -- --stage dev --fn backend --since 5m --filter '"<loopId>"'
 - [ ] `serverless.yml` `custom`의 `topicName`·`tableName`·`queueName` 스테이지별 맵을 바꾼다. IAM·환경변수·`resources`가 이 맵을 참조한다.
 - [ ] `serverless.yml` schedule `name`의 접두어를 바꾼다.
 - [ ] `npm run types`로 `@types/package.json`을 다시 만든다. 이름은 `@lemoncloud/<package.json name>`이 된다. `@types/README.md` 제목도 바꾼다.
-- [ ] 쓰지 않는 샘플 모듈은 위 연결 지점과 `serverless.yml` 명시 라우트에서 함께 뺀다. 그 뒤 `npm run fields:gen`을 돌린다.
+- [ ] 쓰지 않는 샘플 모듈은 위 연결 지점과 `serverless.yml` 명시 라우트에서 함께 뺀다.
 - [ ] 이 README의 제목·소개·VERSION INFO를 바꾼다. proxy 블록은 그대로 둔다.
 - [ ] `env/` 설정은 사람이 준비한다.
 

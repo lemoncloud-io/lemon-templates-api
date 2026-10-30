@@ -43,8 +43,12 @@ describe('BackendProxy', () => {
             'typed-storage-service:test/proxy-storage-service:dummy-storage-service:dummy-data/_id',
         );
         //* v5 B17: TestModel lost `_date` and gained the linked-mock refs in 73fadf2 (same shape as backend-service.spec).
-        expect2(() => proxy.test.$mgr.FIELDS.join(',')).toEqual(
-            'name,stereo,count,extra,mockId,mock$,mockIds,mock$$,ns,type,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id,_idx',
+        //* v5 B4: fieldsOf() is parent-first (HOW_TO § 10.5) — compare sets
+        expect2(() => [...proxy.test.$mgr.FIELDS].sort().join(',')).toEqual(
+            'name,stereo,count,extra,mockId,mock$,mockIds,mock$$,ns,type,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id,_idx'
+                .split(',')
+                .sort()
+                .join(','),
         );
 
         expect2(() => proxy.asDate(null)).toEqual('@date[null] is invalid format!');
