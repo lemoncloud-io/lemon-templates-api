@@ -269,6 +269,10 @@ functions:
           cors: ${self:custom.cors, true}
       - http:
           path: /mocks/{id}/{cmd}
+          method: get
+          cors: ${self:custom.cors, true}
+      - http:
+          path: /mocks/{id}/{cmd}
           method: post
           cors: ${self:custom.cors, true}
       # -------------------------------------------------------
