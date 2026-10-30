@@ -31,6 +31,8 @@
     "info.lemon": "sls info --param='profile=lemon' --stage dev",
     "info.lemon.prod": "sls info --param='profile=lemon' --stage prod",
     "!pack": "------- gulp 빌드후 dist 폴더에 압축한 다음, serverless를 통해서 deploy 실행 -----",
+    "pack": "node bin/pack.mjs",
+    "pack:test": "node --test bin/lib/pack*.test.mjs",
     "pack.lemon": "npm run build && sls package --param='profile=lemon' --stage dev",
     "pack.lemon.prod": "npm run build && sls package --param='profile=lemon' --stage prod",
     "!logs": "------- print logs of serverless by profile -----",

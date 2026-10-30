@@ -17,6 +17,12 @@ lemoncloud 백엔드 마이크로서비스(`<code>-<service>-api`)의 템플릿 
 | 브랜치 | 기본 브랜치 `develop`. v5 라인은 `v5` 브랜치에 있다. |
 | 패키지 버전 | `package.json` `version` |
 
+## Lambda ZIP 패키징
+
+`npm run pack`은 Docker의 Lambda Node 24 이미지에서 별도 빌드·운영 의존성 설치를 수행하고, 추출한 ZIP의 handler를 네트워크 없이 로드해 검증한다. 기본은 `x86_64`이며 `npm run pack -- --architecture arm64`로 바꿀 수 있다. ZIP과 외부 manifest는 `.artifacts/lambda/`의 새 디렉터리에 생성된다. 배포나 AWS 자격정보가 필요하지 않으며 기존 `pack.lemon` / `pack.lemon.prod`는 유지한다.
+
+옵션·포함 경계·크기 제한·재현성과 검증 범위는 [Lambda ZIP 패키징](docs/lambda-pack.md)을 참고한다. 오프라인 테스트는 `npm run pack:test`다.
+
 ## 저장소 지도
 
 | 경로 | 내용 | 누가 고치나 |

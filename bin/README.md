@@ -1,8 +1,9 @@
-# bin/ — invoke the deployed Lambda, watch its logs, check `fields/admin`, and check the loop test
+# bin/ — package Lambda, invoke deployed functions, and verify behavior
 
-Small Node scripts for test-env and prod verification after `sls deploy`.
-They call AWS directly with the SDK (no `sls`), so they work on any machine with AWS credentials.
+Node scripts for packaging and test-env/prod verification.
+`pack.mjs` uses Docker without AWS credentials. The invocation and log scripts call AWS directly with the SDK (no `sls`).
 
+- `pack.mjs` — build a verified Lambda ZIP and external manifest using an isolated Lambda Linux image. Run `npm run pack`; see [Lambda ZIP packaging](../docs/lambda-pack.md). Offline fixtures: `npm run pack:test`.
 - `lambda-invoke.mjs` — invoke the deployed function with a generated event (web, cron, SNS, SQS, or a raw JSON file).
 - `lambda-logs.mjs` — print or follow the function's CloudWatch logs (polling `FilterLogEvents`).
 - `perf-lambda.mjs` — invoke the deployed function several times and summarize cold / warm timings from the log tail, or from the full CloudWatch log with `--logs`. See [perf:lambda](#perflambda).
