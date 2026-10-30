@@ -20,7 +20,7 @@ npm run experiment --prefix tools/lambda-bundle -- --runs 10 --build-runs 3
 
 ```sh
 BUILD_DIR='.artifacts/bundle-lab/build-...'
-node bin/lambda-local.mjs \
+npm run lambda:local -- \
   --root "$BUILD_DIR/obfuscated/runtime" \
   --handler-file handler.cjs --handler-export lambda \
   --event tools/lambda-bundle/fixture/event.json --mode warm --runs 5 --json
@@ -108,7 +108,7 @@ cold는 매번 새 child/module, warm은 한 child의 순차 호출이다. `init
 
 ## 실제 templates에 적용하기 전
 
-현재 `handler.js:20`은 `source-map-support`를 설치하고 `handler.js:29-32`는 환경변수 `SRC`로 동적 `require` 대상을 결정한다. 이 경로를 그대로 정적 번들 입력으로 넣으면 필요한 파일을 빠뜨리거나 불필요한 context bundle을 만들 수 있다. 현재 pack은 `bin/lib/pack-core.mjs`에서 lock의 dependency/peer 정보를 검증·유지하고 production 설치물을 모은다. 이 실험은 그 계약을 대체하지 않는다.
+현재 `handler.js:20`은 `source-map-support`를 설치하고 `handler.js:29-32`는 환경변수 `SRC`로 동적 `require` 대상을 결정한다. 이 경로를 그대로 정적 번들 입력으로 넣으면 필요한 파일을 빠뜨리거나 불필요한 context bundle을 만들 수 있다. 현재 pack(lemon-core `lemon-lambda-pack`)은 lemon-core의 `pack-core.mjs`에서 lock의 dependency/peer 정보를 검증·유지하고 production 설치물을 모은다. 이 실험은 그 계약을 대체하지 않는다.
 
 후속 실험은 소유한 서비스 코드와 외부 dependency를 구분해야 한다. 서비스 코드의 명시 entry를 bundle하고 라이브러리·native addon·peer dependency를 external로 둘 경우, external의 실제 파일도 Linux 배포 패키지에 포함해야 한다. 프로퍼티/함수명 반사, 동적 require, 데이터 파일, side effect와 초기화 순서, 공개 export를 실서비스 경로로 검증한 뒤 범위를 넓힌다. 제삼자 코드를 난독화하거나 license 주석을 제거하는 정책도 별도로 판단해야 한다. fixture에는 제삼자 JS 소스를 bundle하지 않는다.
 

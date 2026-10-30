@@ -79,4 +79,4 @@ $ npm run test:watch /backend- /transformer. /callback/
 - 점검: `npm run loop:check -- --target express`. 기대: 다섯 줄 모두 `send=ok recv=ok`, exit 0.
 - 실제 AWS로 보내려면 `npm run express.lemon.aws`로 띄운다.
 
-spec: `api-callback-loop.spec.ts`, `api-callback-loop-mock.spec.ts`(로컬 전송 끝-끝, AWS SDK 호출 0, `tid` 이음, `x-protocol-context` 미송신), `proxy.spec.ts`(callback 요청 relay). 점검: [bin/README.md](../../../bin/README.md#loopcheck).
+spec: `api-callback-loop.spec.ts`, `api-callback-loop-mock.spec.ts`(로컬 전송 끝-끝, AWS SDK 호출 0, `tid` 이음, `x-protocol-context` 미송신), `proxy.spec.ts`(callback 요청 relay). 점검: [docs/lambda-tools.md](../../../docs/lambda-tools.md#loopcheck) (lemon-core `lemon-loop-check`).

@@ -1,5 +1,7 @@
 # Deploy verified Lambda ZIPs through eureka-deploy
 
+Since lemon-core 5.0.13 (v5 B19) the tools are the lemon-core bins `lemon-lambda-deploy` and `lemon-lambda-deploy-dev`; `npm run lambda:deploy` and `npm run lambda:deploy:dev` call them from the service root. The generic reference and the tests are in lemon-core (`docs/v5/B19-bin-deploy.md`); this page keeps this service's usage. See also [Lambda tools](lambda-tools.md).
+
 `npm run lambda:deploy` consumes the directory produced by `npm run pack`. It verifies the manifest, archive SHA-256 and extracted file inventory, then prints an **offline plan by default**. It does not load the handler, resolve AWS credentials or call the network in plan mode.
 
 Use `--apply` only after reviewing the plan. Apply creates or updates AWS resources and invokes both Lambda handlers for verification. This tool was tested with mock transports and a real existing ZIP in offline mode; no AWS deployment was performed during implementation.
@@ -126,11 +128,11 @@ If the process is killed, the last durable in-flight step is the recovery point.
 ## Verification and source contract
 
 ```sh
-npm run lambda:deploy:test
-npm run lambda:test
+npm run lambda:deploy -- --help
+npm run lambda:deploy:dev -- --help
 ```
 
-Tests use a generated real ZIP and mocked AWS/tools. They cover both modes, route drift, account/architecture/ownership guards, exact upload headers, 412 handling, unknown outcomes, partial success, interruption, secret omission, and independent HMAC verification of the SigV4 `@1` path/query. A previously packed 11,194,234-byte ZIP (9,200 files; SHA `543962ab636edc0aa60917b97d601faddb1a145f82818ae879c9ca16c9eb8e04`, source `80079ee`) was also planned with Node fetch/http/https/net access blocked by a test preload (not an OS security sandbox): code 3.39s, bootstrap 2.74s. This checks compatibility with that existing artifact, not a fresh release or AWS deployment.
+The tests run in lemon-core (`npm test`, the `deploy` and `dev-release` specs), not in this repository. They use a generated real ZIP and mocked AWS/tools. They cover both modes, route drift, account/architecture/ownership guards, exact upload headers, 412 handling, unknown outcomes, partial success, interruption, secret omission, and independent HMAC verification of the SigV4 `@1` path/query. A previously packed 11,194,234-byte ZIP (9,200 files; SHA `543962ab636edc0aa60917b97d601faddb1a145f82818ae879c9ca16c9eb8e04`, source `80079ee`) was also planned with Node fetch/http/https/net access blocked by a test preload (not an OS security sandbox): code 3.39s, bootstrap 2.74s. This checks compatibility with that existing artifact, not a fresh release or AWS deployment.
 
 Contract sources: [knowledge PR #1104](https://github.com/lemoncloud-io/knowledge/pull/1104) at `0ba8b7b0579ca4134ef5f7fb739cb1795829f232`, [eureka-deploy-api PR #40](https://github.com/lemoncloud-io/eureka-deploy-api/pull/40), and server source `6732b58d4d4eee8338d0ca1681afb19cbd4a8808`. `lemon.deploy.apply@1` is DoU-specific and is not used.
 

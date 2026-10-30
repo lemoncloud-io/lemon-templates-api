@@ -7,13 +7,13 @@
 npm run lambda:local -- --artifact .artifacts/lambda/release-candidate \
   --event event.json --env-file local-env.json --mode warm --runs 2 --json
 
-# Run the bundled synthetic fixture in separate processes.
-npm run lambda:local -- --root bin/fixtures/local \
-  --handler-file handler.cjs --handler-export lambda \
-  --event bin/fixtures/local/event.json --mode cold --runs 3 --json
+# Run the compiled service root (after `npm run build`) in separate processes.
+npm run lambda:local -- --root . --event event.json --mode cold --runs 3 --json
 
-npm run lambda:local:test
+npm run lambda:local -- --help
 ```
+
+Since lemon-core 5.0.13 (v5 B19) the tool is the lemon-core bin `lemon-lambda-local`; `npm run lambda:local` calls it from the service root. The generic reference and the tests are in lemon-core (`docs/v5/B19-bin-deploy.md`). The synthetic fixtures (`fixtures/local/`) are lemon-core test files and are not shipped.
 
 The event file is any JSON value. An environment file is an explicit JSON object of string values, for example `{"LS":"1","STAGE":"dev"}`. Keep local events, environment files, reports and extracted/private source maps out of Git. Logs and result payloads are local, unredacted output and may contain application data.
 
@@ -57,8 +57,14 @@ The report identifies the actual host OS, architecture and Node version. An arti
 
 The exported adapter is usable by the [bundle lab](lambda-bundle-research.md):
 
+The module is lemon-core's `local-runner.mjs`. It is not in the lemon-core `exports` map, so load it by file path from the installed package:
+
 ```js
-import { runLocal } from './bin/lib/local-runner.mjs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
+const coreDir = path.dirname(createRequire(import.meta.url).resolve('lemon-core/package.json'));
+const { runLocal } = await import(pathToFileURL(path.join(coreDir, 'bin', 'lib', 'local-runner.mjs')).href);
 const report = await runLocal({
   root: '/absolute/compiled-folder',
   handler: { file: 'handler.cjs', export: 'lambda' },
@@ -87,4 +93,4 @@ Native `--enable-source-maps` uses accessible maps linked from compiled files. T
 
 Hidden/private maps outside the runtime folder require offline symbolication. Preserve their build ID and matching code SHA; do not silently attach a map from a different build. `sourcesContent` can expose original code, and maps without it can still expose filenames and symbols. The bundle lab separately verifies composed maps for minified and obfuscated output.
 
-`lambda:local:test` uses real forked children for cold/warm state, JSON returns, context deadlines, environment isolation, synchronous hangs, errors/exits/unhandled rejections, log bounds, ESM networking guards, callback rejection, source-map line recovery and artifact tamper detection. `lambda:test` also includes these tests. Deployment, cloud permissions and application behavior still need their own verification.
+The `local-runner` tests of lemon-core use real forked children for cold/warm state, JSON returns, context deadlines, environment isolation, synchronous hangs, errors/exits/unhandled rejections, log bounds, ESM networking guards, callback rejection, source-map line recovery and artifact tamper detection. Deployment, cloud permissions and application behavior still need their own verification.

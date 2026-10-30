@@ -2,11 +2,16 @@ import assert from 'node:assert/strict';
 import { readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { createRequire } from 'node:module';
 import { gzipSync } from 'node:zlib';
 import { buildAll, PROFILES } from './build.mjs';
 import { symbolicateStack } from './symbolicate.mjs';
-import { runLocal } from '../../bin/lib/local-runner.mjs';
+//* v5 B19: `runLocal` moved to lemon-core (`bin/lib/local-runner.mjs`, not in its exports map); load it from the service root install.
+const coreDir = path.dirname(
+    createRequire(new URL('../../package.json', import.meta.url)).resolve('lemon-core/package.json'),
+);
+const { runLocal } = await import(pathToFileURL(path.join(coreDir, 'bin', 'lib', 'local-runner.mjs')).href);
 
 export function summarize(values) {
     const finite = values.filter(Number.isFinite).sort((a, b) => a - b);
