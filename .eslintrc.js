@@ -31,4 +31,27 @@ module.exports = {
             },
         ],
     },
+    //* v5 D107: the emitted `@types/dist` is the reverse - it names `lemon-model` only, never `lemon-core` (also checked by `npm run types:verify`).
+    overrides: [
+        {
+            files: ['@types/dist/**/*.d.ts'],
+            rules: {
+                'no-restricted-imports': [
+                    'error',
+                    {
+                        paths: [
+                            {
+                                name: 'lemon-core',
+                                message:
+                                    'v5 D107: the @types package names lemon-model only - run `npm run types` (rewrite + verify).',
+                            },
+                        ],
+                        patterns: [
+                            { group: ['lemon-core/*'], message: 'v5 D107: the @types package names lemon-model only.' },
+                        ],
+                    },
+                ],
+            },
+        },
+    ],
 };

@@ -4,11 +4,13 @@
  *
  * @author      Steve <steve@lemoncloud.io>
  * @date        2022-08-29 initial version.
+ * @date        2026-10-28 v5 B4: `MockModel` is a class with `@field()` annotations (no generated registry entry).
+ * @date        2026-10-30 v5 B4: `TestModel` is a class too; the generated registry is gone.
  *
  * Copyright (C) 2020 LemonCloud Co Ltd. - All Rights Reserved.
  */
 import { CoreModel, NextIdentityAccess, SimpleSet } from 'lemon-model';
-import $LUT from './types';
+import $LUT, { MockStereo, TestStereo } from './types';
 /**
  * type: `ModelType`
  */
@@ -26,14 +28,21 @@ export interface MockHead {
     id?: string;
     /** name of mock */
     name?: string;
+    /** stereo of mock */
+    stereo?: MockStereo | ModelType;
 }
 /**
  * `mock`: internal mock model.
  * - provice mocks data
+ * - v5 B4: a class over `CoreModel`; head fields carry `{ group: 'head' }` (was the `MockHead` registry entry).
  */
-export interface MockModel<T = string> extends MockHead, Model {
+export declare class MockModel<T = string> extends CoreModel<ModelType> implements MockHead {
+    /** id of mock */
+    id?: string;
     /** name of this model */
     name?: string;
+    /** stereo of this model */
+    stereo?: MockStereo | ModelType;
     /** alias-id when stereo='#alias' */
     aliasId?: string;
     /** json encoding all data */
@@ -48,25 +57,48 @@ export interface MockModelExt<T = string> extends MockModel<T> {
  * - common head of test-model.
  */
 export interface TestHead {
+    /** id of head */
+    id?: string;
+    /** name of model */
+    name?: string;
+    /** stereo of model */
+    stereo?: TestStereo;
     /** internal reference */
     _idx?: number;
-    /** internal date(YYYY-MM-DD) */
-    _date?: string;
 }
 /**
  * `test`: internal test model.
+ * - v5 B4: a class over `CoreModel`; head fields carry `{ group: 'head' }` (was the `TestHead` registry entry).
  */
-export interface TestModel extends Model, TestHead {
+export declare class TestModel extends CoreModel<ModelType> implements TestHead {
+    /** id of head */
+    id?: string;
     /** name of model */
     name?: string;
+    /** stereo of model */
+    stereo?: TestStereo;
+    /** internal reference */
+    _idx?: number;
     /** test count */
     count?: number;
     /** (optional) extra */
     extra?: SimpleSet;
+    /** linked mock id */
+    mockId?: string;
+    /** linked mock head */
+    mock$?: MockHead;
+    /** linked mock ids */
+    mockIds?: string[];
+    /** linked mock heads */
+    mock$$?: MockHead[];
     /**
-     * inner Object.
+     * inner Object. (view field: no `@field()`)
      */
     readonly Model?: Model;
+    /** linked mock model (view) */
+    readonly $mock?: MockModel;
+    /** linked mock models (view) */
+    readonly $mocks?: MockModel[];
     /**
      * (view) Access Infor.
      */

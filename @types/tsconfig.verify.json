@@ -1,0 +1,15 @@
+{
+  "//": "v5 D107: type-check the emitted @types/dist alone (no ambient types, lib check on) - used by bin/verify-types.ts",
+  "compilerOptions": {
+    "target": "es2019",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["es2019", "dom"],
+    "types": [],
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": false,
+    "esModuleInterop": true
+  },
+  "include": ["dist/**/*.d.ts"]
+}
