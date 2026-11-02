@@ -5,8 +5,10 @@
  * Items (`--only` picks a subset):
  *  - `pkg`   : Serverless Framework removal (packages, `sls` scripts, dev guard, docs/serverless.md record),
  *              deepmerge-safe + minimatch / test-exclude overrides, lemon-core and nodemon floors,
- *              unused dev deps (codecov, typedoc, @types/cors|request|uuid) when nothing uses them.
- *  - `bin`   : `bin/deploy-dev.sh` + `npm run deploy:dev`, `.gitignore` entries, docs/lambda-tools.md and README rows.
+ *              unused dev deps (codecov, typedoc, @types/cors|request|uuid) when nothing uses them;
+ *              packages only the removed Serverless set provided that are still used are reported (never added).
+ *  - `bin`   : `bin/deploy-dev.sh` + `npm run deploy:dev`, `.gitignore` entries, docs/lambda-tools.md and README rows
+ *              (the README table = the one with `npm run lambda:*` rows, 2-4 columns, any header language).
  *  - `types` : `@types` names lemon-model only (D107): rewrite-imports / verify-types / lemon-model-pair,
  *              init-package patch, tsconfig.verify.json, `incremental: false`, eslint override, stale tsbuildinfo.
  *
@@ -21,10 +23,12 @@
  *
  * @author      Steve <steve@lemoncloud.io>
  * @date        2026-11-03 v5 B42: initial version (lemon-templates-api `v5` = the source of every copied file).
+ * @date        2026-11-03 v5 B42 r4: transitive Serverless packages noted, README `lambda:*` table detection widened.
  *
  * @copyright (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  */
 import fs from 'fs';
+import { builtinModules } from 'module';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -200,6 +204,148 @@ const importedSomewhere = (target, mod) => {
 };
 
 // ---------------------------------------------------------------------------------------------------------------------
+// package-lock.json helpers (transitive packages of the removed Serverless set)
+// ---------------------------------------------------------------------------------------------------------------------
+//* node resolution inside the lock: `name` seen from the package at `from` (`''` = the root).
+const lockResolve = (pkgs, from, name) => {
+    for (let base = from; ; ) {
+        const cand = base ? `${base}/node_modules/${name}` : `node_modules/${name}`;
+        if (pkgs[cand]) return cand;
+        if (!base) return null;
+        const i = base.lastIndexOf('/node_modules/');
+        base = i >= 0 ? base.slice(0, i) : '';
+    }
+};
+//* the names a lock entry pulls in: dependencies, optional ones, and the peers npm installs (not the optional peers).
+const lockEdges = e => [
+    ...Object.keys(e.dependencies || {}),
+    ...Object.keys(e.optionalDependencies || {}),
+    ...Object.keys(e.peerDependencies || {}).filter(p => !(e.peerDependenciesMeta || {})[p]?.optional),
+];
+//* every lock path reachable from the root names (links followed to their folder).
+const lockClosure = (pkgs, names) => {
+    const seen = new Set();
+    const queue = names.map(n => lockResolve(pkgs, '', n)).filter(Boolean);
+    while (queue.length) {
+        const p = queue.shift();
+        if (seen.has(p)) continue;
+        seen.add(p);
+        const e = pkgs[p];
+        // a `file:` link: its dependencies resolve from the linked folder
+        const at = e.link && e.resolved && pkgs[e.resolved] ? e.resolved : p;
+        if (at !== p) queue.push(at);
+        for (const n of lockEdges(pkgs[at])) {
+            const r = lockResolve(pkgs, at, n);
+            if (r && !seen.has(r)) queue.push(r);
+        }
+    }
+    return seen;
+};
+//* `@scope/name/sub` -> `@scope/name`, `name/sub` -> `name`.
+const packageOf = spec =>
+    spec
+        .split('/')
+        .slice(0, spec.startsWith('@') ? 2 : 1)
+        .join('/');
+//* bare module specifiers: `from 'x'`, `import 'x'`, `import('x')`, `require('x')` (relative and node builtins skipped).
+const SPEC_RE = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"]([^'"./][^'"]*)['"]/g;
+//* package -> ['file:line', ...] over the given files.
+const scanImports = (target, files) => {
+    const out = {};
+    for (const f of files) {
+        read(f)
+            .split('\n')
+            .forEach((line, i) => {
+                for (const m of line.matchAll(SPEC_RE)) {
+                    if (m[1].startsWith('node:') || builtinModules.includes(m[1])) continue;
+                    const name = packageOf(m[1]);
+                    (out[name] = out[name] || []).push(`${path.relative(target, f)}:${i + 1}`);
+                }
+            });
+    }
+    return out;
+};
+//* the files whose imports must still resolve: src/, scripts/, root scripts, and the typings of the `@lemoncloud/*` deps
+//* (`missing` lists the `@lemoncloud/*` deps that are not installed, so their typings were not read).
+const importSites = (target, pkg, missing = []) => {
+    const files = [
+        ...walk(path.join(target, 'src'), ['.ts', '.js', '.mjs', '.cjs']),
+        ...walk(path.join(target, 'scripts'), ['.ts', '.js', '.mjs', '.cjs']),
+        ...fs
+            .readdirSync(target, { withFileTypes: true })
+            .filter(e => e.isFile() && /\.(js|ts|mjs|cjs)$/.test(e.name))
+            .map(e => path.join(target, e.name)),
+    ];
+    // the installed `@lemoncloud/*` typings (only when node_modules is there)
+    const declared = [...Object.keys(pkg.dependencies || {}), ...Object.keys(pkg.devDependencies || {})];
+    for (const d of declared.filter(d => d.startsWith('@lemoncloud/'))) {
+        const dir = path.join(target, 'node_modules', d);
+        if (exists(dir)) files.push(...walkTypings(dir));
+        else missing.push(d);
+    }
+    return files;
+};
+//* every `.d.ts` under an installed package (its own nested node_modules skipped; `dist` is where typings live).
+const walkTypings = (dir, out = []) => {
+    if (!exists(dir)) return out;
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+        if (e.name === 'node_modules') continue;
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) walkTypings(p, out);
+        else if (e.name.endsWith('.d.ts')) out.push(p);
+    }
+    return out;
+};
+
+/**
+ * packages that only the removed Serverless set provided (per the target's package-lock.json) and that are still used:
+ * imported by an import site, or an optional peer of a declared package. Reported as notes, never added.
+ */
+const transitiveLeftovers = (target, lock, pkg, removedNames) => {
+    const pkgs = (lock && lock.packages) || null;
+    if (!pkgs || !removedNames.length) return { found: [], unscanned: [] };
+    const declaredNames = [
+        ...Object.keys(pkg.dependencies || {}),
+        ...Object.keys(pkg.devDependencies || {}),
+        ...Object.keys(pkg.optionalDependencies || {}),
+    ];
+    // reachable from what stays declared vs. reachable from each removed package
+    const kept = lockClosure(pkgs, declaredNames);
+    const byRemoved = removedNames.map(n => [n, lockClosure(pkgs, [n])]);
+    const providers = p => byRemoved.filter(([, set]) => set.has(p)).map(([n]) => n);
+    //* the hoisted path of a name that only the removed set reaches (null when declared, kept or unrelated).
+    const lostTop = name => {
+        const p = `node_modules/${name}`;
+        return !declaredNames.includes(name) && pkgs[p] && !kept.has(p) && providers(p).length ? p : null;
+    };
+    const found = new Map(); // name -> { name, version, via, uses }
+    //* record one use of a lost package.
+    const add = (name, use) => {
+        const p = lostTop(name);
+        if (!p) return;
+        const f = found.get(name) || { name, version: pkgs[p].version, via: providers(p), uses: [] };
+        f.uses.push(use);
+        found.set(name, f);
+    };
+    // 1. imported directly by the service (or by its `@lemoncloud/*` typings)
+    const unscanned = [];
+    const imports = scanImports(target, importSites(target, pkg, unscanned));
+    for (const [name, sites] of Object.entries(imports))
+        add(name, `imported by ${sites.slice(0, 3).join(', ')}${sites.length > 3 ? ` (+${sites.length - 3})` : ''}`);
+    // 2. an optional peer of a declared package (npm does not install those on its own)
+    for (const d of declaredNames) {
+        const e = pkgs[`node_modules/${d}`];
+        if (!e) continue;
+        for (const [peer, meta] of Object.entries(e.peerDependenciesMeta || {})) {
+            if (!meta.optional) continue;
+            const users = imports[d] ? ` (${d} is imported by ${imports[d].slice(0, 2).join(', ')})` : '';
+            add(peer, `optional peer of ${d}${users}`);
+        }
+    }
+    return { found: [...found.values()], unscanned };
+};
+
+// ---------------------------------------------------------------------------------------------------------------------
 // item: pkg
 // ---------------------------------------------------------------------------------------------------------------------
 const runPkg = (ctx, opt) => {
@@ -232,6 +378,8 @@ const runPkg = (ctx, opt) => {
     );
     const mode = opt.sls === 'auto' ? (foreign.size ? 'keep' : 'full') : opt.sls;
     ctx.sls = { mode, foreign: [...foreign].sort(), packages: slsPkgs.length, scripts: slsScripts.length };
+    //* the Serverless packages this run removes (their transitive packages are checked at the end).
+    let slsRemoved = [];
     if (mode === 'keep') {
         if (slsPkgs.length || slsScripts.length)
             ctx.ownerItem(
@@ -256,6 +404,7 @@ const runPkg = (ctx, opt) => {
             delete pkg.devDependencies[k];
             delete pkg.dependencies[k];
         }
+        slsRemoved = slsPkgs;
         // scripts
         const removedScripts = slsScripts.map(([k, v]) => ({ key: k, value: v }));
         // a script whose only job is `npm run <removed>` (server-local, server.lemon) goes with it, transitively
@@ -403,6 +552,27 @@ const runPkg = (ctx, opt) => {
             `js-yaml ${pkg.devDependencies['js-yaml']} declared — run \`npm update js-yaml\` after install (templates: 3.15.2+)`,
         );
 
+    // ---- 5. packages only the removed Serverless set provided that something still uses: reported, never added
+    const leftovers = transitiveLeftovers(ctx.target, lock, pkg, slsRemoved);
+    for (const t of leftovers.found)
+        ctx.note(
+            item,
+            `${t.name} ${t.version} was only transitive via ${t.via.join(
+                ', ',
+            )} (package-lock.json) and is still used: ${t.uses.join(
+                '; ',
+            )} — declare it (dependencies if the runtime needs it, else devDependencies) or drop the use; not added automatically`,
+        );
+    if (leftovers.unscanned.length)
+        ctx.note(
+            item,
+            `transitive check: ${
+                leftovers.unscanned.length
+            } @lemoncloud/* dep(s) not installed (${leftovers.unscanned.join(
+                ', ',
+            )}) — their typings were not read; run again before \`--apply\` with node_modules in place to check them`,
+        );
+
     ctx.write(item, pkgFile, stringify(pkg, style));
     ctx.pkg = pkg;
 };
@@ -513,6 +683,37 @@ const writeServerlessDoc = (ctx, pkg, removedPkgs, removedScripts) => {
 // ---------------------------------------------------------------------------------------------------------------------
 // item: bin
 // ---------------------------------------------------------------------------------------------------------------------
+//* the README `deploy:dev` row per column count of the `npm run lambda:*` table (2 = templates, 3 = hello, 4 = with a source column).
+const README_TEXT = '수동 dev 배포 한 명령(`bin/deploy-dev.sh`): pack → 계획 → `--apply` → GET `/`·`/hello/0` 확인';
+const README_MORE =
+    '기본 `dev`·`profile=lemon`, 설정 `.artifacts/deploy.code.dev.json`이 없으면 비공개 레인 폴더에서 한 번 만든다. `--plan-only`면 계획까지만. [docs/lambda-tools.md](docs/lambda-tools.md#manual-dev-deploy-bindeploy-devsh)';
+const README_ROWS = {
+    2: `| \`npm run deploy:dev\` | ${README_TEXT}. ${README_MORE} |`,
+    3: `| \`npm run deploy:dev\` | ${README_TEXT} | ${README_MORE} |`,
+    4: `| \`npm run deploy:dev\` | \`bin/deploy-dev.sh\` | ${README_TEXT} | ${README_MORE} |`,
+};
+//* table cells of a markdown row (an escaped `\|` stays inside its cell).
+const cellCount = line => line.split(/(?<!\\)\|/).length - 2;
+/**
+ * the README table to extend: of the `|` blocks whose rows run `npm run lambda:*`, the one with the most such rows.
+ * returns the line index of its last `npm run lambda:*` row and the column count of its header, or null.
+ */
+const readmeLambdaRow = lines => {
+    let best = null;
+    for (let i = 0; i < lines.length; i++) {
+        if (!lines[i].startsWith('|') || (i > 0 && lines[i - 1].startsWith('|'))) continue;
+        // one table = consecutive `|` lines from here
+        let j = i;
+        while (j + 1 < lines.length && lines[j + 1].startsWith('|')) j++;
+        const rows = [];
+        for (let k = i; k <= j; k++) if (/\bnpm run lambda:/.test(lines[k])) rows.push(k);
+        if (rows.length && (!best || rows.length > best.rows))
+            best = { index: rows[rows.length - 1], cols: cellCount(lines[i]), rows: rows.length };
+        i = j;
+    }
+    return best;
+};
+
 const runBin = ctx => {
     const item = 'bin';
     const name = ctx.name;
@@ -592,26 +793,23 @@ const runBin = ctx => {
         else lines.push('', ...block.split('\n'));
         ctx.write(item, tools, lines.join('\n'), 'deploy:dev row + section');
     }
-    // README: a row after the `lambda:migrate` row when the README has that table
+    // README: a `deploy:dev` row in the table that lists `npm run lambda:*` rows (any header language, 2-4 columns)
     const readme = path.join(ctx.target, 'README.md');
-    if (exists(readme) && !read(readme).includes('deploy:dev')) {
+    if (exists(readme)) {
         const lines = read(readme).split('\n');
-        const idx = lines.findIndex(l => /^\|\s*`npm run lambda:(migrate|deploy)/.test(l));
-        if (idx >= 0) {
-            const cols = lines[idx].split('|').length - 2;
-            const row =
-                cols >= 3
-                    ? '| `npm run deploy:dev` | 수동 dev 배포 한 명령(`bin/deploy-dev.sh`): pack → 계획 → `--apply` → GET `/`·`/hello/0` 확인 | 기본 `dev`·`profile=lemon`, 설정 `.artifacts/deploy.code.dev.json`이 없으면 비공개 레인 폴더에서 한 번 만든다. `--plan-only`면 계획까지만. [docs/lambda-tools.md](docs/lambda-tools.md#manual-dev-deploy-bindeploy-devsh) |'
-                    : '| `npm run deploy:dev` | 수동 dev 배포 한 명령(`bin/deploy-dev.sh`): pack → 계획 → `--apply` → GET `/`·`/hello/0` 확인. 기본 `dev`·`profile=lemon`, 설정 `.artifacts/deploy.code.dev.json`이 없으면 비공개 레인 폴더에서 한 번 만든다. `--plan-only`면 계획까지만. [docs/lambda-tools.md](docs/lambda-tools.md#manual-dev-deploy-bindeploy-devsh) |';
-            // keep the row inside the table: skip following rows of the same table
-            let at = idx;
-            while (at + 1 < lines.length && lines[at + 1].startsWith('|')) at++;
-            lines.splice(at + 1, 0, row);
-            ctx.write(item, readme, lines.join('\n'), 'deploy:dev row');
-        } else
+        //* a row naming `npm run deploy:dev` itself (`npm run lambda:deploy:dev` is another script).
+        const hasRow = lines.some(l => l.startsWith('|') && /\bnpm run deploy:dev\b/.test(l));
+        const at = hasRow ? null : readmeLambdaRow(lines);
+        const row = at && README_ROWS[at.cols];
+        if (row) {
+            lines.splice(at.index + 1, 0, row);
+            ctx.write(item, readme, lines.join('\n'), `deploy:dev row (${at.cols} columns)`);
+        } else if (!hasRow)
             ctx.note(
                 item,
-                'README.md: no `npm run lambda:*` table — add one line about `npm run deploy:dev` (bin/deploy-dev.sh) by hand',
+                at
+                    ? `README.md: the \`npm run lambda:*\` table has ${at.cols} columns — add the \`npm run deploy:dev\` (bin/deploy-dev.sh) row by hand`
+                    : 'README.md: no `npm run lambda:*` table — add one line about `npm run deploy:dev` (bin/deploy-dev.sh) by hand',
             );
     }
 };

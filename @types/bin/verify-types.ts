@@ -5,6 +5,7 @@
  *   or `@lemoncloud/*`, and no `lemon-core` text at all (comments too);
  *   and `dist` holds `.d.ts` files only (a `tsbuildinfo` would carry `lemon-core` paths into the published package).
  * - (b) the declarations type-check alone (`tsconfig.verify.json`): every name taken from `lemon-model` exists there (no TS2305/TS2307/TS2724).
+ *   `lemon-model` and `lemon-model/*` resolve to the pair of the installed lemon-core (`paths`), never to the hoisted root copy.
  * - (c) `package.json` depends on `lemon-model` / `@lemoncloud/*` only, `lemon-model` is `^<installed>`, name and version follow the service.
  *
  * ```sh
@@ -14,6 +15,7 @@
  * @author      Steve <steve@lemoncloud.io>
  * @date        2026-11-03 v5 D107: initial version, ported from eureka-cognitos-api B41 R2.
  * @date        2026-11-03 v5 D107 r3: exported `lemon-model/<subpath>` specifiers allowed (the package still names lemon-model only).
+ * @date        2026-11-03 v5 D107 r4: (b) resolves `lemon-model` to the pair folder (not a hoisted old 1.x from `@lemoncloud/*`).
  *
  * @copyright (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  */
@@ -98,8 +100,20 @@ const checkSpecifiers = (files: string[], errors: string[], subpaths: Set<string
     return imports;
 };
 
+//* `paths` that pin `lemon-model` to the pair folder: the root, each exported subpath (its `types`), then any other subpath.
+const modelPaths = (modelDir: string): ts.MapLike<string[]> => {
+    const $model = loadJson(path.join(modelDir, 'package.json'));
+    const out: ts.MapLike<string[]> = { 'lemon-model': [modelDir] };
+    Object.entries<any>($model.exports || {}).forEach(([k, v]) => {
+        if (!k.startsWith('./') || k === './package.json' || typeof v?.types !== 'string') return;
+        out[`lemon-model/${k.slice(2)}`] = [path.join(modelDir, v.types)];
+    });
+    out['lemon-model/*'] = [path.join(modelDir, '*')];
+    return out;
+};
+
 //* (b) type-check the declarations alone; any diagnostic in `dist`, or a missing module/name anywhere, fails.
-const checkTypes = (errors: string[]) => {
+const checkTypes = (errors: string[], modelDir: string) => {
     const configFile = path.join(ROOT, 'tsconfig.verify.json');
     const parsed = ts.getParsedCommandLineOfConfigFile(
         configFile,
@@ -111,7 +125,22 @@ const checkTypes = (errors: string[]) => {
         },
     );
     if (!parsed) return 0;
-    const program = ts.createProgram(parsed.fileNames, parsed.options);
+    //* in-memory only: `lemon-model` is the pair folder, whatever npm hoisted to the service root.
+    const options = { ...parsed.options, paths: modelPaths(modelDir) };
+    const program = ts.createProgram(parsed.fileNames, options);
+    //* every loaded `lemon-model` file must come from the pair folder (a hoisted copy would check the wrong names).
+    const pair = fs.realpathSync(modelDir) + path.sep;
+    const outside = program
+        .getSourceFiles()
+        .map(sf => sf.fileName)
+        .filter(f => /[\\/]node_modules[\\/]lemon-model[\\/]/.test(f) && !fs.realpathSync(f).startsWith(pair));
+    if (outside.length)
+        errors.push(
+            `(b) ${outside.length} lemon-model file(s) loaded outside the pair folder, ex: ${path.relative(
+                SERVICE,
+                outside[0],
+            )}`,
+        );
     const diags = ts.getPreEmitDiagnostics(program);
     const notes: string[] = [];
     diags.forEach(d => {
@@ -160,12 +189,19 @@ const main = () => {
     listOthers(DIST).forEach(f =>
         errors.push(`(a) ${path.relative(ROOT, f)}: not a .d.ts - dist holds declarations only`),
     );
-    //* the pair of the installed lemon-core (throws on a stale install) - its `exports` name the allowed subpaths.
-    const imports = checkSpecifiers(files, errors, modelSubpaths(lemonModelPair(SERVICE).modelDir));
-    const checked = checkTypes(errors);
+    //* the pair of the installed lemon-core (throws on a stale install) - its `exports` name the allowed subpaths,
+    //* and (b) resolves `lemon-model` there.
+    const modelDir = lemonModelPair(SERVICE).modelDir;
+    const imports = checkSpecifiers(files, errors, modelSubpaths(modelDir));
+    const checked = checkTypes(errors, modelDir);
     const pkg = checkPackage(errors);
     console.info(`[verify-types] ${pkg.name}@${pkg.version} deps=${JSON.stringify(pkg.deps)}`);
-    console.info(`[verify-types] ${files.length} d.ts, ${checked} file(s) type-checked`);
+    console.info(
+        `[verify-types] ${files.length} d.ts, ${checked} file(s) type-checked, lemon-model from ${path.relative(
+            SERVICE,
+            modelDir,
+        )}`,
+    );
     Object.entries(imports).forEach(([mod, names]) =>
         console.info(`[verify-types] import '${mod}': ${[...names].sort().join(', ')}`),
     );
