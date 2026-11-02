@@ -76,7 +76,11 @@ export class BackendService extends MyCoreService<Model, ModelType, BackendProxy
         return proxy;
     };
 
-    /** */
+    /**
+     * fetch the identity-access of the current identity via `lemon-accounts-api` (pack-context).
+     *
+     * @deprecated `lemon-accounts-api` is deprecated (2026-11-03). No caller in this service — do not add new callers.
+     */
     protected async fetchAccess($ctx: NextContext, domain = '') {
         const accountId = getIdentityId($ctx);
         if (!accountId) throw new Error(`.identityId is required - fetchAccess()!`);
