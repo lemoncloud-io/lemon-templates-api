@@ -10,6 +10,7 @@
  * @date        2025-07-01 optimized w/ `lemon-core#4.0.4`
  * @date        2025-12-30 optimized w/ `lemon-core#4.1.5`
  * @date        2026-10-30 v5 B16: `lemon-core` dependency kept as is (lemon-model comes through lemon-core).
+ * @date        2026-11-03 v5 D107: `lemon-model` version from the installed package (the pair of lemon-core), never `lemon-core`.
  *
  * @copyright (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  */
@@ -30,6 +31,8 @@ interface MainFunc {
  * MAIN FUNCTION
  *  *******************************************************************************************************************/
 const loadJsonSync = (file: string): any => JSON.parse(fs.readFileSync(file).toString());
+//* version of the installed `lemon-model` (the one lemon-core resolves), so the types package names the same pair.
+const modelVersion = (): string => loadJsonSync(require.resolve('lemon-model/package.json')).version;
 const saveJsonSync = (json: any, file?: string) => {
     const txt = JSON.stringify(json, null, 2);
     if (file) fs.writeFileSync(file, txt);
@@ -53,10 +56,12 @@ const makePackage = () => {
     const $tar = loadJsonSync(target);
     _log(NS, `> tar.name =`, $tar.name);
 
-    //* grap the dependencies to include in types
+    //* grap the dependencies to include in types (`lemon-core` -> `lemon-model` only; `verify-types.ts` checks it)
+    const MODEL_VERSION = modelVersion();
+    _log(NS, `> lemon-model =`, MODEL_VERSION);
     const dependencies = Object.entries($src.dependencies).reduce<SimpleSet>((M, [k, v]) => {
-        //* v5 B16: keep the parent's `lemon-core` range (no direct `lemon-model` any more).
-        if (k == 'lemon-core') M['lemon-core'] = `${v}`;
+        if (k == 'lemon-core') M['lemon-model'] = `^${MODEL_VERSION}`;
+        else if (k == 'lemon-model') M['lemon-model'] = `${v}`;
         else if (k.startsWith('@lemoncloud/')) M[k] = `${v}`;
         return M;
     }, {});

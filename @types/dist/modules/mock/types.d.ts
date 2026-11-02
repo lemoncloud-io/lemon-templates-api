@@ -33,10 +33,20 @@ declare const $LUT: {
         '#': string;
         '#alias': string;
     };
+    /** type: TestStereo */
+    TestStereo: {
+        '': string;
+        '#': string;
+        '#meta': string;
+    };
 };
 /**
  * type: `MockStereo`
  */
 export declare type MockStereo = keyof typeof $LUT.MockStereo;
+/**
+ * type: `TestStereo`
+ */
+export declare type TestStereo = keyof typeof $LUT.TestStereo;
 /** must export $LUT as default */
 export default $LUT;

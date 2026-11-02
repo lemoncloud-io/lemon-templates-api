@@ -3,7 +3,8 @@
   "compilerOptions": {
     "emitDeclarationOnly": true,
     "removeComments": false,
-    "outDir": "dist"
+    "outDir": "dist",
+    "incremental": false
   },
   "exclude": [
       "node_modules",
