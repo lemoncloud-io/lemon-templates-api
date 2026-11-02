@@ -36,6 +36,8 @@ module.exports = {
         {
             files: ['@types/dist/**/*.d.ts'],
             rules: {
+                //* tsc drops `eslint-disable` comments from the emit: `interface X extends Y {}` in view types is fine here.
+                '@typescript-eslint/no-empty-interface': 'off',
                 'no-restricted-imports': [
                     'error',
                     {

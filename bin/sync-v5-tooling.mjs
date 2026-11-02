@@ -383,6 +383,8 @@ const runPkg = (ctx, opt) => {
         if (docScripts.length) ctx.act(item, 'update', pkgFile, `scripts: -${docScripts.join(', -')}`);
         ctx.remove(item, path.join(ctx.target, 'typedoc.json'), 'typedoc removed');
     }
+    if (!('typedoc' in pkg.devDependencies))
+        ctx.remove(item, path.join(ctx.target, 'typedoc.json'), 'typedoc is not declared');
     // @types/x whose runtime module is neither declared nor imported
     for (const [typesPkg, mod] of Object.entries(TYPES_DEPS)) {
         if (!(typesPkg in pkg.devDependencies)) continue;
