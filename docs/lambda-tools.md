@@ -26,8 +26,30 @@ This page keeps only what is specific to this service. The tests of the tools ar
 | `perf:lambda`       | `lemon-lambda-perf`       | Invoke several times and summarize cold / warm timings.                             |                                                              |
 | `fields:admin`      | `lemon-fields-admin`      | Check `GET /<type>/fields/admin` on the local server or the deployed Lambda.        | [fields:admin](#fieldsadmin)                                 |
 | `loop:check`        | `lemon-loop-check`        | Check the SNS / SQS / protocol / notify / enqueue loop test.                        | [loop:check](#loopcheck)                                     |
+| `deploy:dev`        | `bin/deploy-dev.sh`       | Manual dev deploy: pack → plan → `--apply` → probe, in one command. Human-run only. | [Manual dev deploy](#manual-dev-deploy-bindeploy-devsh)      |
 
 `lemon-lambda-migrate` and `lemon-lambda-deploy-dev` pin their target to this service (`lemon-templates-api`, stage `dev`); the pin lives in lemon-core, not here.
+
+### Manual dev deploy (`bin/deploy-dev.sh`)
+
+`npm run deploy:dev` is the one-command path for a human to ship the current checkout to the `lemon` dev stage. It wraps the same tools as the rows above and runs them in the lane order — nothing in it is new deploy logic.
+
+1. Preflight: `package.json` + `pack.config.json` present, stage `dev` only (prod stays a Serverless stack, see [serverless.md](serverless.md)), Node ≥ 24, `jq`, `aws`, `docker`, lemon-core bins installed, config in **code mode** with matching `stage` / `profile` / `project` (`project` = `package.json` `name`), `aws sts get-caller-identity` (account redacted).
+2. Pack: `npm run pack -- --output .artifacts/lambda/dev-<time>-<sha>` (Docker). `--skip-pack --artifact <dir>` reuses an existing pack.
+3. Offline plan: `lambda:deploy --config … --artifact …` → `<artifact>/plan.dev.json`, summary printed with account / endpoint redacted. `--plan-only` stops here.
+4. Apply: a **separate** `lambda:deploy … --apply --receipt-dir .artifacts/deploy/receipts` command; the run must end `completed`. No prompt by default — `--ask` inserts a confirm step.
+5. Probe: `lambda:invoke --path /` and `/hello/0`.
+
+Config: `.artifacts/deploy.code.dev.json` (git-ignored). When it is missing the script fills it once — copies `deploy.code.dev.json` from the private lane folder `../.wt/v5-private/<service>/` next to the main checkout (override with `DEPLOY_PRIVATE_DIR`), else reduces that folder's `deploy.dev.json` to code mode with `jq`, else writes the example and stops so the real values can be filled in. The file holds account / endpoint / bucket values and is never committed.
+
+Difference from `lambda:deploy:dev`: that bin is lemon-core's guarded registry release (target pinned in lemon-core). `deploy:dev` is this repository's own wrapper around pack + plan + apply + probe and reads the local config instead.
+
+```bash
+npm run deploy:dev                                   # pack → plan → apply → probe
+npm run deploy:dev -- --plan-only                    # pack + plan, no AWS change
+npm run deploy:dev -- --skip-pack --artifact .artifacts/lambda/dev-20261103-1200-abc1234
+npm run deploy:dev -- --ask                          # confirm before --apply
+```
 
 ## What the tools read in this repository
 

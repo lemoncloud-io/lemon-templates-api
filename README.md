@@ -145,6 +145,7 @@ flowchart LR
 |---|---|
 | `npm run lambda:deploy -- --apply ...` | 배포 실행(`lemon-lambda-deploy`). 기본은 계획만 보인다. [docs/lambda-deploy.md](docs/lambda-deploy.md) |
 | `npm run lambda:migrate` / `lambda:deploy:dev` | 가드된 이행·dev 릴리스. [docs/lambda-migrate.md](docs/lambda-migrate.md) |
+| `npm run deploy:dev` | 수동 dev 배포 한 명령(`bin/deploy-dev.sh`): pack → 계획 → `--apply` → GET `/`·`/hello/0` 확인. 기본 `dev`·`profile=lemon`, 설정 `.artifacts/deploy.code.dev.json`이 없으면 비공개 레인 폴더에서 한 번 만든다. `--plan-only`면 계획까지만. [docs/lambda-tools.md](docs/lambda-tools.md#manual-dev-deploy-bindeploy-devsh) |
 
 Serverless Framework 패키지(`sls`)는 설치하지 않는다. 설정 파일 `serverless.yml`·`serverless-vpc.yml`은 남아 있고, `sls`로 직접 배포·운영하려면 [docs/serverless.md](docs/serverless.md)의 권장 구성(패키지·스크립트)을 다시 넣는다.
 
