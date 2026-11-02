@@ -78,3 +78,6 @@ typings/
 # Verified Lambda ZIPs and external manifests (npm run pack)
 .artifacts/
 .pack-publish-*/
+
+# nested git worktrees of this repo (agent lanes)
+.claude/worktrees/
