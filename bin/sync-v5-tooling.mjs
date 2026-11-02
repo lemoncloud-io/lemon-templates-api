@@ -640,9 +640,19 @@ const runTypes = ctx => {
         "//* the `lemon-model` that the installed lemon-core declares (its pair) - fails on a stale install (see lemon-model-pair.ts).\nconst MODEL_VERSION = lemonModelPair(path.resolve(__dirname, '..', '..')).modelVersion;\n";
     const DATE_LINE =
         ' * @date        2026-11-03 v5 D107: `lemon-model` version from the installed package (the pair of lemon-core), never `lemon-core`.\n';
+    // D107 r3: a direct root `lemon-model` pin must also name the pair (verify (c) wants `^<installed>`) - every variant
+    const PIN_OLD = "        else if (k == 'lemon-model') M['lemon-model'] = `${v}`;\n";
+    const PIN_NEW =
+        "        //* D107: a direct `lemon-model` pin also names the pair (verify-types (c) wants `^<installed>`).\n        else if (k == 'lemon-model') M['lemon-model'] = `^${MODEL_VERSION}`;\n";
+    const pinPatch = txt => txt.replace(PIN_OLD, PIN_NEW);
     if (!exists(initFile)) ctx.copy(item, '@types/bin/init-package.ts');
-    else if (read(initFile) === srcInit || read(initFile).includes('lemonModelPair')) {
-        /* already pair-based */
+    else if (read(initFile) === srcInit) {
+        /* same as the recipe */
+    } else if (read(initFile).includes('lemonModelPair')) {
+        // already pair-based (B41 R2 / an earlier run): only the pin patch may still apply
+        const txt = read(initFile);
+        if (pinPatch(txt) !== txt)
+            ctx.write(item, initFile, pinPatch(txt), 'D107 r3: direct lemon-model pin -> the pair');
     } else {
         let txt = read(initFile);
         const usesConst = CONST_RE.test(txt) && txt.includes('`^${MODEL_VERSION}`');
@@ -665,8 +675,9 @@ const runTypes = ctx => {
             if (usesCoreRange)
                 txt = txt.replace(
                     "        //* v5 B16: keep the parent's `lemon-core` range (no direct `lemon-model` any more).\n        if (k == 'lemon-core') M['lemon-core'] = `${v}`;\n",
-                    "        if (k == 'lemon-core') M['lemon-model'] = `^${MODEL_VERSION}`;\n        else if (k == 'lemon-model') M['lemon-model'] = `${v}`;\n",
+                    "        if (k == 'lemon-core') M['lemon-model'] = `^${MODEL_VERSION}`;\n" + PIN_NEW,
                 );
+            txt = pinPatch(txt);
             // 4. header: one @date line after the last one
             const dates = [...txt.matchAll(/^ \* @date .*\n/gm)];
             if (dates.length) {

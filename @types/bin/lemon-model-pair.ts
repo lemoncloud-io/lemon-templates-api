@@ -70,5 +70,7 @@ export const lemonModelPair = (serviceDir: string) => {
         coreRange: range,
         modelVersion: model.version as string,
         modelDeclared: declared,
+        //* the installed lemon-model folder (its `exports` name the subpaths a types package may import).
+        modelDir: path.dirname(modelPkg),
     };
 };

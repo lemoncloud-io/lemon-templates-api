@@ -1,7 +1,8 @@
 /**
  * `bin/verify-types.ts`
  * - verify the `@types` package names `lemon-model` only, never `lemon-core` (owner decision 2026-11-03).
- * - (a) every module specifier in `dist/**\/*.d.ts` is relative, `lemon-model` or `@lemoncloud/*`, and no `lemon-core` text at all (comments too);
+ * - (a) every module specifier in `dist/**\/*.d.ts` is relative, `lemon-model` (or a subpath its `exports` names, ex: `lemon-model/upload`)
+ *   or `@lemoncloud/*`, and no `lemon-core` text at all (comments too);
  *   and `dist` holds `.d.ts` files only (a `tsbuildinfo` would carry `lemon-core` paths into the published package).
  * - (b) the declarations type-check alone (`tsconfig.verify.json`): every name taken from `lemon-model` exists there (no TS2305/TS2307/TS2724).
  * - (c) `package.json` depends on `lemon-model` / `@lemoncloud/*` only, `lemon-model` is `^<installed>`, name and version follow the service.
@@ -12,6 +13,7 @@
  *
  * @author      Steve <steve@lemoncloud.io>
  * @date        2026-11-03 v5 D107: initial version, ported from eureka-cognitos-api B41 R2.
+ * @date        2026-11-03 v5 D107 r3: exported `lemon-model/<subpath>` specifiers allowed (the package still names lemon-model only).
  *
  * @copyright (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  */
@@ -54,11 +56,19 @@ const listOthers = (dir: string): string[] =>
                 : [path.join(dir, e.name)],
         );
 
-//* allowed module: relative, `lemon-model` (exact), or `@lemoncloud/*`.
-const isAllowed = (name: string) => name.startsWith('.') || name === 'lemon-model' || name.startsWith('@lemoncloud/');
+//* the subpaths the installed lemon-model exports (`./upload` -> `lemon-model/upload`); `./package.json` is not a type module.
+const modelSubpaths = (modelDir: string): Set<string> => {
+    const $model = loadJson(path.join(modelDir, 'package.json'));
+    const keys = Object.keys($model.exports || {}).filter(k => k.startsWith('./') && k !== './package.json');
+    return new Set(keys.map(k => `lemon-model/${k.slice(2)}`));
+};
+
+//* allowed module: relative, `lemon-model` (exact or an exported subpath), or `@lemoncloud/*`.
+const isAllowed = (name: string, subpaths: Set<string>) =>
+    name.startsWith('.') || name === 'lemon-model' || subpaths.has(name) || name.startsWith('@lemoncloud/');
 
 //* (a) module specifiers and `lemon-core` text; also returns the `lemon-model` names per file for the report.
-const checkSpecifiers = (files: string[], errors: string[]) => {
+const checkSpecifiers = (files: string[], errors: string[], subpaths: Set<string>) => {
     const imports: { [module: string]: Set<string> } = {};
     files.forEach(file => {
         const rel = path.relative(ROOT, file);
@@ -70,7 +80,7 @@ const checkSpecifiers = (files: string[], errors: string[]) => {
         //* every module specifier must be allowed.
         const info = ts.preProcessFile(text, true, true);
         [...info.importedFiles, ...info.typeReferenceDirectives].forEach(r => {
-            if (!isAllowed(r.fileName)) errors.push(`(a) ${rel}: module '${r.fileName}' is not allowed`);
+            if (!isAllowed(r.fileName, subpaths)) errors.push(`(a) ${rel}: module '${r.fileName}' is not allowed`);
         });
         //* collect imported names of the non-relative modules (report only).
         const sf = ts.createSourceFile(file, text, ts.ScriptTarget.Latest, false);
@@ -150,7 +160,8 @@ const main = () => {
     listOthers(DIST).forEach(f =>
         errors.push(`(a) ${path.relative(ROOT, f)}: not a .d.ts - dist holds declarations only`),
     );
-    const imports = checkSpecifiers(files, errors);
+    //* the pair of the installed lemon-core (throws on a stale install) - its `exports` name the allowed subpaths.
+    const imports = checkSpecifiers(files, errors, modelSubpaths(lemonModelPair(SERVICE).modelDir));
     const checked = checkTypes(errors);
     const pkg = checkPackage(errors);
     console.info(`[verify-types] ${pkg.name}@${pkg.version} deps=${JSON.stringify(pkg.deps)}`);
