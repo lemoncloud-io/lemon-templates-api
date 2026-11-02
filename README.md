@@ -149,6 +149,8 @@ flowchart LR
 
 Serverless Framework 패키지(`sls`)는 설치하지 않는다. 설정 파일 `serverless.yml`·`serverless-vpc.yml`은 남아 있고, `sls`로 직접 배포·운영하려면 [docs/serverless.md](docs/serverless.md)의 권장 구성(패키지·스크립트)을 다시 넣는다.
 
+이 저장소는 v5 서비스의 레시피다. 다른 v5 서비스에 같은 도구(Serverless 제거·`deepmerge` overrides, `bin/deploy-dev.sh`, `@types` lemon-model 전용)를 옮기려면 `node bin/sync-v5-tooling.mjs --target <서비스 체크아웃>`을 쓴다. 기본은 보고만, `--apply`가 쓴다. [docs/sync-v5-tooling.md](docs/sync-v5-tooling.md)
+
 소스 주석의 `:8888` 예시는 꺼진 `serverless-offline`의 포트다. 로컬 express 포트는 8800이다.
 
 ## 작업 검증
