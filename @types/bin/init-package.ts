@@ -18,6 +18,7 @@
 import path from 'path';
 import fs from 'fs';
 import $engine, { $U, ConfigService, SimpleSet, _inf, _log } from 'lemon-core';
+import { lemonModelPair } from './lemon-model-pair';
 const NS = $U.NS('main', 'yellow'); // NAMESPACE TO BE PRINTED.
 
 /**
@@ -31,8 +32,8 @@ interface MainFunc {
  * MAIN FUNCTION
  *  *******************************************************************************************************************/
 const loadJsonSync = (file: string): any => JSON.parse(fs.readFileSync(file).toString());
-//* version of the installed `lemon-model` (the one lemon-core resolves), so the types package names the same pair.
-const modelVersion = (): string => loadJsonSync(require.resolve('lemon-model/package.json')).version;
+//* the `lemon-model` that the installed lemon-core declares (its pair) - fails on a stale install (see lemon-model-pair.ts).
+const modelVersion = (): string => lemonModelPair(path.resolve(__dirname, '..', '..')).modelVersion;
 const saveJsonSync = (json: any, file?: string) => {
     const txt = JSON.stringify(json, null, 2);
     if (file) fs.writeFileSync(file, txt);

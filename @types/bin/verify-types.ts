@@ -18,6 +18,7 @@
 import path from 'path';
 import fs from 'fs';
 import ts from 'typescript';
+import { lemonModelPair } from './lemon-model-pair';
 
 //* paths of the types package and of the service.
 const ROOT = path.resolve(__dirname, '..');
@@ -122,13 +123,18 @@ const checkTypes = (errors: string[]) => {
 const checkPackage = (errors: string[]) => {
     const $svc = loadJson(path.join(SERVICE, 'package.json'));
     const $pkg = loadJson(path.join(ROOT, 'package.json'));
-    const modelVersion = loadJson(require.resolve('lemon-model/package.json', { paths: [SERVICE] })).version;
+    //* the pair of the installed lemon-core (throws on a stale install: wrong lemon-core, or an old hoisted lemon-model).
+    const modelVersion = lemonModelPair(SERVICE).modelVersion;
     const deps: { [k: string]: string } = $pkg.dependencies || {};
     Object.keys(deps).forEach(k => {
         if (k !== 'lemon-model' && !k.startsWith('@lemoncloud/')) errors.push(`(c) dependency '${k}' is not allowed`);
     });
     if (deps['lemon-model'] !== `^${modelVersion}`)
-        errors.push(`(c) lemon-model '${deps['lemon-model'] ?? ''}' != '^${modelVersion}' (installed)`);
+        errors.push(
+            `(c) lemon-model '${
+                deps['lemon-model'] ?? ''
+            }' != '^${modelVersion}' (the pair of the installed lemon-core)`,
+        );
     if ($pkg.name !== `@lemoncloud/${$svc.name}`) errors.push(`(c) name '${$pkg.name}' != '@lemoncloud/${$svc.name}'`);
     if ($pkg.version !== $svc.version) errors.push(`(c) version '${$pkg.version}' != '${$svc.version}'`);
     if (!fs.existsSync(path.join(ROOT, $pkg.types || ''))) errors.push(`(c) types entry '${$pkg.types}' is missing`);
