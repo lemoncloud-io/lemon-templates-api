@@ -12,6 +12,7 @@
 import { loadProfile } from 'lemon-core/dist/environ';
 import { $U, expect2, GETERR } from 'lemon-core';
 import { CallbackAPIController } from './api-callback';
+import { CallbackManagerProxy } from './proxy';
 
 import { AuthType, ServiceParams } from '../../service/backend-service.spec';
 import * as $proxy from '../../service/backend-service.spec';
@@ -157,5 +158,48 @@ describe('CallbackAPIController', () => {
         expect2(await api.doGet(view1st.id).catch(GETERR)).toEqual(
             `404 NOT FOUND - deleted at ${$U.ts(current)} @doGet(${api.type()}/1000001)`,
         );
+    });
+    //! v5 PR #32: custom handler `id` of `POST /callback/{id}/request` is admin only via `hasAdminRole()` (HOW_TO_UPGRADE_V5 § 11.3).
+    describe('doPostRequest custom id gate', () => {
+        const body = { service: 'lemon-hello-api', type: 'hello', id: 'echo', body: { name: 'hello' } } as any;
+        //* not local mode: `isLocalMode()` needs `LOCAL_MODE=1`, so drop it (and the Lambda name, as B17 restores both).
+        const notLocal = () => {
+            delete process.env.LOCAL_MODE;
+            delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+        };
+        //* stub the downstream request so only the gate is under test.
+        const stubRequest = () =>
+            jest.spyOn(CallbackManagerProxy.prototype, 'doRequest').mockResolvedValue({ id: 'echo' } as any);
+        afterEach(() => jest.restoreAllMocks());
+
+        it('should 403 when not local and no admin role', async () => {
+            const { api } = instance();
+            notLocal();
+            const spy = stubRequest();
+            const ctx: any = { identity: { roles: ['user'] } };
+            expect2(await api.doPostRequest('echo', {}, body, ctx).catch(GETERR)).toEqual(
+                `403 NOT ALLOWED - only for admin @doPostRequest(callback/echo)`,
+            );
+            expect2(() => spy.mock.calls.length).toEqual(0);
+        });
+
+        it('should pass the gate in local mode (LOCAL_MODE=1)', async () => {
+            const { api } = instance();
+            useLocalMode();
+            const spy = stubRequest();
+            expect2(await api.doPostRequest('echo', {}, body, null).catch(GETERR)).toMatchObject({ id: 'echo' });
+            expect2(() => spy.mock.calls[0]).toEqual(['echo', body, { isProd: false, isSimul: false }]);
+        });
+
+        it('should pass the gate with the admin role claim (not local)', async () => {
+            const { api } = instance();
+            notLocal();
+            const spy = stubRequest();
+            const ctx: any = { identity: { roles: ['admin'] } };
+            expect2(await api.doPostRequest('echo', { prod: '' }, body, ctx).catch(GETERR)).toMatchObject({
+                id: 'echo',
+            });
+            expect2(() => spy.mock.calls[0]).toEqual(['echo', body, { isProd: true, isSimul: false }]);
+        });
     });
 });

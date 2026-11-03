@@ -87,7 +87,7 @@ A deletion between preflight and ensure-function remains a race: the server can 
 
 ## Bootstrap settings and route compatibility
 
-The example mirrors all **18** HTTP route entries in the current `serverless.yml`: nine public and nine AWS_IAM routes. The drift test compares path, method, authorization and CORS. OPTIONS methods are created by the route tool; do not put OPTIONS entries into the config.
+The example mirrors all **19** HTTP route entries in the current `serverless.yml`: ten public and nine AWS_IAM routes. The drift test compares path, method, authorization and CORS. OPTIONS methods are created by the route tool; do not put OPTIONS entries into the config.
 
 Bootstrap uses a PAY_PER_REQUEST `_id` string-key table with NEW_AND_OLD_IMAGES streams, explicit deletion protection, the legacy queue settings, 14-day logs, 512 MB functions with 30/300 second timeouts, and a disabled minute schedule. These are concrete template defaults, not universal production recommendations. Existing table settings that the server does not converge may fail verification; retained-resource migration is not automatic. Bootstrap replaces the managed role's whole policy with the resolved policy; the server's statement-drop guard can refuse a change. It never opts into statement dropping.
 
