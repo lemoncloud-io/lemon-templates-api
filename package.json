@@ -27,6 +27,7 @@
     "fields:admin": "lemon-fields-admin",
     "loop:check": "lemon-loop-check",
     "deploy:dev": "bash bin/deploy-dev.sh",
+    "ship:check": "bash bin/ship-check.sh",
     "!test": "------- run self-test with jest -----",
     "test": "LS=1 jest --config=jest.config.json",
     "test:dev": "LS=1 jest --config=jest.config.json --watchAll",
