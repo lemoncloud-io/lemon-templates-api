@@ -165,10 +165,11 @@ export class CallbackAPIController extends AbstractCRUDController<
         id = id === '0' ? '' : $T.S2(id);
 
         // STEP.0 validate parameter
-        const isLocal = $U.isLocalMode(); //* v5 B5: custom `id` only in local mode, not from `$ctx.domain`.
         const isProd = !!$T.BN(param?.prod, param?.prod === '' ? 1 : 0);
         const isSimul = !!$T.BN(param?.simul, param?.simul === '' ? 1 : 0);
-        if (id && !isLocal) throw new Error(`@id[${id}] is invalid - ${errScope}`);
+        //* v5 (§ 11.3): custom handler `id` is admin-only via `hasAdminRole()` (role claim, signed key, local mode, or a v4 internal caller in transition) — never `$ctx.domain`.
+        const isAdmin = await this.service.guardProxy($ctx, async proxy => proxy.hasAdminRole());
+        if (id && !isAdmin) throw new Error(`403 NOT ALLOWED - only for admin @${errScope}`);
         if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
         //* runs in guarded proxy.
@@ -192,8 +193,7 @@ export class CallbackAPIController extends AbstractCRUDController<
         id = id === '0' ? '' : $T.S2(id);
 
         // STEP.0 validate parameter
-        const isLocal = $U.isLocalMode(); //* v5 B5: runtime local mode (unused below, kept for the commented check).
-        // if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
+        //* v5 PR #32: the unused `isLocal` (and its commented `id` check) is gone; the response `id` is the callback model id.
         // if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
         return this.service.guardProxy($ctx, async proxy => {

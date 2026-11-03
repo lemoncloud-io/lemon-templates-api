@@ -99,7 +99,7 @@ flowchart LR
   - `[LOOP] send`·`recv`·`done` 줄 끝에 ` tid=<tid> hop=<hop>`이 붙는다. CloudWatch에서 `tid` 하나로 두 함수의 줄을 잇는다.
 - 자세한 내용: [docs/lambda-tools.md](docs/lambda-tools.md#loopcheck), [src/modules/callback/README.md](src/modules/callback/README.md)
 - 일반 라우트 `/{type}/{id}/{cmd}`에는 `authorizer: aws_iam`이 붙는다. `/`·`/hello`·`/mocks` 명시 라우트에는 없다.
-- 내부 호출 수신 게이트는 `$ctx.domain`이 아니라 `hasAdminRole()`로 연다. search `GET /search/0/hello`·`POST /search/0/migrate`가 그렇다(admin 역할·서명 키·로컬 모드, 전환기에는 v4 내부 호출자 `domain: 'localhost'` + `channel: 'internal'`도 받는다 — `src/service/backend-proxy.ts`). 로컬 실행 편의(callback 사용자 `id` 지정 등)만 `$U.isLocalMode()`를 쓴다.
+- 내부 호출 수신 게이트는 `$ctx.domain`이 아니라 `hasAdminRole()`로 연다. search `GET /search/0/hello`·`POST /search/0/migrate`와 callback `POST /callback/{id}/request`의 사용자 핸들러 `id`가 그렇다(admin 역할·서명 키·로컬 모드, 전환기에는 v4 내부 호출자 `domain: 'localhost'` + `channel: 'internal'`도 받는다 — `src/service/backend-proxy.ts`). 로컬 실행 편의(callback 등록 `POST /callback/{id}`의 `id` 지정 등)만 `$U.isLocalMode()`를 쓴다.
 
 ## 기능을 어디에 넣나
 

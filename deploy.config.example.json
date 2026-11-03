@@ -173,6 +173,26 @@
         },
         {
             "path": "/mocks/{id}/{cmd}",
+            "httpMethod": "GET",
+            "authorizationType": "NONE",
+            "cors": {
+                "origin": "*",
+                "headers": [
+                    "Authorization",
+                    "Content-Type",
+                    "X-Amz-Date",
+                    "X-Amz-Security-Token",
+                    "X-Amz-User-Agent",
+                    "X-Api-Key",
+                    "X-Lemon-Language",
+                    "X-Lemon-Identity"
+                ],
+                "credentials": true,
+                "allowCredentialsWithWildcardOrigin": true
+            }
+        },
+        {
+            "path": "/mocks/{id}/{cmd}",
             "httpMethod": "POST",
             "authorizationType": "NONE",
             "cors": {
