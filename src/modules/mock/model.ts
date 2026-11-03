@@ -113,6 +113,10 @@ export class TestModel extends CoreModel<ModelType> implements TestHead {
     @field()
     extra?: SimpleSet;
 
+    /** pinned flag (0 | 1) */
+    @field()
+    pinned?: 0 | 1;
+
     /** linked mock id */
     @field()
     mockId?: string;

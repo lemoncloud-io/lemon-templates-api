@@ -65,6 +65,7 @@ describe('BackendService', () => {
             'stereo',
             'count',
             'extra',
+            'pinned',
             'mockId',
             'mock$',
             'mockIds',

@@ -43,7 +43,7 @@ export interface TestBody extends Body, Partial<TestView> {}
  */
 export interface TestView
     extends View,
-        Omit<Partial<TestModel>, 'id' | 'required' | 'mock$' | 'mock$$' | '$mock' | '$mocks'> {
+        Omit<Partial<TestModel>, 'id' | 'required' | 'pinned' | 'mock$' | 'mock$$' | '$mock' | '$mocks'> {
     /**
      * unique id of this type
      */
@@ -53,6 +53,9 @@ export interface TestView
      * (optional) flag required.
      */
     required?: boolean;
+
+    /** pinned flag (stored as 0 | 1) */
+    pinned?: boolean;
 
     /** linked mock resolved from `mockId` */
     mock$?: MockView;

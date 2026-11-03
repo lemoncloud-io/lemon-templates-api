@@ -95,6 +95,8 @@ export class TestTransformer extends AbstractTransformer<TestModel, TestView, Te
             name: model.name,
             stereo: model.stereo,
             count: model.count,
+            // 0|1 → boolean; keep the key out when unset (`$T.B(undefined)` is `false`)
+            pinned: model.pinned !== undefined ? $T.B(model.pinned) : undefined,
             mockId: model.mockId,
             mock$: model.mock$ ? $trans.mock.modelAsView(model.mock$) : undefined,
             mockIds: model.mockIds,
@@ -114,6 +116,8 @@ export class TestTransformer extends AbstractTransformer<TestModel, TestView, Te
         if (body?.name !== undefined) model.name = $T.S2(body.name);
 
         if (body?.count !== undefined) model.count = $T.N(body.count);
+        // any truthy/falsy input → stored as 0|1
+        if (body?.pinned !== undefined) model.pinned = $T.BN(body.pinned);
         if (body?.mockId !== undefined) model.mockId = $T.S2(body.mockId);
         if (body?.mockIds !== undefined) model.mockIds = $T.SS(body.mockIds).filter(Boolean);
 

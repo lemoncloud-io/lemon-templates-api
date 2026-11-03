@@ -110,6 +110,7 @@ describe('transformer', () => {
             stereo: '#',
             count: 1,
             extra: {},
+            pinned: 1,
             mockId: 'mock-1',
             mock$: { id: 'mock-1', name: 'Mock', stereo: '#' },
             mockIds: ['mock-1', 'mock-2'],
@@ -189,5 +190,30 @@ describe('transformer', () => {
             mockId: 'mock-1',
             mockIds: ['mock-1'],
         });
+    });
+
+    //* `pinned`: body → model by `$T.BN`, model → view by `$T.B` (with the undefined guard).
+    it('should convert test-model pinned ($T.BN in, $T.B out)', async () => {
+        const trans = $trans.test;
+        // body → model, truthy inputs → 1
+        expect2(() => trans.bodyToModel({ pinned: true } as any, true), 'pinned').toEqual({ pinned: 1 });
+        expect2(() => trans.bodyToModel({ pinned: 'true' } as any, true), 'pinned').toEqual({ pinned: 1 });
+        expect2(() => trans.bodyToModel({ pinned: 'yes' } as any, true), 'pinned').toEqual({ pinned: 1 });
+        expect2(() => trans.bodyToModel({ pinned: '1' } as any, true), 'pinned').toEqual({ pinned: 1 });
+        expect2(() => trans.bodyToModel({ pinned: 1 } as any, true), 'pinned').toEqual({ pinned: 1 });
+        expect2(() => trans.bodyToModel({ pinned: 2 } as any, true), 'pinned').toEqual({ pinned: 1 });
+        // body → model, falsy inputs → 0
+        expect2(() => trans.bodyToModel({ pinned: false } as any, true), 'pinned').toEqual({ pinned: 0 });
+        expect2(() => trans.bodyToModel({ pinned: 0 } as any, true), 'pinned').toEqual({ pinned: 0 });
+        expect2(() => trans.bodyToModel({ pinned: '' } as any, true), 'pinned').toEqual({ pinned: 0 });
+        expect2(() => trans.bodyToModel({ pinned: 'false' } as any, true), 'pinned').toEqual({ pinned: 0 });
+        expect2(() => trans.bodyToModel({ pinned: null } as any, true), 'pinned').toEqual({ pinned: 0 });
+        // body → model, no key → no key
+        expect2(() => Object.keys(trans.bodyToModel({} as any, true)).includes('pinned')).toEqual(false);
+
+        // model → view: 1 → true, 0 → false, no key → no key
+        expect2(() => trans.modelAsView({ pinned: 1 } as any), 'pinned').toEqual({ pinned: true });
+        expect2(() => trans.modelAsView({ pinned: 0 } as any), 'pinned').toEqual({ pinned: false });
+        expect2(() => Object.keys(trans.modelAsView({} as any)).includes('pinned')).toEqual(false);
     });
 });
