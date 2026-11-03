@@ -36,8 +36,8 @@ v5 서비스의 레시피이기도 하다. `bin/sync-v5-tooling.mjs`가 이 저�
 | `src/test-helpers/` | 테스트용 컨텍스트 샘플(`loadSample`) | 개발자 |
 | `data/`, `sample/` | 더미·배치 데이터(Lambda 패키지에 들어간다), 컨텍스트·응답 예시 JSON | 개발자 |
 | `@types/` | 타입 패키지 `@lemoncloud/<name>`. `bin/`은 생성·재작성·검증 스크립트다. | **`dist/`·`package.json`은 `npm run types`가 만든다. 손으로 고치지 않음** |
-| `serverless.yml` | 함수·이벤트·라우트 19개·IAM·리소스 이름 맵. 로컬 게이트웨이도 읽는다. `serverless-vpc.yml`은 VPC 변형, `swagger/`는 그 문서 플러그인 설정이다. | 사람 검토 필수 |
-| `pack.config.json`, `*.config.example.json` | `pack` 설정, deploy·dev 배포·이행 설정 예시(라우트 19개). 실제 설정은 `.artifacts/`에 둔다. | 개발자 |
+| `serverless.yml` | 함수·이벤트·라우트 22개·IAM·리소스 이름 맵. 로컬 게이트웨이도 읽는다. `serverless-vpc.yml`은 VPC 변형, `swagger/`는 그 문서 플러그인 설정이다. | 사람 검토 필수 |
+| `pack.config.json`, `*.config.example.json` | `pack` 설정, deploy·dev 배포·이행 설정 예시(라우트 22개). 실제 설정은 `.artifacts/`에 둔다. | 개발자 |
 | `bin/` | `deploy-dev.sh`(수동 dev 배포), `sync-v5-tooling.mjs`(도구 전파) | 레시피 담당 |
 | `scripts/deepmerge-safe/` | `deepmerge` override 대체본(dev 전용) | 거의 안 고침 |
 | `tools/lambda-bundle/` | 번들·축약 실험(`bundle:lab`). 의존성은 따로 설치한다. | 개발자 |
@@ -73,7 +73,8 @@ flowchart LR
 
 - 두 함수 모두 같은 `handler.lambda`를 쓴다. 함수별 이벤트는 `serverless.yml` `functions:`에 있다.
 - `src/engine.ts`는 웹 컨트롤러 6개, cron 리스너 1개, SNS·SQS 리스너 각 1개를 등록한다. DynamoDB stream 리스너는 없다.
-- 라우트 19개: 명시 라우트 10개(`/`·`/hello…`·`/mocks…`)는 인증이 없다. 일반 라우트 `/{type}…` 9개에는 `authorizer: aws_iam`이 붙는다.
+- 라우트 22개: 명시 라우트 13개(`/`·`/hello…`·`/mocks…`·`/public…`)는 인증이 없다. 일반 라우트 `/{type}…` 9개에는 `authorizer: aws_iam`이 붙는다.
+- `/public`·`/public/{proxy+}`는 `public` 컨트롤러(`src/api/public-api.ts`)로 간다. 인증은 NONE이다. 등록한 대상(`mocks`)만 열린다. 경로 조각은 받은 그대로 넘기고, 디코드는 lemon-core 5.0.26 `asWebPath()`가 조각별로 한 번 한다.
 - SNS·SQS 리스너는 루프 테스트 전용이다. 제목 `x-loop-test` 메시지만 처리한다.
 - 루프 테스트 트리거는 `POST /callback/<kind>/loop`(admin만)다. `kind`는 `sns`·`sqs`·`protocol`·`notify`·`enqueue`다. protocol 수신부는 `POST /callback/<loopId>/loop-recv`다.
 - 수신부는 로그만 남기고 재발신하지 않는다. 트리거는 protocol 경유 재진입을 거부한다(`400 INVALID LOOP - nested trigger`). 가드 7개는 [docs/lambda-tools.md](docs/lambda-tools.md#infinite-loop-guards)에 있다.
@@ -126,6 +127,7 @@ flowchart LR
 | `npm run perf:lambda -- ...` | 반복 호출, cold/warm 시간 요약(`lemon-lambda-perf`) | [docs/lambda-tools.md](docs/lambda-tools.md) |
 | `npm run fields:admin -- --target express\|lambda` | `GET /<type>/fields/admin` 점검(`lemon-fields-admin`) | [docs/lambda-tools.md](docs/lambda-tools.md#fieldsadmin) |
 | `npm run loop:check -- ...` | 루프 테스트 다섯 kind를 로그 줄로 점검(`lemon-loop-check`). `--target express`면 로컬 서버 | [docs/lambda-tools.md](docs/lambda-tools.md#loopcheck) |
+| `npm run ship:check` | push 전 유출 검사(`bin/ship-check.sh`, S3 게이트): 깨끗한 트리, 보호 파일(`env`·`serverless.yml`·`serverless-vpc.yml`) 무변경, diff 유출 패턴 0건, `version` 불변 또는 dev 형식 한 줄 | 읽기 전용, AWS 불필요. base 기본 `origin/v5`(`-- --base <ref>`). exit 0 통과·1 실패·2 사용법. [docs/lambda-tools.md](docs/lambda-tools.md#ship-check-binship-checksh) |
 | `node bin/sync-v5-tooling.mjs --target <dir>` | 이 저장소의 v5 도구를 다른 서비스 체크아웃에 옮긴다. 기본은 보고만 | `--apply`가 대상 파일을 쓴다. [docs/sync-v5-tooling.md](docs/sync-v5-tooling.md) |
 
 내부용(직접 부르지 않음): `build-ts`·`watch-ts`·`nodemon`·`start`(`express.lemon*`이 부른다), `*start`(ts-node 변형), `test:dev`·`test:watch.lemon`(watch 변형), `prepretypes`·`pretypes`·`posttypes`·`types:rewrite`(`types`가 부른다). `!`로 시작하는 키는 구분 주석이다.
@@ -146,14 +148,15 @@ flowchart LR
 
 ```sh
 npx tsc --noEmit        # 기대: 출력 없음, exit 0
-npm test                # 기대: Test Suites 21 passed, Tests 186 passed, exit 0 (2026-11-03, 약 6초)
+npm test                # 기대: Test Suites 23 passed, Tests 204 passed, exit 0 (2026-11-04)
+npm run ship:check      # 커밋한 뒤 push 전: 기대 PASS 4줄, exit 0 (base origin/v5)
 ```
 
 - 테스트가 실패하면 테스트가 아니라 코드를 고친다. 테스트 수가 바뀌면 이 줄도 고친다.
 - 모델 필드 목록은 모델 클래스의 `@field()`에서 나온다(`fieldsOf()`, B4). 저장 필드를 더하면 `@field()`를 붙인다. 빠뜨리면 그 값은 `.meta`로 들어간다.
 - 목록은 부모(`CoreModel`) 필드가 먼저다. head 객체(`asHead()`)와 search `$param`의 키 순서도 이를 따른다.
 - 모델 필드를 바꾸면 `src/modules/mock/fields-admin.expected.json`의 `counts`·`extra`도 고친다.
-- 라우트를 바꾸면 `serverless.yml`과 `deploy.config.example.json`의 19개가 같은 순서인지 맞춘다.
+- 라우트를 바꾸면 `serverless.yml`과 `deploy.config.example.json`의 22개가 같은 순서인지 맞춘다.
 - `@types/`를 바꾸면 `npm run types:verify`를 돌린다. 기대: exit 0.
 - 로컬 서버(`LOCAL_MODE=1`)가 떠 있으면 `npm run fields:admin -- --target express`로 점검한다. 기대: exit 0.
 - 루프 테스트를 바꿨으면 `npm run express.lemon`으로 서버를 띄우고 먼저 로컬에서 점검한다.

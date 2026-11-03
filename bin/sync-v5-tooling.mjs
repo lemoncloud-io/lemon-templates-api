@@ -7,7 +7,8 @@
  *              deepmerge-safe + minimatch / test-exclude overrides, lemon-core and nodemon floors,
  *              unused dev deps (codecov, typedoc, @types/cors|request|uuid) when nothing uses them;
  *              packages only the removed Serverless set provided that are still used are reported (never added).
- *  - `bin`   : `bin/deploy-dev.sh` + `npm run deploy:dev`, `.gitignore` entries, docs/lambda-tools.md and README rows
+ *  - `bin`   : `bin/deploy-dev.sh` + `npm run deploy:dev`, `bin/ship-check.sh` + `npm run ship:check`, `.gitignore` entries,
+ *              docs/lambda-tools.md rows + sections and README rows
  *              (the README table = the one with `npm run lambda:*` rows, 2-4 columns, any header language).
  *  - `types` : `@types` names lemon-model only (D107): rewrite-imports / verify-types / lemon-model-pair,
  *              init-package patch, tsconfig.verify.json, `incremental: false`, eslint override, stale tsbuildinfo.
@@ -24,6 +25,7 @@
  * @author      Steve <steve@lemoncloud.io>
  * @date        2026-11-03 v5 B42: initial version (lemon-templates-api `v5` = the source of every copied file).
  * @date        2026-11-03 v5 B42 r4: transitive Serverless packages noted, README `lambda:*` table detection widened.
+ * @date        2026-11-03 v5 M2-P1: bin item also ports bin/ship-check.sh + npm run ship:check
  *
  * @copyright (C) 2026 LemonCloud Co Ltd. - All Rights Reserved.
  */
@@ -692,6 +694,75 @@ const README_ROWS = {
     3: `| \`npm run deploy:dev\` | ${README_TEXT} | ${README_MORE} |`,
     4: `| \`npm run deploy:dev\` | \`bin/deploy-dev.sh\` | ${README_TEXT} | ${README_MORE} |`,
 };
+//* the README `ship:check` row, same column variants (M2-P1; the recipe README row is the 3-column one).
+const SHIP_TEXT =
+    'push 전 유출 검사(`bin/ship-check.sh`, S3 게이트): 깨끗한 트리, 보호 파일(`env`·`serverless.yml`·`serverless-vpc.yml`) 무변경, diff 유출 패턴 0건, `version` 불변 또는 dev 형식 한 줄';
+const SHIP_MORE =
+    '읽기 전용, AWS 불필요. base 기본 `origin/v5`(`-- --base <ref>`). exit 0 통과·1 실패·2 사용법. 일치한 줄은 출력하지 않는다. [docs/lambda-tools.md](docs/lambda-tools.md#ship-check-binship-checksh)';
+const README_SHIP_ROWS = {
+    2: `| \`npm run ship:check\` | ${SHIP_TEXT}. ${SHIP_MORE} |`,
+    3: `| \`npm run ship:check\` | ${SHIP_TEXT} | ${SHIP_MORE} |`,
+    4: `| \`npm run ship:check\` | \`bin/ship-check.sh\` | ${SHIP_TEXT} | ${SHIP_MORE} |`,
+};
+//* the docs/lambda-tools.md scripts-table rows (4 columns = the recipe table, else the 3-column form).
+const TOOLS_ROWS = {
+    deploy: {
+        4: '| `deploy:dev`        | `bin/deploy-dev.sh`       | Manual dev deploy: pack → plan → `--apply` → probe, in one command. Human-run only. | [Manual dev deploy](#manual-dev-deploy-bindeploy-devsh)      |',
+        3: '| `deploy:dev`        | `bin/deploy-dev.sh`       | Manual dev deploy: pack → plan → `--apply` → probe, in one command. Human-run only ([Manual dev deploy](#manual-dev-deploy-bindeploy-devsh)). |',
+    },
+    ship: {
+        4: '| `ship:check`        | `bin/ship-check.sh`       | Pre-ship leak check against a base ref: tree, protected files, leak scan, version.  | [Ship check](#ship-check-binship-checksh)                    |',
+        3: '| `ship:check`        | `bin/ship-check.sh`       | Pre-ship leak check against a base ref: tree, protected files, leak scan, version. Read-only ([Ship check](#ship-check-binship-checksh)). |',
+    },
+};
+//* section headings of the recipe docs/lambda-tools.md that the bin item ports.
+const DEPLOY_HEADING = '### Manual dev deploy (`bin/deploy-dev.sh`)';
+const SHIP_HEADING = '### Ship check (`bin/ship-check.sh`)';
+//* a `### ` section of the recipe text: from its heading up to the next `## ` / `### ` heading (or the end).
+const recipeSection = (src, heading) => {
+    const start = src.indexOf(heading);
+    if (start < 0) throw new Error(`recipe docs/lambda-tools.md has no section: ${heading}`);
+    const m = /\n#{2,3} /.exec(src.slice(start + heading.length));
+    return src.slice(start, m ? start + heading.length + m.index : src.length);
+};
+//* the line index right after the section that starts with `heading` (next `#`..`###` heading outside code fences), or -1.
+const sectionEnd = (lines, heading) => {
+    const start = lines.findIndex(l => l.startsWith(heading));
+    if (start < 0) return -1;
+    let fence = false;
+    for (let i = start + 1; i < lines.length; i++) {
+        if (/^```/.test(lines[i])) fence = !fence;
+        else if (!fence && /^#{1,3} /.test(lines[i])) return i;
+    }
+    return lines.length;
+};
+/**
+ * add one script row (at the end of the scripts table = the one naming `lambda:invoke`) and one section to the
+ * docs/lambda-tools.md lines. The section goes after `afterHeading`'s section when given and present, else before
+ * `## What the tools read`, else at the end. Returns false when there is no scripts table (the section is still added).
+ */
+const addToolsEntry = (lines, rows, block, afterHeading) => {
+    let rowAdded = false;
+    const anchor = lines.findIndex(l => /^\|\s*`lambda:invoke`/.test(l));
+    if (anchor >= 0) {
+        // the table around the anchor; its header decides the row form
+        let head = anchor;
+        while (head > 0 && lines[head - 1].startsWith('|')) head--;
+        let tail = anchor;
+        while (tail + 1 < lines.length && lines[tail + 1].startsWith('|')) tail++;
+        const cols = lines[head].split('|').length - 2;
+        lines.splice(tail + 1, 0, cols >= 4 ? rows[4] : rows[3]);
+        rowAdded = true;
+    }
+    // the section: next to its sibling section when there is one, else the B42 place
+    const after = afterHeading ? sectionEnd(lines, afterHeading) : -1;
+    const whatIdx = lines.findIndex(l => /^## What the tools read/.test(l));
+    const body = block.replace(/\n*$/, '\n').split('\n');
+    if (after >= 0) lines.splice(after, 0, ...body);
+    else if (whatIdx >= 0) lines.splice(whatIdx, 0, ...body);
+    else lines.push('', ...body);
+    return rowAdded;
+};
 //* table cells of a markdown row (an escaped `\|` stays inside its cell).
 const cellCount = line => line.split(/(?<!\\)\|/).length - 2;
 /**
@@ -718,6 +789,8 @@ const runBin = ctx => {
     const item = 'bin';
     const name = ctx.name;
     ctx.copy(item, 'bin/deploy-dev.sh');
+    // M2-P1: the S3 leak check (git only; reads the checkout it runs in, so it is copied verbatim too)
+    ctx.copy(item, 'bin/ship-check.sh');
     if (!exists(path.join(ctx.target, 'deploy.config.example.json')))
         ctx.note(item, 'deploy.config.example.json missing — bin/deploy-dev.sh writes its first config from it');
     // scripts: `deploy:dev` next to the other lambda tools
@@ -731,6 +804,11 @@ const runBin = ctx => {
         );
         pkg.scripts = insertAfter(pkg.scripts, after, 'deploy:dev', 'bash bin/deploy-dev.sh');
         ctx.act(item, 'update', pkgFile, 'scripts: deploy:dev');
+    }
+    // scripts: `ship:check` right after `deploy:dev`
+    if (pkg.scripts['ship:check'] !== 'bash bin/ship-check.sh') {
+        pkg.scripts = insertAfter(pkg.scripts, 'deploy:dev', 'ship:check', 'bash bin/ship-check.sh');
+        ctx.act(item, 'update', pkgFile, 'scripts: ship:check');
     }
     for (const s of ['pack', 'lambda:pack']) if (pkg.scripts[s]) break;
     if (!pkg.scripts.pack && !pkg.scripts['lambda:pack'])
@@ -757,53 +835,50 @@ const runBin = ctx => {
             '\n';
         ctx.write(item, gi, giTxt, `+${missing.map(m => m[0]).join(' ')}`);
     }
-    // docs/lambda-tools.md: table row + section (from the recipe text, service name swapped)
+    // docs/lambda-tools.md: table row + section per script (from the recipe text, service name swapped), one write
     const tools = path.join(ctx.target, 'docs/lambda-tools.md');
-    if (!exists(tools)) ctx.note(item, 'docs/lambda-tools.md missing — document deploy:dev by hand');
-    else if (!read(tools).includes('bin/deploy-dev.sh')) {
+    if (!exists(tools)) ctx.note(item, 'docs/lambda-tools.md missing — document deploy:dev and ship:check by hand');
+    else {
         const srcTools = read(path.join(ctx.source, 'docs/lambda-tools.md'));
-        const secStart = srcTools.indexOf('### Manual dev deploy (`bin/deploy-dev.sh`)');
-        const secEnd = srcTools.indexOf('\n## ', secStart);
-        let section = srcTools.slice(secStart, secEnd).replace(/lemon-templates-api/g, name);
-        const packScript = pkg.scripts.pack ? 'pack' : 'lambda:pack';
-        if (packScript !== 'pack')
-            section = section.replace('`npm run pack -- --output', '`npm run lambda:pack -- --output');
         const lines = read(tools).split('\n');
-        // the scripts table = the one whose rows name `lambda:invoke`
-        const anchor = lines.findIndex(l => /^\|\s*`lambda:invoke`/.test(l));
-        if (anchor >= 0) {
-            let head = anchor;
-            while (head > 0 && lines[head - 1].startsWith('|')) head--;
-            let tail = anchor;
-            while (tail + 1 < lines.length && lines[tail + 1].startsWith('|')) tail++;
-            const cols = lines[head].split('|').length - 2;
-            const row =
-                cols >= 4
-                    ? '| `deploy:dev`        | `bin/deploy-dev.sh`       | Manual dev deploy: pack → plan → `--apply` → probe, in one command. Human-run only. | [Manual dev deploy](#manual-dev-deploy-bindeploy-devsh)      |'
-                    : '| `deploy:dev`        | `bin/deploy-dev.sh`       | Manual dev deploy: pack → plan → `--apply` → probe, in one command. Human-run only ([Manual dev deploy](#manual-dev-deploy-bindeploy-devsh)). |';
-            lines.splice(tail + 1, 0, row);
-        } else
-            ctx.note(
-                item,
-                'docs/lambda-tools.md: no scripts table with `lambda:invoke` — add the deploy:dev row by hand',
-            );
-        const whatIdx = lines.findIndex(l => /^## What the tools read/.test(l));
-        const block = section.replace(/\n*$/, '\n');
-        if (whatIdx >= 0) lines.splice(whatIdx, 0, ...block.split('\n'));
-        else lines.push('', ...block.split('\n'));
-        ctx.write(item, tools, lines.join('\n'), 'deploy:dev row + section');
+        const done = [];
+        // deploy:dev (B42): the section text says `npm run pack`; a `lambda:pack` service gets its own script name
+        if (!lines.join('\n').includes('bin/deploy-dev.sh')) {
+            let section = recipeSection(srcTools, DEPLOY_HEADING).replace(/lemon-templates-api/g, name);
+            const packScript = pkg.scripts.pack ? 'pack' : 'lambda:pack';
+            if (packScript !== 'pack')
+                section = section.replace('`npm run pack -- --output', '`npm run lambda:pack -- --output');
+            if (!addToolsEntry(lines, TOOLS_ROWS.deploy, section, null))
+                ctx.note(
+                    item,
+                    'docs/lambda-tools.md: no scripts table with `lambda:invoke` — add the deploy:dev row by hand',
+                );
+            done.push('deploy:dev row + section');
+        }
+        // ship:check (M2-P1): row after the deploy:dev row (end of the same table), section after the deploy:dev section
+        if (!lines.join('\n').includes('bin/ship-check.sh')) {
+            const section = recipeSection(srcTools, SHIP_HEADING).replace(/lemon-templates-api/g, name);
+            if (!addToolsEntry(lines, TOOLS_ROWS.ship, section, DEPLOY_HEADING))
+                ctx.note(
+                    item,
+                    'docs/lambda-tools.md: no scripts table with `lambda:invoke` — add the ship:check row by hand',
+                );
+            done.push('ship:check row + section');
+        }
+        if (done.length) ctx.write(item, tools, lines.join('\n'), done.join(', '));
     }
-    // README: a `deploy:dev` row in the table that lists `npm run lambda:*` rows (any header language, 2-4 columns)
+    // README: `deploy:dev` and `ship:check` rows in the table that lists `npm run lambda:*` rows (any header language, 2-4 columns)
     const readme = path.join(ctx.target, 'README.md');
     if (exists(readme)) {
         const lines = read(readme).split('\n');
+        const done = [];
         //* a row naming `npm run deploy:dev` itself (`npm run lambda:deploy:dev` is another script).
         const hasRow = lines.some(l => l.startsWith('|') && /\bnpm run deploy:dev\b/.test(l));
         const at = hasRow ? null : readmeLambdaRow(lines);
         const row = at && README_ROWS[at.cols];
         if (row) {
             lines.splice(at.index + 1, 0, row);
-            ctx.write(item, readme, lines.join('\n'), `deploy:dev row (${at.cols} columns)`);
+            done.push(`deploy:dev row (${at.cols} columns)`);
         } else if (!hasRow)
             ctx.note(
                 item,
@@ -811,6 +886,28 @@ const runBin = ctx => {
                     ? `README.md: the \`npm run lambda:*\` table has ${at.cols} columns — add the \`npm run deploy:dev\` (bin/deploy-dev.sh) row by hand`
                     : 'README.md: no `npm run lambda:*` table — add one line about `npm run deploy:dev` (bin/deploy-dev.sh) by hand',
             );
+        // ship:check: same table, right after its `npm run deploy:dev` row, else at the end of the table
+        const hasShip = lines.some(l => l.startsWith('|') && /\bnpm run ship:check\b/.test(l));
+        const at2 = hasShip ? null : readmeLambdaRow(lines);
+        const shipRow = at2 && README_SHIP_ROWS[at2.cols];
+        if (shipRow) {
+            // the table that holds the last `npm run lambda:*` row
+            let end = at2.index;
+            while (end + 1 < lines.length && lines[end + 1].startsWith('|')) end++;
+            let start = at2.index;
+            while (start > 0 && lines[start - 1].startsWith('|')) start--;
+            let pos = end;
+            for (let k = start; k <= end; k++) if (/\bnpm run deploy:dev\b/.test(lines[k])) pos = k;
+            lines.splice(pos + 1, 0, shipRow);
+            done.push(`ship:check row (${at2.cols} columns)`);
+        } else if (!hasShip)
+            ctx.note(
+                item,
+                at2
+                    ? `README.md: the \`npm run lambda:*\` table has ${at2.cols} columns — add the \`npm run ship:check\` (bin/ship-check.sh) row by hand`
+                    : 'README.md: no `npm run lambda:*` table — add one line about `npm run ship:check` (bin/ship-check.sh) by hand',
+            );
+        if (done.length) ctx.write(item, readme, lines.join('\n'), done.join(', '));
     }
 };
 

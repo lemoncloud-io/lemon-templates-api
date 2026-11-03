@@ -276,6 +276,21 @@ functions:
           method: post
           cors: ${self:custom.cors, true}
       # -------------------------------------------------------
+      # REST API : /public (auth NONE) → `public` controller → registered targets only (`mocks`).
+      # NOTE: the dev gateway got `/public/{proxy+}` (ANY, auth NONE) on 2026-11-04; `/public` still needs a method there.
+      - http:
+          path: /public
+          method: get
+          cors: ${self:custom.cors, true}
+      - http:
+          path: /public/{proxy+}
+          method: get
+          cors: ${self:custom.cors, true}
+      - http:
+          path: /public/{proxy+}
+          method: post
+          cors: ${self:custom.cors, true}
+      # -------------------------------------------------------
       # REST API : General Controller.
       - http:
           path: /{type}
