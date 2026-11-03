@@ -182,4 +182,29 @@ describe('TestAPIController', () => {
             name: 'X',
         });
     });
+
+    //! `pinned`: stored as 0|1 (`$T.BN`), shown as boolean (`$T.B`)
+    it('should keep pinned as 0|1 in storage and boolean in view', async () => {
+        const { api, proxy, service } = instance();
+        // no identity: direct controller calls need local mode
+        useLocalMode();
+
+        // POST with a string flag → view `true`
+        const view1 = await api.doPost('0', {}, { name: 'P', pinned: 'true' } as any);
+        expect2(() => view1, 'pinned').toEqual({ pinned: true });
+        const id = view1.id;
+
+        // storage keeps the number 1 as its own field (not folded into `.meta`)
+        const model1 = await proxy.test.get(id);
+        expect2(() => model1, 'pinned').toEqual({ pinned: 1 });
+        expect2(() => `${model1.meta ?? ''}`.includes('pinned')).toEqual(false);
+
+        // PUT 0 → view `false`, storage 0 (read by the manager: `proxy.test.get()` returns its cached copy)
+        expect2(await api.doPut(id, {}, { pinned: 0 } as any), 'pinned').toEqual({ pinned: false });
+        expect2(await service.$test.find(id), 'pinned').toEqual({ pinned: 0 });
+
+        // POST without `pinned` → no `pinned` key in the view
+        const view3 = await api.doPost('0', {}, { name: 'Q' });
+        expect2(() => Object.keys(view3).includes('pinned')).toEqual(false);
+    });
 });

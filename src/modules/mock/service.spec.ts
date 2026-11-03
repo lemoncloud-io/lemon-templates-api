@@ -49,6 +49,7 @@ describe('BackendProxy', () => {
             'stereo',
             'count',
             'extra',
+            'pinned',
             'mockId',
             'mock$',
             'mockIds',

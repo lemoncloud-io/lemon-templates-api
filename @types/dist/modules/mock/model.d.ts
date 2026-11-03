@@ -83,6 +83,8 @@ export declare class TestModel extends CoreModel<ModelType> implements TestHead 
     count?: number;
     /** (optional) extra */
     extra?: SimpleSet;
+    /** pinned flag (0 | 1) */
+    pinned?: 0 | 1;
     /** linked mock id */
     mockId?: string;
     /** linked mock head */

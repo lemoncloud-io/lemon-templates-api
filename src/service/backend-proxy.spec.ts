@@ -45,7 +45,7 @@ describe('BackendProxy', () => {
         //* v5 B17: TestModel lost `_date` and gained the linked-mock refs in 73fadf2 (same shape as backend-service.spec).
         //* v5 B4: fieldsOf() is parent-first (HOW_TO § 10.5) — compare sets
         expect2(() => [...proxy.test.$mgr.FIELDS].sort().join(',')).toEqual(
-            'name,stereo,count,extra,mockId,mock$,mockIds,mock$$,ns,type,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id,_idx'
+            'name,stereo,count,extra,pinned,mockId,mock$,mockIds,mock$$,ns,type,sid,uid,gid,lock,next,meta,createdAt,updatedAt,deletedAt,error,id,_idx'
                 .split(',')
                 .sort()
                 .join(','),
