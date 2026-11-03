@@ -139,6 +139,7 @@ flowchart LR
 | `npm run fields:admin -- --target express\|lambda` | `GET /<type>/fields/admin` 점검(`lemon-fields-admin`) | [docs/lambda-tools.md](docs/lambda-tools.md#fieldsadmin) |
 | `npm run loop:check -- ...` | SNS·SQS·protocol 루프 테스트를 로그 줄로 점검(`lemon-loop-check`) | [docs/lambda-tools.md](docs/lambda-tools.md#loopcheck) |
 | `npm run loop:check -- --target express` | 로컬 서버(`express.lemon`)에서 루프 테스트 다섯 kind 점검 | AWS 불필요. 응답의 `mock`·`recv`로 판정 |
+| `npm run ship:check` | push 전 유출 검사(`bin/ship-check.sh`, S3 게이트): 깨끗한 트리, 보호 파일(`env`·`serverless.yml`·`serverless-vpc.yml`) 무변경, diff 유출 패턴 0건, `version` 불변 또는 dev 형식 한 줄 | 읽기 전용, AWS 불필요. base 기본 `origin/v5`(`-- --base <ref>`). exit 0 통과·1 실패·2 사용법. 일치한 줄은 출력하지 않는다. [docs/lambda-tools.md](docs/lambda-tools.md#ship-check-binship-checksh) |
 
 **사람만 실행** — 에이전트는 사람이 명시적으로 시킬 때만 돌린다.
 
@@ -150,7 +151,7 @@ flowchart LR
 
 Serverless Framework 패키지(`sls`)는 설치하지 않는다. 설정 파일 `serverless.yml`·`serverless-vpc.yml`은 남아 있고, `sls`로 직접 배포·운영하려면 [docs/serverless.md](docs/serverless.md)의 권장 구성(패키지·스크립트)을 다시 넣는다.
 
-이 저장소는 v5 서비스의 레시피다. 다른 v5 서비스에 같은 도구(Serverless 제거·`deepmerge` overrides, `bin/deploy-dev.sh`, `@types` lemon-model 전용)를 옮기려면 `node bin/sync-v5-tooling.mjs --target <서비스 체크아웃>`을 쓴다. 기본은 보고만, `--apply`가 쓴다. [docs/sync-v5-tooling.md](docs/sync-v5-tooling.md)
+이 저장소는 v5 서비스의 레시피다. 다른 v5 서비스에 같은 도구(Serverless 제거·`deepmerge` overrides, `bin/deploy-dev.sh`·`bin/ship-check.sh`, `@types` lemon-model 전용)를 옮기려면 `node bin/sync-v5-tooling.mjs --target <서비스 체크아웃>`을 쓴다. 기본은 보고만, `--apply`가 쓴다. [docs/sync-v5-tooling.md](docs/sync-v5-tooling.md)
 
 소스 주석의 `:8888` 예시는 꺼진 `serverless-offline`의 포트다. 로컬 express 포트는 8800이다.
 
@@ -161,6 +162,7 @@ Serverless Framework 패키지(`sls`)는 설치하지 않는다. 설정 파일 `
 ```sh
 npx tsc --noEmit        # 기대: 출력 없음, exit 0
 npm test                # 기대: jest 요약에 failed 0, exit 0
+npm run ship:check      # 커밋한 뒤 push 전: 기대 PASS 4줄, exit 0 (base origin/v5)
 ```
 
 - 테스트가 실패하면 테스트가 아니라 코드를 고친다.
