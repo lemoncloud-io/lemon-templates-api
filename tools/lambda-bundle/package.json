@@ -1,0 +1,21 @@
+{
+  "name": "lambda-bundle-research",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=24 <25" },
+  "scripts": {
+    "build": "node build.mjs",
+    "experiment": "node experiment.mjs",
+    "symbolicate": "node symbolicate.mjs",
+    "test": "node --test *.test.mjs"
+  },
+  "devDependencies": {
+    "@jridgewell/remapping": "2.3.5",
+    "javascript-obfuscator": "5.9.0",
+    "terser": "5.51.2",
+    "terser-webpack-plugin": "5.6.1",
+    "typescript": "5.9.3",
+    "webpack": "5.112.2"
+  }
+}

@@ -45,7 +45,7 @@ export class CallbackModelManager extends MyCoreManager<CallbackModel, ModelType
 
     /** default contructor */
     public constructor(parent: BackendService) {
-        super('callback', parent, $FIELD.callback);
+        super('callback', parent, $FIELD.callback, { enableSync: true }); //* v5 B5: sync is opt-in (lemon-core default false).
 
         /** report into slack */
         this.registerCallback('echo', async (proxy, $res, $req, model) => {

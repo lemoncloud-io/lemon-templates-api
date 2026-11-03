@@ -174,7 +174,10 @@ export class CallbackManagerProxy extends MyManagerProxy<CallbackModel, Callback
         const $ups = onlyDefined<CallbackModel>({});
         try {
             if (isSimul) throw new Error(`! in simulate mode(req) - ${errScope}`);
-            const context = this.proxy.asNextContext(null, { domain: 'localhost' });
+            //* v5 B5: claim the admin role explicitly (the outgoing call is signed); the domain grants nothing now.
+            const identity: any = this.proxy.context?.identity;
+            const roles: string[] = [...(identity?.roles ?? []), 'admin'];
+            const context = this.proxy.asNextContext(null, { identity: { ...identity, roles } });
             const callback = `callback/${modelId}/response`;
             const $prot = $protocol(context, target, { isProd: isProd ? true : undefined });
             const qid = await $prot.enqueue(request.param, request.body, 'POST', callback, 5);

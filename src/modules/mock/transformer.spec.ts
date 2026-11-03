@@ -9,13 +9,14 @@
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 import { _it, describe, it, expect2, expect, GETERR } from '../../test-helpers/commons.spec';
-import { AbstractTransformer } from 'lemon-core';
+import { AbstractTransformer, CoreModel } from 'lemon-core';
 import { $FIELD, Model, MockModel, filterFields, TestModel } from './model';
 import { $Y, $trans } from './transformer';
-import { fieldKeys } from '../../generated/field-registry';
+//* v5 B4: `Model` (= `CoreModel<ModelType>`) lists the core fields from the class (was `fieldKeys.mockTransformerModel`)
+import { fieldsOf } from 'lemon-core/model';
 import { onlyDefined } from 'lemon-core';
 
-const $mock = filterFields(fieldKeys.mockTransformerModel<Model>(), ['meta']);
+const $mock = filterFields(fieldsOf(CoreModel), ['meta']);
 
 //! main test body.
 describe('transformer', () => {

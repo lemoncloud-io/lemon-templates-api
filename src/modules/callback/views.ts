@@ -8,7 +8,8 @@
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
-import { View, Body } from 'lemon-model';
+//* v5 B16: lemon-model through lemon-core
+import { View, Body } from 'lemon-core';
 import { CallbackModel } from './model';
 import $LUT from './types';
 

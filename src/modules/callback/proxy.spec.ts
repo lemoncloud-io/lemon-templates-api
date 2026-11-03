@@ -4,11 +4,13 @@
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2025-03-26 initial version.
+ * @date        2026-10-30 lemon-core B14: the callback request goes out as a relay (admin claim, no full context).
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
-import { expect2, _it, GETERR, $info, $U } from 'lemon-core';
+import $cores, { expect2, _it, GETERR, $info, $U } from 'lemon-core';
+import { decodeRelay, RELAY_IDENTITY_FIELDS } from 'lemon-core/dist/cores/protocol/protocol-relay';
 import { CallbackModel, CallbackRequest } from './model';
 
 import { BackendProxy } from '../../service/backend-proxy';
@@ -145,5 +147,42 @@ describe('BackendProxy', () => {
             state: 'responsed',
             responsedAt: current,
         });
+    });
+
+    //* lemon-core B14: `doRequest()` claims admin in `identity.roles`; the SQS message carries only the relay.
+    it('should enqueue the callback request as a relay (admin claim, no full context)', async () => {
+        const { proxy, context } = instance('authed');
+        const proto: any = $cores.cores.protocol.service;
+        const enqueue = jest.spyOn(proto, 'enqueue').mockResolvedValue('q-1');
+        try {
+            const req: CallbackRequest = { service: 'lemon-hello-api', type: 'hello', id: 'echo' };
+            const model = await proxy.callback.doRequest('echo', req);
+            expect2(() => model, 'qid,state,error').toEqual({ qid: 'q-1', state: 'requested', error: undefined });
+            //* the protocol param: admin added to the caller roles; the caller context is not raised by hand.
+            expect(enqueue).toHaveBeenCalledTimes(1);
+            const [param, callback, delay] = enqueue.mock.calls[0] as any[];
+            expect(callback).toMatchObject({ type: 'callback', id: model.id, cmd: 'response' });
+            expect(delay).toEqual(5);
+            expect(param.context.identity.roles).toContain('admin');
+            expect(param.context.depth).toEqual(context.depth);
+            //* the SQS message the transformer builds: `relay` only (no `context`), the whitelisted identity with admin.
+            const ctx = { ...param.context, accountId: '000000000000' }; //* a 12-digit account for the queue url.
+            const sent = proto
+                .asTransformer('sqs')
+                .transformToEvent('sqs://lemon-hello-api-dev', { ...param, context: ctx });
+            const body = JSON.parse(sent.MessageBody);
+            expect('context' in body).toBe(false);
+            const relay = decodeRelay(body.relay);
+            expect(relay.hop).toEqual(1);
+            expect(relay.idt.roles).toContain('admin');
+            expect(Object.keys(relay.idt).every(k => (RELAY_IDENTITY_FIELDS as readonly string[]).includes(k))).toBe(
+                true,
+            );
+            //* nothing of the caller request crosses the hop (cookie, domain, client ip, user agent …).
+            const text = Buffer.from(body.relay.substring(3), 'base64url').toString('utf8');
+            ['oauth.lemoncloud.io', '222.0.0.192', 'Mozilla'].forEach(v => expect(text).not.toContain(v));
+        } finally {
+            enqueue.mockRestore();
+        }
     });
 });

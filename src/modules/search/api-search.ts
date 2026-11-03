@@ -18,11 +18,11 @@ import {
     GeneralWEBController,
     loadJsonSync,
     doReportError,
-    Elastic6SearchParams,
+    OS2SearchParams,
     SearchProxyBody,
 } from 'lemon-core';
 import { SearchBatchModel, SearchBody, SearchResult, SearchQueryModel } from './model';
-import { _OS2, $ES6Routed as $ES6 } from 'lemon-core';
+import { $ES6Routed as $ES6 } from 'lemon-core';
 import { BatchParams, SearchService } from './service';
 import { performance } from 'perf_hooks';
 
@@ -88,8 +88,9 @@ export class SearchAPIController extends GeneralWEBController {
     public getSearchHello: NextHandler = async (id, param, body, $ctx) => {
         const errScope = `getSearchHello(${id ?? ''})`;
         id = id == '0' ? '' : id;
-        const isLocal = $ctx?.domain === 'localhost';
-        if (!isLocal) throw new Error(`403 NOT ALLOWED - domain[${$ctx?.domain ?? ''}] is invali  @${errScope}`);
+        //* v5 (§ 11.3): admin only via `hasAdminRole()` (role claim, signed key, local mode, or a v4 internal caller in transition) — never `$ctx.domain`.
+        const isAdmin = await this.service.guardProxy($ctx, async proxy => proxy.hasAdminRole());
+        if (!isAdmin) throw new Error(`403 NOT ALLOWED - only for admin @${errScope}`);
 
         const hello = this.hello();
         const useProxy = this.search?.isProxy(); // flag if search is running w/ proxy agent.
@@ -236,9 +237,9 @@ export class SearchAPIController extends GeneralWEBController {
     /**
      * run the proxied search query.
      */
-    public getSearchProxy: NextHandler<Elastic6SearchParams, any, SearchProxyBody> = async (id, param, body, $ctx) =>
+    public getSearchProxy: NextHandler<OS2SearchParams, any, SearchProxyBody> = async (id, param, body, $ctx) =>
         this.postSearchProxy(id, param, body, $ctx);
-    public postSearchProxy: NextHandler<Elastic6SearchParams, any, SearchProxyBody> = async (id, param, body, $ctx) => {
+    public postSearchProxy: NextHandler<OS2SearchParams, any, SearchProxyBody> = async (id, param, body, $ctx) => {
         const errScope = `postSearchProxy(${id ?? ''})`;
         _log(NS, `${errScope}..`);
         id = id === '0' ? '' : $T.S2(id);
@@ -636,11 +637,13 @@ export class SearchAPIController extends GeneralWEBController {
         const errScope = `doPostMigrate(${this.type()}/${id ?? ''})`;
         id = id == '0' ? '' : $T.S2(id);
 
-        const isLocal = $ctx?.domain === 'localhost';
-        if (!isLocal) throw new Error(`403 NOT ALLOWED - domain[${$ctx?.domain ?? ''}] is invali  @${errScope}`);
+        //* v5 (§ 11.3): admin only via `hasAdminRole()` (role claim, signed key, local mode, or a v4 internal caller in transition) — never `$ctx.domain`.
+        const isAdmin = await this.service.guardProxy($ctx, async proxy => proxy.hasAdminRole());
+        if (!isAdmin) throw new Error(`403 NOT ALLOWED - only for admin @${errScope}`);
         if (id) throw new Error(`@id[${id}] is invalid - ${errScope}`);
 
-        const $OS2 = _OS2();
+        //* v5: reuse the shared lazy instance (a new `_OS2()` per request added 2 listeners each time).
+        const $OS2 = $ES6;
         _inf(NS, `> option =`, $U.json($OS2.options));
         // const $res = await $OS2.describeIndex().catch(e => {
         //     _err(NS, `! err =`, e);

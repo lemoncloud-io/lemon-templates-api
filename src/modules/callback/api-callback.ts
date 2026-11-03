@@ -5,17 +5,24 @@
  *
  * @author      Steve Jung <steve@lemoncloud.io>
  * @date        2025-03-26 initial version.
+ * @date        2026-10-30 loop test: `POST /callback/<kind>/loop`, `POST /callback/<loopId>/loop-recv` (see `loop.ts`).
+ * @date        2026-10-30 loop test: `notify` and `enqueue` kinds (protocol service over SNS/SQS).
+ * @date        2026-10-30 loop test: with lemon-core's local transport (`LOCAL_TRANSPORT=mock`), wait and answer `recv`.
+ * @date        2026-10-30 loop test: lemon-core B14 relay — `trace.hop` gates, no hand-raised `depth`, ` tid=… hop=…` lines.
  *
  * @copyright   (C) 2022 LemonCloud Co Ltd. - All Rights Reserved.
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { $U, _log, _inf, _err, NextHandler, SearchQuery, $protocol, $slack } from 'lemon-core';
+import { $U, _log, _inf, _err, NextHandler, SearchQuery, $protocol, $slack, $localTransport } from 'lemon-core';
 import { $T, AbstractCRUDController, MyManagerProxy, onlyDefined } from 'lemon-core';
 import { Model, CallbackModel, CallbackRequest } from './model';
 import { CallbackModelManager } from './service';
 import { $trans, CallbackTransformer } from './transformer';
 import $LUT, { CallbackBody, CallbackView } from './views';
+import { LoopTransports, defaultTransports, loopLog, isLoopKind, isNestedTrigger } from './loop';
+import { asLoopPayload, onLoopRecv, onLoopError, loopKindOf, LOOP_SUBJECT, RECV_CMD, PROTOCOL_OPTIONS } from './loop';
+import { localRecv, traceTag, isViaProtocol } from './loop';
 
 //WARN - use `BackendService` from main service due to proper `BackendProxy`.
 import $service, { BackendService, ModelType } from '../../service/backend-service';
@@ -35,8 +42,13 @@ export class CallbackAPIController extends AbstractCRUDController<
 > {
     /**
      * public constructor
+     * @param service    backend service
+     * @param transports provider of the loop-test send side (default: lemon-core SNS/SQS services + `$protocol()`)
      */
-    public constructor(service: BackendService = $service) {
+    public constructor(
+        service: BackendService = $service,
+        protected readonly transports: () => LoopTransports = defaultTransports,
+    ) {
         super('callback', service, service.$callback, $trans.callback);
         _log(NS, `CallbackAPIController()...`);
     }
@@ -101,7 +113,7 @@ export class CallbackAPIController extends AbstractCRUDController<
         id = id === '0' ? '' : $T.S2(id);
 
         // STEP.0 validate parameter
-        const isLocal = $ctx?.domain === 'localhost';
+        const isLocal = $U.isLocalMode(); //* v5 B5: custom `id` only in local mode, not from `$ctx.domain`.
         if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
         if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
@@ -153,10 +165,11 @@ export class CallbackAPIController extends AbstractCRUDController<
         id = id === '0' ? '' : $T.S2(id);
 
         // STEP.0 validate parameter
-        const isLocal = $ctx?.domain === 'localhost';
         const isProd = !!$T.BN(param?.prod, param?.prod === '' ? 1 : 0);
         const isSimul = !!$T.BN(param?.simul, param?.simul === '' ? 1 : 0);
-        if (id && !isLocal) throw new Error(`@id[${id}] is invalid - ${errScope}`);
+        //* v5 (§ 11.3): custom handler `id` is admin-only via `hasAdminRole()` (role claim, signed key, local mode, or a v4 internal caller in transition) — never `$ctx.domain`.
+        const isAdmin = await this.service.guardProxy($ctx, async proxy => proxy.hasAdminRole());
+        if (id && !isAdmin) throw new Error(`403 NOT ALLOWED - only for admin @${errScope}`);
         if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
         //* runs in guarded proxy.
@@ -180,8 +193,7 @@ export class CallbackAPIController extends AbstractCRUDController<
         id = id === '0' ? '' : $T.S2(id);
 
         // STEP.0 validate parameter
-        const isLocal = $ctx?.domain === 'localhost';
-        // if (id && !isLocal) throw new Error(`@id (string) is invalid - ${errScope}`);
+        //* v5 PR #32: the unused `isLocal` (and its commented `id` check) is gone; the response `id` is the callback model id.
         // if (typeof body !== 'object') throw new Error(`@body (object) is required - ${errScope}`);
 
         return this.service.guardProxy($ctx, async proxy => {
@@ -189,6 +201,118 @@ export class CallbackAPIController extends AbstractCRUDController<
             const $final = await proxy.callback.doResponse(model, body);
             return this.modelAsView($final);
         });
+    };
+
+    /**
+     * loop test trigger (admin only): send one loop message by `sns`, `sqs`, `protocol`, `notify` or `enqueue`.
+     * - refuses a nested trigger (re-entry through the protocol channel: `trace.hop > 0`) with `400 INVALID LOOP`.
+     * - `protocol` waits for the receiver (`doPostLoopRecv()`) and returns its result.
+     * - `notify` (SNS) and `enqueue` (SQS) go through the protocol service to `doPostLoopRecv()` in `backend`.
+     *   they never pass a callback (a callback would be one more call after the receiver).
+     *
+     * ```sh
+     * $ npm run lambda:invoke -- --stage dev --internal --identity '{"sid":"loop-check","roles":["admin"]}' --method POST --path /callback/sns/loop
+     * $ http POST ':8800/callback/sqs/loop' note=hi     # local mode (LOCAL_MODE=1)
+     * ```
+     * - with lemon-core's local transport (`LOCAL_TRANSPORT=mock`, `npm run express.lemon`): the send is delivered
+     *   in-process; it waits (`$localTransport.drain()`) and answers `mock: true` and `recv` (results of this loop id).
+     * - each `send`/`done` line ends with ` tid=<trace.tid> hop=<trace.hop>` of this request; the protocol kinds carry
+     *   the same `tid` in the relay, so the receiver's `recv` line shows it too.
+     */
+    public doPostLoop: NextHandler = async (id, param, body, $ctx) => {
+        const errScope = `doPostLoop(${this.type()}/${id ?? ''})`;
+        _log(NS, `${errScope}...`);
+        return this.service.guardProxy($ctx, async proxy => {
+            //* admin first, so a non-admin learns nothing more.
+            if (!proxy.hasAdminRole()) throw new Error(`403 NOT ALLOWED - only for admin @${errScope}`);
+            //* guard: never start a loop from inside a loop.
+            if (isNestedTrigger($ctx, this.type(), `${id ?? ''}`)) throw new Error(`400 INVALID LOOP - nested trigger`);
+            if (!isLoopKind(id)) throw new Error(`404 NOT FOUND - ${this.type()}/${id ?? ''}/loop`);
+            const payload = asLoopPayload(id, body);
+            const { loopId, sentAt } = payload;
+            const $aws = this.transports();
+            //* local transport (lemon-core `LOCAL_TRANSPORT=mock`, local mode only): ` mock=1` on the send line.
+            const mock = $localTransport.isActive();
+            const tag = `${traceTag($ctx)}${mock ? ' mock=1' : ''}`;
+            //* with the local transport: wait for the in-process delivery, then add the receiver result(s).
+            const done = async (res: any) => {
+                if (!mock) return res;
+                await $localTransport.drain();
+                return { ...res, mock: true, recv: localRecv.take(loopId) };
+            };
+
+            //* sns: '' → the default topic (env `MY_SNS_ENDPOINT`).
+            if (id === 'sns') {
+                const messageId = await $aws.sns.publish('', LOOP_SUBJECT, payload);
+                loopLog.inf(`[LOOP] send kind=sns loop=${loopId} message=${messageId}${tag}`);
+                return done({ kind: id, loopId, messageId, sentAt });
+            }
+            //* sqs: the default queue (env `MY_SQS_ENDPOINT`); attributes carry the subject and the loop id.
+            if (id === 'sqs') {
+                const attr = { Subject: LOOP_SUBJECT, loop: id, loopId };
+                const messageId = await $aws.sqs.sendMessage(payload, attr);
+                loopLog.inf(`[LOOP] send kind=sqs loop=${loopId} message=${messageId}${tag}`);
+                return done({ kind: id, loopId, messageId, sentAt });
+            }
+            //* protocol kinds: a signed protocol call to `//self/callback/<loopId>/loop-recv`; the payload is the body.
+            //* the context claims `admin` (like `proxy.ts`); `identity.roles` rides in the relay (lemon-core B14).
+            //* no hand-raised `depth`: lemon-core counts the hop (`trace.hop + 1`) and the relay never carries `depth`.
+            const identity: any = $ctx?.identity;
+            const roles: string[] = [...(identity?.roles ?? []).filter((r: string) => r !== 'admin'), 'admin'];
+            const context: any = { ...$ctx, identity: { ...identity, roles } };
+            const target = `//self/${this.type()}/${loopId}/${RECV_CMD}`;
+            const $proto = $aws.protocol(context, target, PROTOCOL_OPTIONS);
+            const noCallback: string = undefined; //* guard: never a callback (it would call once more).
+            //* notify: SNS topic of this service (`x-protocol-service`) → `backend`.
+            if (id === 'notify') {
+                const messageId = await $proto.notify(null, payload, 'POST', noCallback);
+                loopLog.inf(`[LOOP] send kind=notify loop=${loopId} message=${messageId || '-'}${tag}`);
+                return done({ kind: id, loopId, messageId, sentAt });
+            }
+            //* enqueue: SQS queue of this service (`x-protocol-service`) → `backend`, no delay.
+            if (id === 'enqueue') {
+                const messageId = await $proto.enqueue(null, payload, 'POST', noCallback, 0);
+                loopLog.inf(`[LOOP] send kind=enqueue loop=${loopId} message=${messageId || '-'}${tag}`);
+                return done({ kind: id, loopId, messageId, sentAt });
+            }
+            //* protocol: synchronized call to this service's `lambda` function (`//self`), waits for the result.
+            loopLog.inf(`[LOOP] send kind=protocol loop=${loopId} message=-${tag}`);
+            const result = await $proto.execute(null, payload, 'POST');
+            loopLog.inf(`[LOOP] done kind=protocol loop=${loopId} rtt=${Date.now() - sentAt}ms${traceTag($ctx)}`);
+            return done({ kind: id, loopId, sentAt, result });
+        });
+    };
+
+    /**
+     * loop test receiver of the protocol kinds (`protocol`, `notify`, `enqueue`): log one `[LOOP] recv` line and
+     * return. it never sends anything.
+     * - allowed via the protocol channel (lemon-core B14: `trace.hop > 0`, not `external`) or for an admin;
+     *   any other non-admin request (external, direct invoke, local, or a hand-raised `depth`) gets 403.
+     * - a bad message (loop, loop id, sent time, `hop !== 1`) logs `[LOOP] bad` and returns ''.
+     * - via the protocol channel it never throws: any error logs `[LOOP] bad … reason=error` and returns ''
+     *   (a throw on the SQS protocol path is a redelivery, on the SNS path an error report).
+     * - the recv line ends with ` tid=<trace.tid> hop=<trace.hop>` (the sender's `tid`, hop 1 via the relay).
+     *
+     * ```sh
+     * $ http POST ':8800/callback/<loopId>/loop-recv' loop=protocol sentAt:=1 hop:=1     # local mode
+     * ```
+     */
+    public doPostLoopRecv: NextHandler = async (id, param, body, $ctx) => {
+        const errScope = `doPostLoopRecv(${this.type()}/${id ?? ''})`;
+        _log(NS, `${errScope}...`);
+        const viaProtocol = isViaProtocol($ctx);
+        try {
+            return await this.service.guardProxy($ctx, async proxy => {
+                if (!viaProtocol && !proxy.hasAdminRole()) {
+                    throw new Error(`403 NOT ALLOWED - protocol or admin only @${errScope}`);
+                }
+                return onLoopRecv(`${id ?? ''}`, body, $ctx);
+            });
+        } catch (e) {
+            //* a direct call keeps its error (403 etc.); the protocol channel never gets one.
+            if (!viaProtocol) throw e;
+            return onLoopError(loopKindOf(body), e);
+        }
     };
 
     /**

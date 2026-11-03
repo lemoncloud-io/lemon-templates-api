@@ -13,7 +13,7 @@ import { Model } from './backend-model';
 import { ModelType } from './backend-types';
 import { BackendProxy } from './backend-proxy';
 import { MyCoreService, $ES6Routed as $ES6 } from 'lemon-core';
-import { SearchService, Elastic6Option } from '../modules/search/service';
+import { SearchService, OS2BaseOption } from '../modules/search/service';
 import { CallbackModelManager } from '../modules/callback/service';
 import { MockModelManager, TestModelManager } from '../modules/mock/service';
 const NS = $U.NS('BACK', 'magenta'); // NAMESPACE TO BE PRINTED.
@@ -57,7 +57,7 @@ export class BackendService extends MyCoreService<Model, ModelType, BackendProxy
     /**
      * create search-service with some batch-handlers.
      */
-    public createSearchService = (options: Elastic6Option) => {
+    public createSearchService = (options: OS2BaseOption) => {
         const service = new SearchService(this.tableName, this.NS, options);
         // service.setBatchHandler('batch-mappings', async (list: MappingModel[], params: BatchParams<SimpleSet>) => {
         //     _log(NS, `batch-mappings($${list?.length})`);
@@ -76,7 +76,11 @@ export class BackendService extends MyCoreService<Model, ModelType, BackendProxy
         return proxy;
     };
 
-    /** */
+    /**
+     * fetch the identity-access of the current identity via `lemon-accounts-api` (pack-context).
+     *
+     * @deprecated `lemon-accounts-api` is deprecated (2026-11-03). No caller in this service — do not add new callers.
+     */
     protected async fetchAccess($ctx: NextContext, domain = '') {
         const accountId = getIdentityId($ctx);
         if (!accountId) throw new Error(`.identityId is required - fetchAccess()!`);

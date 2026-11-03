@@ -29,21 +29,58 @@ describe('SearchController', () => {
     PROFILE && console.info('! PROFILE=', PROFILE);
 
     //! test controller
-    it('should pass w/ main-service', async done => {
+    //* jest 29 (jest-circus) rejects `async done =>`; async tests return the promise instead.
+    it('should pass w/ main-service', async () => {
         const { controller } = instance();
         /* eslint-disable prettier/prettier */
         expect2(controller.hello()).toEqual(`search-api:search`);
         /* eslint-enable prettier/prettier */
-        done();
     });
 
     //! test `/hello` route
-    it('should pass express route: GET /0/hello', async done => {
-        const res = await request(app).get('/search/0/hello');
+    it('should pass express route: GET /0/hello', async () => {
+        // v5 B44: `getSearchHello` is admin only via `hasAdminRole()` (true in local mode `LOCAL_MODE=1`, HOW_TO_UPGRADE_V5 § 11.3), so the spec sets it and restores it.
+        const saved = {
+            LOCAL_MODE: process.env.LOCAL_MODE,
+            AWS_LAMBDA_FUNCTION_NAME: process.env.AWS_LAMBDA_FUNCTION_NAME,
+        };
+        process.env.LOCAL_MODE = '1';
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+        //* run the request, then put both names back (or delete them) whatever the result.
+        const res = await (async () => {
+            try {
+                return await request(app).get('/search/0/hello');
+            } finally {
+                Object.entries(saved).forEach(([k, v]) =>
+                    v === undefined ? delete process.env[k] : (process.env[k] = v),
+                );
+            }
+        })();
         expect2(res).toMatchObject({
             status: 200,
             text: $U.json({ id: '', hello: 'search-api:search' }),
         });
-        done();
+    });
+
+    //! v5 B44: not local and no admin role -> `GET /0/hello` is 403.
+    it('should 403 express route: GET /0/hello (not local, no role)', async () => {
+        const saved = {
+            LOCAL_MODE: process.env.LOCAL_MODE,
+            AWS_LAMBDA_FUNCTION_NAME: process.env.AWS_LAMBDA_FUNCTION_NAME,
+        };
+        delete process.env.LOCAL_MODE;
+        delete process.env.AWS_LAMBDA_FUNCTION_NAME;
+        //* run the request, then put both names back (or delete them) whatever the result.
+        const res = await (async () => {
+            try {
+                return await request(app).get('/search/0/hello');
+            } finally {
+                Object.entries(saved).forEach(([k, v]) =>
+                    v === undefined ? delete process.env[k] : (process.env[k] = v),
+                );
+            }
+        })();
+        expect2(() => res.status).toEqual(403);
+        expect2(() => res.text).toContain('only for admin');
     });
 });

@@ -9,12 +9,13 @@
  * @origin      `@lemoncloud/lemon-templates-api/modules/callback`
  */
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-import { AbstractTransformer, expect2 } from 'lemon-core';
+import { AbstractTransformer, expect2, CoreModel } from 'lemon-core';
 import { $FIELD, Model, filterFields, CallbackModel } from './model';
 import { $trans } from './transformer';
-import { fieldKeys } from '../../generated/field-registry';
+//* v5 B4: `Model` (= `CoreModel<ModelType>`) lists the core fields from the class (was `fieldKeys.callbackTransformerModel`)
+import { fieldsOf } from 'lemon-core/model';
 
-const $temp = filterFields(fieldKeys.callbackTransformerModel<Model>(), ['meta']);
+const $temp = filterFields(fieldsOf(CoreModel), ['meta']);
 
 //1 main test body.
 describe('transformer', () => {

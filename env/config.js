@@ -22,7 +22,7 @@
     return {
         lemon: {
             name: 'lemon-app',
-            runtime: 'nodejs22.x',                              // Powered by the V8 JavaScript Engine (used in Chromium)
+            runtime: 'nodejs24.x',                              // Powered by the V8 JavaScript Engine (used in Chromium)
             region: 'ap-northeast-2',
             env: 'lemon.yml',                                   // environment file
             //WARN! lambda를 VPC에서 이용할경우 NAT와 VPCE 등 네트워크 설정 구성 필요함!!! (refer to `lemon-hello-api`)
@@ -32,7 +32,7 @@
         },
         none: {
             name: 'none-app',
-            runtime: 'nodejs22.x',                              // Powered by the V8 JavaScript Engine (used in Chromium)
+            runtime: 'nodejs24.x',                              // Powered by the V8 JavaScript Engine (used in Chromium)
             region: 'ap-northeast-2',
             env: 'none.yml',                                    // environment file
             //WARN! lambda를 VPC에서 이용할경우 NAT와 VPCE 등 네트워크 설정 구성 필요함!!! (refer to `lemon-hello-api`)
