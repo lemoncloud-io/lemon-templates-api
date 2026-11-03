@@ -78,4 +78,18 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
         if (typeof s === 'string' && s.length <= maxLen && /^[1-9][0-9]{0,5}$/.test(s)) return $T.N(s);
         return s;
     };
+
+    /**
+     * v5 transition: a v4 internal caller still sends `domain: 'localhost'` without a role claim.
+     * - accept it only when the context is an internal protocol call (`channel: 'internal'`, `isInternalAdmin()`);
+     *   an external request (`channel: 'external'`) never gets admin from `domain`.
+     * - v5 callers claim the role (`asAdminContext()`); remove this when every caller runs v5.
+     */
+    public hasAdminRole(role?: string, options?: { errScope?: string; context?: NextContext }): boolean {
+        //* v5 admin first: local mode, signed key, or the role claim.
+        if (super.hasAdminRole(role, options)) return true;
+        //* v4 internal caller in transition: `domain: 'localhost'` only on an internal protocol call.
+        const context = options?.context ?? this.context;
+        return context?.domain === 'localhost' && this.isInternalAdmin(null, context);
+    }
 }
