@@ -1,6 +1,6 @@
 {
   "name": "lemon-templates-api",
-  "version": "5.26.1102b",
+  "version": "5.26.1102-c",
   "description": "lemon-templates management api",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -57,7 +57,7 @@
     "@aws-sdk/client-sqs": "^3.1159.0",
     "@aws-sdk/client-sts": "^3.1159.0",
     "@aws-sdk/credential-providers": "^3.1159.0",
-    "lemon-core": "^5.0.23"
+    "lemon-core": "^5.0.26"
   },
   "devDependencies": {
     "@aws-sdk/client-cloudwatch-logs": "^3.1159.0",
