@@ -9,6 +9,7 @@
  * @date        2019-11-26 optimized with `lemon-core#2.0.0`
  * @date        2019-12-03 optimized with `lemon-core#2.0.3`
  * @date        2026-10-30 register the SNS/SQS loop-test listeners (`modules/callback/loop`).
+ * @date        2026-11-04 register `public` (`/public/{proxy+}` → registered controllers; `mocks` only).
  *
  * @copyright (C) lemoncloud.io 2019 - All Rights Reserved.
  */
@@ -31,6 +32,7 @@ import callback from './modules/callback/api-callback';
 import search from './modules/search/api-search';
 import mocks from './modules/mock/api-mocks';
 import tests from './modules/mock/api-tests';
+import publc from './api/public-api';
 import { onLoopMessage } from './modules/callback/loop';
 
 //! register sub handlers, and listeners.
@@ -40,6 +42,10 @@ $web.addController(search);
 $web.addController(crons);
 $web.addController(tests);
 $web.addController(mocks);
+
+//! open the target controllers under `/public/{proxy+}` (auth NONE), then register `public`.
+publc.addController(mocks);
+$web.addController(publc);
 
 //! register cron listener
 $cron.addListener((id, param, body, ctx) => crons.handleEvent(id, param, body, ctx));
