@@ -83,6 +83,14 @@ flowchart LR
 - `context.trace`는 `{ tid, hop }`이다. protocol hop마다 lemon-core가 `hop`을 1 올린다. `[LOOP]` 줄 끝의 ` tid=<tid> hop=<hop>`으로 두 함수의 로그를 잇는다([src/modules/callback/README.md](src/modules/callback/README.md)).
 - 내부 호출 수신 게이트는 `$ctx.domain`이 아니라 `hasAdminRole()`로 연다(D110). search `GET /search/0/hello`·`POST /search/0/migrate`, callback `POST /callback/{id}/request`의 사용자 핸들러 `id`가 그렇다.
 - `hasAdminRole()`은 admin 역할·서명 키·로컬 모드면 참이다. 전환기에는 v4 내부 호출자(`domain: 'localhost'` + `channel: 'internal'`)도 받는다(`src/service/backend-proxy.ts`).
+- 수신 게이트는 두 종류다(D112).
+
+| 호출 종류 | 수신 게이트 | 송신 |
+| --- | --- | --- |
+| 관리 행위 | `hasAdminRole()` | `asAdminContext()` |
+| 내부 위임 호출(호출자 신원 보존) | `proxy.isInternalCall($ctx)` (`channel`이 `internal`·`local`) | 호출자 context 그대로 |
+
+- v5 relay 호출자는 `domain`이 없다. 그래서 오버라이드의 `domain === 'localhost'` 조건은 v4 호출자 전용이다. 원시 `$ctx.channel` 비교를 핸들러에 쓰지 않는다.
 - 로컬 실행 편의만 `$U.isLocalMode()`를 쓴다. callback 등록 `POST /callback/{id}`의 `id` 지정이 그렇다.
 
 ## 기능을 어디에 넣나
@@ -99,7 +107,7 @@ flowchart LR
   - `src/service/backend-proxy.ts`: 매니저 proxy
   - `src/view/types.ts`: 타입 패키지로 내보낼 view
 - 새 type은 일반 라우트(`aws_iam`)로 들어온다. 인증 없는 경로가 필요하면 `serverless.yml`과 `deploy.config.example.json`에 명시 라우트를 같은 순서로 둔다.
-- 내부 호출만 받는 핸들러는 `hasAdminRole()`로 막는다. `$ctx.domain`을 보지 않는다.
+- 내부 호출만 받는 핸들러는 관리 행위면 `hasAdminRole()`, 내부 위임 호출이면 `proxy.isInternalCall($ctx)`로 막는다(D112). `$ctx.domain`을 보지 않는다.
 - proxy를 추가·변경하면 [docs/proxy-implementation-guide.md](docs/proxy-implementation-guide.md)를 먼저 본다.
 - 모듈 규칙: [src/modules/mock/README.md](src/modules/mock/README.md), [src/modules/callback/README.md](src/modules/callback/README.md)
 

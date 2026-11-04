@@ -92,4 +92,16 @@ export class BackendProxy extends MyCoreProxy<ModelType, BackendService> {
         const context = options?.context ?? this.context;
         return context?.domain === 'localhost' && this.isInternalAdmin(null, context);
     }
+
+    /**
+     * v5 D112: gate of an internal delegation call that keeps the caller identity
+     * (relay `internal`, local server `local`).
+     * - an administrative action uses `hasAdminRole()` and the caller `asAdminContext()` instead.
+     * - never gate on `context.domain`.
+     */
+    public isInternalCall(context?: NextContext): boolean {
+        //* only the channel set by lemon-core decides; an external web request is `external`.
+        const channel = (context ?? this.context)?.channel;
+        return channel === 'internal' || channel === 'local';
+    }
 }

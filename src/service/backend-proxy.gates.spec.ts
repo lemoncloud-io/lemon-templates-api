@@ -67,4 +67,39 @@ describe('BackendProxy (v5 B44 gates)', () => {
         const { proxy } = instance({ identity: { sid: '', uid: '', roles: ['admin'] } } as NextContext);
         expect2(() => proxy.hasAdminRole()).toEqual(true);
     });
+
+    //* D112: the internal delegation gate reads only `channel`.
+    describe('isInternalCall()', () => {
+        //* relay (protocol) or direct invoke.
+        it('channel internal → true', async () => {
+            const { proxy } = instance({ channel: 'internal' } as NextContext);
+            expect2(() => proxy.isInternalCall()).toEqual(true);
+        });
+
+        //* local server.
+        it('channel local → true', async () => {
+            const { proxy } = instance({ channel: 'local' } as NextContext);
+            expect2(() => proxy.isInternalCall()).toEqual(true);
+        });
+
+        //* an external web request, even w/ domain localhost.
+        it('channel external → false', async () => {
+            const { proxy } = instance({ domain: 'localhost', channel: 'external' } as NextContext);
+            expect2(() => proxy.isInternalCall()).toEqual(false);
+        });
+
+        //* no channel at all.
+        it('no channel → false', async () => {
+            const { proxy } = instance({});
+            expect2(() => proxy.isInternalCall()).toEqual(false);
+        });
+
+        //* the explicit context wins over `this.context`.
+        it('explicit context overrides this.context', async () => {
+            const { proxy } = instance({ channel: 'external' } as NextContext);
+            expect2(() => proxy.isInternalCall({ channel: 'internal' } as NextContext)).toEqual(true);
+            const { proxy: proxy2 } = instance({ channel: 'internal' } as NextContext);
+            expect2(() => proxy2.isInternalCall({ channel: 'external' } as NextContext)).toEqual(false);
+        });
+    });
 });
