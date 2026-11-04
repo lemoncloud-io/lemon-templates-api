@@ -12,12 +12,12 @@ v5 서비스의 레시피이기도 하다. `bin/sync-v5-tooling.mjs`가 이 저�
 | 런타임 | Node `24.15.0` (`.nvmrc`), `engines.node` `>=24.0.0`. Lambda 런타임은 `serverless.yml` `provider.runtime`이 env 설정에서 읽는다. |
 | 언어·빌드 | TypeScript `^4.7.4`, `ttsc`(ttypescript)로 `src/` → `dist/` |
 | 테스트 | jest `^29.7.0` + ts-jest `^29.4.15` (`src/**/*.spec.ts`). Lambda 도구(`lemon-*`)의 테스트는 lemon-core에 있다 |
-| 프레임워크 | `lemon-core` `^5.0.23`(설치 5.0.23). lemon-model(설치 5.0.4)은 lemon-core를 통해 온다(`field`·`fieldsOf`는 `lemon-core/model`). 루트 `package.json`은 `lemon-model`을 선언하지 않는다. 타입 패키지 `@types/`만 `lemon-model`을 참조한다(D107). |
+| 프레임워크 | `lemon-core` `^5.0.29`(설치 5.0.29). lemon-model(설치 5.0.4)은 lemon-core를 통해 온다(`field`·`fieldsOf`는 `lemon-core/model`). 루트 `package.json`은 `lemon-model`을 선언하지 않는다. 타입 패키지 `@types/`만 `lemon-model`을 참조한다(D107). |
 | 로컬 서버 | lemon-core `buildExpress()`의 로컬 API Gateway(`src/express.ts`). `serverless.yml` 라우트를 그대로 따른다(`{proxy+}`, 없는 경로·메서드는 403). `express`·`lemon-devkit`은 쓰지 않는다. |
 | AWS SDK | v3 (`@aws-sdk/*` `^3.1159.0`, lemon-core peer 범위와 같다). lemon-core가 쓰는 클라이언트를 이 서비스가 직접 선언한다 |
 | 배포 | lemon-core `lemon-lambda-pack` → `lemon-lambda-deploy` → AWS Lambda. Serverless Framework 패키지·`sls` 스크립트는 없다. `serverless.yml`은 함수·라우트 정의로 남는다([docs/serverless.md](docs/serverless.md)). prod는 아직 Serverless 스택이다(`bin/deploy-dev.sh`). |
 | 의존성 고정 | `overrides`: `deepmerge` → dev 전용 대체본 `scripts/deepmerge-safe`, `minimatch` `^11.0.4`, `test-exclude` `^7.0.2`(+`glob` `^14.0.2`) |
-| 브랜치 | 기본 브랜치 `develop`. v5 라인은 `v5` 브랜치에 있다(`develop` PR 열림, 머지 전). |
+| 브랜치 | 기본 브랜치 `develop`. v5 라인은 `develop`에 있다(2026-11-03 templates #76으로 머지). |
 | 패키지 버전 | `package.json` `version` (`5.26.1102a`) |
 
 ## 저장소 지도
@@ -135,7 +135,7 @@ flowchart LR
 | `npm run perf:lambda -- ...` | 반복 호출, cold/warm 시간 요약(`lemon-lambda-perf`) | [docs/lambda-tools.md](docs/lambda-tools.md) |
 | `npm run fields:admin -- --target express\|lambda` | `GET /<type>/fields/admin` 점검(`lemon-fields-admin`) | [docs/lambda-tools.md](docs/lambda-tools.md#fieldsadmin) |
 | `npm run loop:check -- ...` | 루프 테스트 다섯 kind를 로그 줄로 점검(`lemon-loop-check`). `--target express`면 로컬 서버 | [docs/lambda-tools.md](docs/lambda-tools.md#loopcheck) |
-| `npm run ship:check` | push 전 유출 검사(`bin/ship-check.sh`, S3 게이트): 깨끗한 트리, 보호 파일(`env`·`serverless.yml`·`serverless-vpc.yml`) 무변경, diff 유출 패턴 0건, `version` 불변 또는 dev 형식 한 줄 | 읽기 전용, AWS 불필요. base 기본 `origin/v5`(`-- --base <ref>`). exit 0 통과·1 실패·2 사용법. [docs/lambda-tools.md](docs/lambda-tools.md#ship-check-binship-checksh) |
+| `npm run ship:check` | push 전 유출 검사(`bin/ship-check.sh`, S3 게이트): 깨끗한 트리, 보호 파일(`env`·`serverless.yml`·`serverless-vpc.yml`) 무변경, diff 유출 패턴 0건, `version` 불변 또는 dev 형식 한 줄 | 읽기 전용, AWS 불필요. base 기본 `origin/v5`(`-- --base <ref>`). v5가 `develop`에 머지된 뒤로는 보통 `-- --base origin/develop`을 준다. exit 0 통과·1 실패·2 사용법. [docs/lambda-tools.md](docs/lambda-tools.md#ship-check-binship-checksh) |
 | `node bin/sync-v5-tooling.mjs --target <dir>` | 이 저장소의 v5 도구를 다른 서비스 체크아웃에 옮긴다. 기본은 보고만 | `--apply`가 대상 파일을 쓴다. [docs/sync-v5-tooling.md](docs/sync-v5-tooling.md) |
 
 내부용(직접 부르지 않음): `build-ts`·`watch-ts`·`nodemon`·`start`(`express.lemon*`이 부른다), `*start`(ts-node 변형), `test:dev`·`test:watch.lemon`(watch 변형), `prepretypes`·`pretypes`·`posttypes`·`types:rewrite`(`types`가 부른다). `!`로 시작하는 키는 구분 주석이다.
@@ -157,7 +157,7 @@ flowchart LR
 ```sh
 npx tsc --noEmit        # 기대: 출력 없음, exit 0
 npm test                # 기대: Test Suites 23 passed, Tests 204 passed, exit 0 (2026-11-04)
-npm run ship:check      # 커밋한 뒤 push 전: 기대 PASS 4줄, exit 0 (base origin/v5)
+npm run ship:check -- --base origin/develop  # 커밋한 뒤 push 전: 기대 PASS 4줄, exit 0 (스크립트 기본 base는 origin/v5)
 ```
 
 - 테스트가 실패하면 테스트가 아니라 코드를 고친다. 테스트 수가 바뀌면 이 줄도 고친다.
@@ -196,7 +196,7 @@ npm run loop:check -- --stage dev                     # 기대: 다섯 줄 모�
 - Lambda 도구(`lemon-*`)에 `--raw`를 쓰지 않는다. 계정·ARN·토큰 마스킹이 꺼진다. 보고에 계정·ARN·호스트·토큰을 쓰지 않는다.
 - pack(Docker)·deploy·migrate·이행은 사람이 명시적으로 시킬 때만 돌린다.
 - prod 스테이지 호출은 하지 않는다. Lambda 도구의 stage guard는 dev 외 스테이지에 `--confirm-stage <stage>`를 요구한다. 이 플래그는 사람의 명시 지시가 있을 때만 붙인다.
-- 작업 전에 브랜치를 만든다. v5 라인 작업의 base는 `v5`다. `v5`는 아직 `develop`에 머지되지 않았다.
+- 작업 전에 브랜치를 만든다. v5 라인 작업의 base는 `develop`이다. `v5`는 2026-11-03 `develop`에 머지됐다(templates #76).
 - 내부 호출 수신 게이트는 `hasAdminRole()`이다. `isLocalMode()`는 로컬 편의에만 쓴다. `$ctx.domain`으로 권한을 열지 않는다.
 - 생성 파일(`@types/dist/`, `@types/package.json`, `dist/`, `coverage/`, `.artifacts/`)을 손으로 고치지 않는다. `npm run types`로 다시 만든다.
 - `npm run lint`는 파일을 고쳐 쓴다. 의도한 경우에만 돌린다.
@@ -242,6 +242,7 @@ npm run loop:check -- --stage dev                     # 기대: 다섯 줄 모�
 
 | Version   | Description
 |--         |--
+| 5.26.1102d | `lemon-core@5.0.29`: relay carries origin `ua`/`ip`/`dom` + call `path`; `PROTOCOL_LEGACY_ACCEPT` default `reject`.
 | 5.26.1102a | v5 line on `lemon-core@5.0.23`: Serverless removed, overrides, `deploy:dev`, `@types` on lemon-model only (D107), internal-call gates `hasAdminRole()` (D110), `sync-v5-tooling`.
 | 5.26.xxx  | optimized `lemon-core@5.0.5` since 2026. (local transport, see [docs/dependency-audit.md](docs/dependency-audit.md))
 | 0.25.808  | optimized `lemon-core@4.0.6` initially.

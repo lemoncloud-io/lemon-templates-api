@@ -178,9 +178,11 @@ describe('BackendProxy', () => {
             expect(Object.keys(relay.idt).every(k => (RELAY_IDENTITY_FIELDS as readonly string[]).includes(k))).toBe(
                 true,
             );
-            //* nothing of the caller request crosses the hop (cookie, domain, client ip, user agent …).
-            const text = Buffer.from(body.relay.substring(3), 'base64url').toString('utf8');
-            ['oauth.lemoncloud.io', '222.0.0.192', 'Mozilla'].forEach(v => expect(text).not.toContain(v));
+            //* lemon-core 5.0.29: the origin (user agent, client ip, domain) crosses only as the relay `ua`/`ip`/`dom` fields.
+            expect(relay).toMatchObject({ ua: context.userAgent, ip: context.clientIp, dom: context.domain });
+            //* the identity stays whitelisted: no provider, pool, or user agent of the caller identity in `idt`.
+            const idt = JSON.stringify(relay.idt);
+            ['oauth.lemoncloud.io', 'identityPoolId', 'Mozilla'].forEach(v => expect(idt).not.toContain(v));
         } finally {
             enqueue.mockRestore();
         }
