@@ -4,7 +4,7 @@ Since lemon-core 5.0.13 (v5 B19) the tools are the lemon-core bins `lemon-lambda
 
 `npm run lambda:deploy` consumes the directory produced by `npm run pack`. It verifies the manifest, archive SHA-256 and extracted file inventory, then prints an **offline plan by default**. It does not load the handler, resolve AWS credentials or call the network in plan mode.
 
-Use `--apply` only after reviewing the plan. Apply creates or updates AWS resources and invokes both Lambda handlers for verification. This tool was tested with mock transports and a real existing ZIP in offline mode; no AWS deployment was performed during implementation.
+Use `--apply` only after reviewing the plan. Apply creates or updates AWS resources and invokes both Lambda handlers for verification. This tool was first tested with mock transports and a real existing ZIP in offline mode. A new service cloned from this template was bootstrapped on lemon dev with it on 2026-11-19 ([New service: first deploy](#new-service-first-deploy-bootstrap)).
 
 ## Templates dev entrypoint
 
@@ -27,11 +27,12 @@ Edit the example account, endpoint, profile and artifact bucket for the installa
 {
     "NAME": "lemon-templates",
     "NS": "TT",
-    "LS": "1"
+    "LS": "1",
+    "REPORT_ERROR_ARN": "<SNS ARN of lemon-hello-sns in the installation account and region>"
 }
 ```
 
-Supply your service's additional environment settings explicitly. The CLI overlays `STAGE`, `DEFAULT_REGION`, `MY_DYNAMO_TABLE`, `MY_SQS_ENDPOINT` and `MY_SNS_ENDPOINT` using the selected stage and resolved resource outputs. The function tool uses `environmentMode: "merge"`; omitted live keys remain. Environment values are never printed or saved in receipts. If any value begins with `*AQIC`, `policy.kmsDecryptKeyArn` is required. The exact key must also be permitted by the installation boundary. Other policy options are `kmsEncryptKeyArn`, `kmsKeyArn`, `identityPoolId` and `bucket`; the resolved statements are passed unchanged to ensure-role.
+`npx lemon-lambda-env build --env-file env/<profile>.yml --stage dev --output .artifacts/deploy.env.json` writes the stage section as this JSON and prints key names only. Supply your service's additional environment settings explicitly. The CLI overlays `STAGE`, `DEFAULT_REGION`, `MY_DYNAMO_TABLE`, `MY_SQS_ENDPOINT` and `MY_SNS_ENDPOINT` using the selected stage and resolved resource outputs. **It does not overlay `REPORT_ERROR_ARN`**, which `serverless.yml` `provider.environment` used to set. Without it `getHelloArn()` has no account in a direct invoke, so the `notify` and `enqueue` loops fail with `400 .accountId[] is missing - getHelloArn(HELO:)` and error reports have no topic. Put it in the environment file with the installation's account and region. The function tool uses `environmentMode: "merge"`; omitted live keys remain. Environment values are never printed or saved in receipts. If any value begins with `*AQIC`, `policy.kmsDecryptKeyArn` is required. The exact key must also be permitted by the installation boundary. Other policy options are `kmsEncryptKeyArn`, `kmsKeyArn`, `identityPoolId` and `bucket`; the resolved statements are passed unchanged to ensure-role.
 
 `endpoint` must be an HTTPS API Gateway execute-api URL in the configured region with one API stage path, e.g. `https://example123.execute-api.ap-northeast-2.amazonaws.com/dev`. Custom domains, query strings, credentials in URLs, redirects and automatic endpoint discovery are intentionally unsupported. The endpoint's API stage and the target resource stage are separate; the server must support the requested target stage.
 
@@ -87,11 +88,26 @@ A deletion between preflight and ensure-function remains a race: the server can 
 
 ## Bootstrap settings and route compatibility
 
-The example mirrors all **19** HTTP route entries in the current `serverless.yml`: ten public and nine AWS_IAM routes. The drift test compares path, method, authorization and CORS. OPTIONS methods are created by the route tool; do not put OPTIONS entries into the config.
+The example mirrors all **22** HTTP route entries in the current `serverless.yml`: thirteen public and nine AWS_IAM routes. The drift test compares path, method, authorization and CORS. OPTIONS methods are created by the route tool; do not put OPTIONS entries into the config.
 
 Bootstrap uses a PAY_PER_REQUEST `_id` string-key table with NEW_AND_OLD_IMAGES streams, explicit deletion protection, the legacy queue settings, 14-day logs, 512 MB functions with 30/300 second timeouts, and a disabled minute schedule. These are concrete template defaults, not universal production recommendations. Existing table settings that the server does not converge may fail verification; retained-resource migration is not automatic. Bootstrap replaces the managed role's whole policy with the resolved policy; the server's statement-drop guard can refuse a change. It never opts into statement dropping.
 
 The example preserves the legacy wildcard-origin plus credential CORS with explicit `allowCredentialsWithWildcardOrigin: true`. Browsers do not allow credentialed access with wildcard origin. Change that consciously to an explicit origin before relying on browser credentials. Routes are applied sequentially with 1.5 seconds between calls. A known tool failure stops and closes the round as aborted; there is no blind retry of mutation calls.
+
+## New service: first deploy (bootstrap)
+
+A service cloned from this template has no dev functions yet, so its first deploy is `bootstrap`. After that it uses `code` mode. Verified on lemon dev on 2026-11-19 with a clone named `lemon-sample-api` (lemon-core 5.0.30, Node 24, ZIP 11,462,181 bytes).
+
+1. Finish the README clone checklist (`package.json` name/version, `serverless.yml` `service`, `custom` name maps, schedule prefix). Commit, so pack records `dirty: false`.
+2. `npm run pack -- --output .artifacts/lambda/dev-<YYYYMMDD-HHMM>-<sha7>`.
+3. `cp deploy.config.example.json .artifacts/deploy.bootstrap.dev.json` and replace `project`, `keyPrefix`, `account`, `endpoint`, `profile` and `artifactBucket`. Keep `"environmentFile": "deploy.env.json"`. `deletionProtection: false` makes a trial service easy to remove; keep `true` for a real one.
+4. Build `.artifacts/deploy.env.json` with `lemon-lambda-env build` (above), then set `NAME` to the new service and add `REPORT_ERROR_ARN`.
+5. Plan: `npm run lambda:deploy -- --config .artifacts/deploy.bootstrap.dev.json --artifact <dir>`. Check `mode: bootstrap`, 13 steps, 22 routes and the environment key list.
+6. Apply as a separate command: the same line with `--apply --receipt-dir .artifacts/deploy/receipts`. Expect `status: completed` and a `deployId`.
+7. Verify (README § 작업 검증, dev only): both functions' `CodeSha256` equal the ZIP's base64 sha256, `lambda:invoke` `/` and `/hello/0` http 200, `loop:check` 5/5, `fields:admin` `ok=true gate=closed(403)`, `lambda:logs` no error lines. Through the REST API, unsigned `/{type}` routes return 403.
+8. Save a code-mode config (`jq '{schemaVersion, mode: "code", project, stage, region, account, profile, endpoint, artifactBucket, keyPrefix}'`) for later updates.
+
+Re-running bootstrap with the same artifact converges and completes again; it is how an environment change is applied (`code` mode never sends environment). The 2026-11-19 run needed this once, for the missing `REPORT_ERROR_ARN`.
 
 ## Upload, verification and receipts
 
@@ -134,6 +150,6 @@ npm run lambda:deploy:dev -- --help
 
 The tests run in lemon-core (`npm test`, the `deploy` and `dev-release` specs), not in this repository. They use a generated real ZIP and mocked AWS/tools. They cover both modes, route drift, account/architecture/ownership guards, exact upload headers, 412 handling, unknown outcomes, partial success, interruption, secret omission, and independent HMAC verification of the SigV4 `@1` path/query. A previously packed 11,194,234-byte ZIP (9,200 files; SHA `543962ab636edc0aa60917b97d601faddb1a145f82818ae879c9ca16c9eb8e04`, source `80079ee`) was also planned with Node fetch/http/https/net access blocked by a test preload (not an OS security sandbox): code 3.39s, bootstrap 2.74s. This checks compatibility with that existing artifact, not a fresh release or AWS deployment.
 
-Contract sources: [knowledge PR #1104](https://github.com/lemoncloud-io/knowledge/pull/1104) at `0ba8b7b0579ca4134ef5f7fb739cb1795829f232`, [eureka-deploy-api PR #40](https://github.com/lemoncloud-io/eureka-deploy-api/pull/40), and server source `6732b58d4d4eee8338d0ca1681afb19cbd4a8808`. `lemon.deploy.apply@1` is DoU-specific and is not used.
+Contract sources: [knowledge PR #1104](https://github.com/lemoncloud-io/knowledge/pull/1104) at `0ba8b7b0579ca4134ef5f7fb739cb1795829f232`, [eureka-deploy-api PR #40](https://github.com/lemoncloud-io/eureka-deploy-api/pull/40), and server source `6732b58d4d4eee8338d0ca1681afb19cbd4a8808`. This CLI calls the individual tools; it does not use `lemon.deploy.apply@1` (the separate `settings.yml` → `spec$` path).
 
 The transport, plan and orchestration modules are separated from the service config for later migration into shared tooling. Their inputs/receipts are schema version 1; the template route/default settings remain service-owned.

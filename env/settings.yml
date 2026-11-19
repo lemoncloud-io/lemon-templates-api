@@ -1,0 +1,132 @@
+# lemon-templates-api env settings (sample for cloned services)
+# - read only by the generic deploy path: codes-github-api `env-settings` → goods catalog → eureka-deploy `lemon.deploy.apply@1` `spec$`.
+# - `lemon-lambda-deploy` (npm run lambda:deploy, docs/lambda-deploy.md) does NOT read this file.
+# - a cloned service renames `NAME`/`name` defaults and the `*Name` descriptions, and lists only its extra routes under `deploy.routes`.
+
+#==============================================
+# environ
+#==============================================
+environ:
+  LS:
+    isRequired: 1
+    type: boolean
+    defaultValue: 0
+    description: 'Hide logs (0: disabled, 1: enabled)'
+    redeploy: 1
+  LC:
+    isRequired: 1
+    type: boolean
+    defaultValue: 1
+    description: 'Enable log coloring (0: disabled, 1: enabled)'
+    redeploy: 1
+  TS:
+    isRequired: 1
+    type: boolean
+    defaultValue: 1
+    description: 'Include timestamp in logs (0: disabled, 1: enabled)'
+    redeploy: 1
+  NAME:
+    isRequired: 1
+    type: string
+    defaultValue: temp
+    description: 'Project profile name - e.g., lemon'
+    isHidden: 1
+  STAGE:
+    isRequired: 1
+    type: string
+    options:
+      - develop
+      - production
+    defaultValue: develop
+    description: 'Deployment stage'
+    isHidden: 1
+    immutable: 1
+  MY_DYNAMO_TABLE:
+    isRequired: 0
+    type: string
+    description: 'Name of the DynamoDB table to use for integration'
+    immutable: 1
+  SQS_ENDPOINT:
+    isRequired: 0
+    type: string
+    description: 'SQS endpoint or configuration to integrate'
+    immutable: 1
+  REPORT_ERROR:
+    isRequired: 0
+    type: boolean
+    defaultValue: 1
+    description: 'Report errors to `REPORT_ERROR_ARN` (0: off, 1: on). On this path a created topic replaces `REPORT_ERROR_ARN`, so reports go to this service own topic, not the shared `lemon-hello-sns`'
+    redeploy: 1
+  USE_SESSION:
+    isRequired: 0
+    type: boolean
+    defaultValue: 0
+    description: 'Session handling in lemon-core web handler (0: off, 1: on)'
+    redeploy: 1
+  BACKBONE_API:
+    isRequired: 0
+    type: string
+    description: 'Backbone (proxy-server) API endpoint; unset = not behind a backbone'
+    redeploy: 1
+
+#==============================================
+# config
+#==============================================
+config:
+  name:
+    isRequired: 1
+    type: string
+    defaultValue: temp
+    description: 'Name for project identification'
+    isHidden: 1
+  runtime:
+    isRequired: 1
+    type: string
+    options:
+      - nodejs24.x
+    defaultValue: nodejs24.x
+    description: 'Runtime environment (pack builds Node 24)'
+    immutable: 1
+  region:
+    isRequired: 1
+    type: string
+    defaultValue: ap-northeast-2
+    description: 'AWS region'
+    immutable: 1
+  env:
+    isRequired: 1
+    type: string
+    defaultValue: temp.yml
+    description: 'Name of the env file; should match the project name'
+    isHidden: 1
+  stage:
+    isRequired: 1
+    type: string
+    options:
+      - dev
+      - prod
+    defaultValue: dev
+    description: 'Deployment stage'
+    immutable: 1
+  tableName:
+    isRequired: 1
+    type: string
+    description: 'DynamoDB table (`_id` HASH, stream NEW_AND_OLD_IMAGES → backend, `MY_DYNAMO_TABLE`). sls: lemon-templates-table[-dev]'
+  queueName:
+    isRequired: 1
+    type: string
+    description: 'SQS queue consumed by backend (`MY_SQS_ENDPOINT`, loop test `sqs`). sls: lemon-templates-sqs[-dev]'
+  topicName:
+    isRequired: 1
+    type: string
+    description: 'SNS topic subscribed by backend (`MY_SNS_ENDPOINT`, loop test `sns`). sls: lemon-templates-sns[-dev]'
+
+#==============================================
+# deploy - Generic deploy path (apply@1 spec$), only what differs from the standard 18 routes
+#==============================================
+deploy:
+  routes:
+    - { path: '/mocks/{id}/{cmd}', httpMethod: GET, authorizationType: NONE }
+    - { path: '/public', httpMethod: GET, authorizationType: NONE }
+    - { path: '/public/{proxy+}', httpMethod: GET, authorizationType: NONE }
+    - { path: '/public/{proxy+}', httpMethod: POST, authorizationType: NONE }
