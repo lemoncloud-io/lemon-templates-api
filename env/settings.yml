@@ -83,7 +83,6 @@ config:
     isRequired: 1
     type: string
     options:
-      - nodejs22.x
       - nodejs24.x
     defaultValue: nodejs24.x
     description: 'Runtime environment (pack builds Node 24)'
