@@ -12,13 +12,13 @@ v5 서비스의 레시피이기도 하다. `bin/sync-v5-tooling.mjs`가 이 저�
 | 런타임 | Node `24.15.0` (`.nvmrc`), `engines.node` `>=24.0.0`. Lambda 런타임은 `serverless.yml` `provider.runtime`이 env 설정에서 읽는다. |
 | 언어·빌드 | TypeScript `^4.7.4`, `ttsc`(ttypescript)로 `src/` → `dist/` |
 | 테스트 | jest `^29.7.0` + ts-jest `^29.4.15` (`src/**/*.spec.ts`). Lambda 도구(`lemon-*`)의 테스트는 lemon-core에 있다 |
-| 프레임워크 | `lemon-core` `^5.0.29`(설치 5.0.29). lemon-model(설치 5.0.4)은 lemon-core를 통해 온다(`field`·`fieldsOf`는 `lemon-core/model`). 루트 `package.json`은 `lemon-model`을 선언하지 않는다. 타입 패키지 `@types/`만 `lemon-model`을 참조한다(D107). |
+| 프레임워크 | `lemon-core` `^5.0.30`(설치 5.0.30). lemon-model(설치 5.0.4)은 lemon-core를 통해 온다(`field`·`fieldsOf`는 `lemon-core/model`). 루트 `package.json`은 `lemon-model`을 선언하지 않는다. 타입 패키지 `@types/`만 `lemon-model`을 참조한다(D107). |
 | 로컬 서버 | lemon-core `buildExpress()`의 로컬 API Gateway(`src/express.ts`). `serverless.yml` 라우트를 그대로 따른다(`{proxy+}`, 없는 경로·메서드는 403). `express`·`lemon-devkit`은 쓰지 않는다. |
 | AWS SDK | v3 (`@aws-sdk/*` `^3.1159.0`, lemon-core peer 범위와 같다). lemon-core가 쓰는 클라이언트를 이 서비스가 직접 선언한다 |
 | 배포 | lemon-core `lemon-lambda-pack` → `lemon-lambda-deploy` → AWS Lambda. Serverless Framework 패키지·`sls` 스크립트는 없다. `serverless.yml`은 함수·라우트 정의로 남는다([docs/serverless.md](docs/serverless.md)). prod는 아직 Serverless 스택이다(`bin/deploy-dev.sh`). |
 | 의존성 고정 | `overrides`: `deepmerge` → dev 전용 대체본 `scripts/deepmerge-safe`, `minimatch` `^11.0.4`, `test-exclude` `^7.0.2`(+`glob` `^14.0.2`) |
 | 브랜치 | 기본 브랜치 `develop`. v5 라인은 `develop`에 있다(2026-11-03 templates #76으로 머지). |
-| 패키지 버전 | `package.json` `version` (`5.26.1102a`) |
+| 패키지 버전 | `package.json` `version` (`5.26.1118`) |
 
 ## 저장소 지도
 
@@ -156,7 +156,7 @@ flowchart LR
 
 ```sh
 npx tsc --noEmit        # 기대: 출력 없음, exit 0
-npm test                # 기대: Test Suites 23 passed, Tests 204 passed, exit 0 (2026-11-04)
+npm test                # 기대: Test Suites 23 passed, Tests 209 passed, exit 0 (2026-11-19)
 npm run ship:check -- --base origin/develop  # 커밋한 뒤 push 전: 기대 PASS 4줄, exit 0 (스크립트 기본 base는 origin/v5)
 ```
 
@@ -214,6 +214,8 @@ npm run loop:check -- --stage dev                     # 기대: 다섯 줄 모�
 - [ ] 쓰지 않는 샘플 모듈은 위 연결 지점과 `serverless.yml`·`deploy.config.example.json` 명시 라우트에서 함께 뺀다.
 - [ ] 이 README의 제목·소개·VERSION INFO를 바꾼다.
 - [ ] `env/` 설정과 `.artifacts/` 배포 설정은 사람이 준비한다.
+- [ ] 첫 dev 배포는 `bootstrap` 모드다(함수·역할·테이블·큐·토픽·REST API를 새로 만든다). 그 뒤는 `code` 모드다. 순서는 [docs/lambda-deploy.md § New service: first deploy](docs/lambda-deploy.md#new-service-first-deploy-bootstrap)에 있다(2026-11-19 lemon dev 실측).
+- [ ] bootstrap env 파일에 `REPORT_ERROR_ARN`을 넣는다. 배포 도구는 `serverless.yml`이 넣던 이 키를 채우지 않는다. 빠지면 `loop:check`의 `notify`·`enqueue`가 `400 .accountId[] is missing`으로 실패한다.
 - [ ] 이미 있는 v5 서비스는 복제 대신 `node bin/sync-v5-tooling.mjs --target <체크아웃>`으로 도구만 맞춘다. `--apply` 뒤 사람이 할 일은 [docs/sync-v5-tooling.md](docs/sync-v5-tooling.md)에 있다.
 
 ## 문서 색인
@@ -242,6 +244,7 @@ npm run loop:check -- --stage dev                     # 기대: 다섯 줄 모�
 
 | Version   | Description
 |--         |--
+| 5.26.1118 | `lemon-core@5.0.30`.
 | 5.26.1102d | `lemon-core@5.0.29`: relay carries origin `ua`/`ip`/`dom` + call `path`; `PROTOCOL_LEGACY_ACCEPT` default `reject`.
 | 5.26.1102a | v5 line on `lemon-core@5.0.23`: Serverless removed, overrides, `deploy:dev`, `@types` on lemon-model only (D107), internal-call gates `hasAdminRole()` (D110), `sync-v5-tooling`.
 | 5.26.xxx  | optimized `lemon-core@5.0.5` since 2026. (local transport, see [docs/dependency-audit.md](docs/dependency-audit.md))
