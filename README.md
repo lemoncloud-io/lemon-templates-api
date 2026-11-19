@@ -42,6 +42,7 @@ v5 서비스의 레시피이기도 하다. `bin/sync-v5-tooling.mjs`가 이 저�
 | `scripts/deepmerge-safe/` | `deepmerge` override 대체본(dev 전용) | 거의 안 고침 |
 | `tools/lambda-bundle/` | 번들·축약 실험(`bundle:lab`). 의존성은 따로 설치한다. | 개발자 |
 | `env/` | 프로필·스테이지 설정 | **에이전트는 열지 않음** |
+| `env/settings.yml` | 범용 배포 경로(goods → `lemon.deploy.apply@1` `spec$`)용 서비스 스펙 견본: `environ`·`config`(테이블·큐·토픽 이름)·`deploy.routes`(표준 18개 밖 4개). 비밀값 없음. `lambda:deploy`는 읽지 않는다 | 복제한 서비스가 고침 |
 | `docs/` | 서비스별 사용법. 아래 문서 색인 | 개발자 |
 | `dist/`, `coverage/`, `.artifacts/` | 빌드·테스트·pack 결과(`.gitignore`) | **손으로 고치지 않음** |
 
@@ -214,6 +215,7 @@ npm run loop:check -- --stage dev                     # 기대: 다섯 줄 모�
 - [ ] 쓰지 않는 샘플 모듈은 위 연결 지점과 `serverless.yml`·`deploy.config.example.json` 명시 라우트에서 함께 뺀다.
 - [ ] 이 README의 제목·소개·VERSION INFO를 바꾼다.
 - [ ] `env/` 설정과 `.artifacts/` 배포 설정은 사람이 준비한다.
+- [ ] 범용 배포 경로(콘솔·에이전트 배포)로도 올릴 서비스면 `env/settings.yml`의 기본값·설명을 바꾸고, 표준 18개 밖 라우트만 `deploy.routes`에 남긴다. 그 경로는 토픽을 만들면 `REPORT_ERROR_ARN`이 자기 토픽으로 바뀐다(공용 에러 토픽으로 가지 않는다).
 - [ ] 첫 dev 배포는 `bootstrap` 모드다(함수·역할·테이블·큐·토픽·REST API를 새로 만든다). 그 뒤는 `code` 모드다. 순서는 [docs/lambda-deploy.md § New service: first deploy](docs/lambda-deploy.md#new-service-first-deploy-bootstrap)에 있다(2026-11-19 lemon dev 실측).
 - [ ] bootstrap env 파일에 `REPORT_ERROR_ARN`을 넣는다. 배포 도구는 `serverless.yml`이 넣던 이 키를 채우지 않는다. 빠지면 `loop:check`의 `notify`·`enqueue`가 `400 .accountId[] is missing`으로 실패한다.
 - [ ] 이미 있는 v5 서비스는 복제 대신 `node bin/sync-v5-tooling.mjs --target <체크아웃>`으로 도구만 맞춘다. `--apply` 뒤 사람이 할 일은 [docs/sync-v5-tooling.md](docs/sync-v5-tooling.md)에 있다.
